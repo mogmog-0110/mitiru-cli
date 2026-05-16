@@ -13,7 +13,7 @@ import (
 // at the project root next to src/.
 const ManifestFilename = "mitiru.toml"
 
-// ProjectConfig mirrors the schema documented in CLAUDE / scaffold templates.
+// ProjectConfig mirrors the schema documented in the scaffold templates.
 // Field tags follow BurntSushi/toml conventions (lowercase, underscored).
 type ProjectConfig struct {
 	Project ProjectSection `toml:"project"`
