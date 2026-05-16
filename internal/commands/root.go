@@ -1,0 +1,36 @@
+package commands
+
+import (
+	"github.com/spf13/cobra"
+)
+
+const (
+	cliName    = "mitiru"
+	cliVersion = "0.1.0"
+)
+
+func NewRootCommand() *cobra.Command {
+	root := &cobra.Command{
+		Use:   cliName,
+		Short: "MitiruEngine project tool",
+		Long: `mitiru — MitiruEngine project tool.
+
+Manage MitiruEngine game projects without touching CMakeLists.txt:
+  mitiru new <name>      create a new project
+  mitiru build           build the current project
+  mitiru run             build and run
+  mitiru doctor          check that prerequisites are installed
+  mitiru version         print version`,
+		SilenceUsage:  true,
+		SilenceErrors: true,
+	}
+
+	root.AddCommand(newNewCommand())
+	root.AddCommand(newBuildCommand())
+	root.AddCommand(newRunCommand())
+	root.AddCommand(newCleanCommand())
+	root.AddCommand(newDoctorCommand())
+	root.AddCommand(newVersionCommand())
+
+	return root
+}

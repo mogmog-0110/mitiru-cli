@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>{{.ProjectName}}</title>
+<style>
+  html, body {
+    margin: 0;
+    height: 100%;
+    overflow: hidden;
+    font-family: "Noto Sans JP", "Hiragino Sans", "Yu Gothic", system-ui, sans-serif;
+    color: #fff;
+    background: radial-gradient(120% 90% at 50% 30%, #2a3550 0%, #0c1024 70%);
+  }
+  .stage {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    display: grid;
+    place-items: center;
+  }
+  .stage__title {
+    font-size: clamp(1.5rem, 3vw, 2.5rem);
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-shadow: 0 2px 18px rgba(0, 0, 0, 0.6);
+  }
+  .stage__sub {
+    margin-top: 0.5em;
+    opacity: 0.7;
+    font-size: 0.95rem;
+  }
+</style>
+</head>
+<body>
+  <div class="stage">
+    <div>
+      <div class="stage__title">{{.ProjectName}}</div>
+      <div class="stage__sub">Built with MitiruEngine</div>
+    </div>
+  </div>
+
+  <!-- This scene uses mitiru_runtime — engine ships this; users include and call APIs. -->
+  <script src="../../../web/mitiru_runtime/mitiru_runtime.js"></script>
+</body>
+</html>
