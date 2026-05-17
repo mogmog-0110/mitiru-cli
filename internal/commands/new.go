@@ -25,9 +25,10 @@ func newNewCommand() *cobra.Command {
 		Long: `Create a new MitiruEngine project from a template.
 
 Example:
-  mitiru new myGame              create ./myGame/ from the 'hello' template
-  mitiru new myGame -t hello     same as above
-  mitiru new myGame --force      overwrite an existing directory`,
+  mitiru new myGame                       create ./myGame/ from the 'hello' template (Mode B / CEF)
+  mitiru new myGame -t hello              same as above
+  mitiru new myGame -t native-only        Mode A — pure C++, no CEF, no HTML
+  mitiru new myGame --force               overwrite an existing directory`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runNew(args[0])
@@ -35,7 +36,7 @@ Example:
 	}
 
 	cmd.Flags().StringVarP(&newTemplateName, "template", "t", "hello",
-		"template to use (currently only 'hello')")
+		"template to use: 'hello' (Mode B, default) or 'native-only' (Mode A, no CEF)")
 	cmd.Flags().BoolVar(&newForce, "force", false,
 		"overwrite the target directory if it already exists")
 

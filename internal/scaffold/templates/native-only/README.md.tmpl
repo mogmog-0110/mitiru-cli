@@ -1,0 +1,24 @@
+# {{.ProjectName}}
+
+A MitiruEngine project — **Mode A (native only)**. No CEF, no HTML UI layer.
+
+## 動かしかた
+
+```
+mitiru run
+```
+
+これだけで Debug ビルド + 起動まで一通り走ります。
+
+## 構成
+
+- `src/main.cpp` — ゲームコード (C++)
+- `mitiru.toml` — プロジェクト設定 (ウィンドウサイズ、build backend)
+
+`CMakeLists.txt` を編集する必要はありません。`mitiru` CLI が裏で生成して管理します。
+
+CEF を有効にして HTML UI を載せたくなったら、`mitiru.toml` に `[cef] start_url = "assets/scene.html"` を足し、`src/main.cpp` の `cfg.enableCef = false;` を消すか `true` に直してください。
+
+## ライセンス
+
+このテンプレートのコードは MIT License です。お好きにどうぞ。
