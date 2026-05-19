@@ -85,6 +85,17 @@ set(SCENE_URL "file:///${MITIRU_PROJECT_ROOT}/{{.StartUrl}}")
 target_compile_definitions({{.TargetName}} PRIVATE
     "{{.ScenarioUrlMacro}}=\"${SCENE_URL}\"")
 mitiru_add_cef_game({{.TargetName}})
+
+# Deploy the JS bridge runtime (mitiru_cef_state.js etc.) next to the consumer's
+# scene HTML so <script src="mitiru_runtime/..."> works without consumers
+# needing to know the engine's internal layout.
+if(EXISTS "${MITIRU_ENGINE_ROOT}/web/mitiru_runtime")
+    add_custom_command(TARGET {{.TargetName}} POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_directory
+            "${MITIRU_ENGINE_ROOT}/web/mitiru_runtime"
+            "${MITIRU_PROJECT_ROOT}/assets/mitiru_runtime"
+        COMMENT "mitiru-cli: syncing mitiru_runtime/* into assets/")
+endif()
 `
 
 // BuildDirs computes the standard layout of build artefacts for projectRoot:
