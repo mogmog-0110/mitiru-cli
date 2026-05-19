@@ -23,6 +23,8 @@ Standard output, standard error, and exit code are forwarded.`,
 	cmd.Flags().BoolVar(&buildRelease, "release", false, "build + run with Release configuration")
 	cmd.Flags().StringVar(&buildConfigName, "config", "",
 		"explicit CMake configuration (Debug|Release|RelWithDebInfo); overrides --release")
+	cmd.Flags().StringVar(&buildGenerator, "generator", "",
+		"explicit CMake generator (e.g. \"Visual Studio 17 2022\", \"Ninja\"); default is NMake Makefiles")
 	return cmd
 }
 

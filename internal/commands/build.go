@@ -13,6 +13,7 @@ import (
 var (
 	buildRelease    bool
 	buildConfigName string
+	buildGenerator  string
 )
 
 func newBuildCommand() *cobra.Command {
@@ -36,6 +37,8 @@ Examples:
 	cmd.Flags().BoolVar(&buildRelease, "release", false, "build with Release configuration")
 	cmd.Flags().StringVar(&buildConfigName, "config", "",
 		"explicit CMake configuration (Debug|Release|RelWithDebInfo); overrides --release")
+	cmd.Flags().StringVar(&buildGenerator, "generator", "",
+		"explicit CMake generator (e.g. \"Visual Studio 17 2022\", \"Ninja\"); default is NMake Makefiles")
 	return cmd
 }
 
@@ -75,6 +78,7 @@ func runBuild() (*buildResult, error) {
 		EngineRoot:  engineRoot,
 		StartURL:    cfg.CEF.StartURL,
 		Config:      cfgName,
+		Generator:   buildGenerator,
 		Stdout:      os.Stdout,
 		Stderr:      os.Stderr,
 	}

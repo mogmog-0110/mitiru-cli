@@ -40,7 +40,9 @@
     </div>
   </div>
 
-  <!-- This scene uses mitiru_runtime — engine ships this; users include and call APIs. -->
-  <script src="../../../web/mitiru_runtime/mitiru_runtime.js"></script>
+  <!-- This default scene is pure CSS — no JS bridge required.
+       To subscribe to C++ state from JS, see examples/hello_game in the
+       engine repo: it shows how to wire a StateStore / onStateChange bridge
+       with `mitiru_runtime/mitiru_cef_state.js`. -->
 </body>
 </html>

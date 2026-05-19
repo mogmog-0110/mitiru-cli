@@ -35,11 +35,9 @@ func runDoctor() error {
 		},
 		{
 			name: "CMake",
-			hint: "Install from https://cmake.org/download/ (or 'winget install Kitware.CMake')",
-			doneFn: func() bool {
-				_, err := exec.LookPath("cmake")
-				return err == nil
-			},
+			hint: "Install from https://cmake.org/download/ (or 'winget install Kitware.CMake'). " +
+				"Alternatively, install Visual Studio 2022 with the 'C++ CMake tools for Windows' component.",
+			doneFn: hasCMake,
 		},
 		{
 			name: "git",
@@ -87,6 +85,18 @@ func runDoctor() error {
 	fmt.Println()
 	fmt.Println("All prerequisites look good.")
 	return nil
+}
+
+// hasCMake reports whether a usable cmake.exe is reachable. CMake comes from
+// either a stand-alone install (cmake on PATH) or the "C++ CMake tools for
+// Windows" component shipped inside Visual Studio 2022. We accept either.
+func hasCMake() bool {
+	if _, err := exec.LookPath("cmake"); err == nil {
+		return true
+	}
+	matches, _ := filepath.Glob(
+		`C:\Program Files\Microsoft Visual Studio\*\*\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe`)
+	return len(matches) > 0
 }
 
 func hasVcvars64() bool {

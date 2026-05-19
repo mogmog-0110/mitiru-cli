@@ -34,6 +34,11 @@ type Options struct {
 	// Config is "Debug" or "Release".
 	Config string
 
+	// Generator is the explicit CMake generator override (e.g. "NMake Makefiles",
+	// "Visual Studio 17 2022"). Empty means use the default for the detected
+	// vcvars toolchain.
+	Generator string
+
 	// Stdout receives progress and cmake output.
 	Stdout io.Writer
 
@@ -45,6 +50,7 @@ type templateData struct {
 	ProjectName      string
 	TargetName       string
 	EngineRoot       string
+	ProjectRoot      string
 	MainCppAbs       string
 	StartUrl         string
 	ScenarioUrlMacro string
@@ -63,15 +69,19 @@ set(MITIRU_ENGINE_ROOT "{{.EngineRoot}}")
 set(MITIRU_HEADER_ONLY ON)
 add_subdirectory("${MITIRU_ENGINE_ROOT}" mitiru-engine)
 
-# User project
+# User project (paths point back at the consumer project root, NOT at the
+# generated CMakeLists.txt's directory under build/cmake/).
+set(MITIRU_PROJECT_ROOT "{{.ProjectRoot}}")
 add_executable({{.TargetName}}
     "{{.MainCppAbs}}"
 )
 target_link_libraries({{.TargetName}} PRIVATE Mitiru::mitiru)
 
-# CEF helper macro
+# CEF helper macro. SCENE_URL must resolve to <project root>/assets/<...>;
+# using CMAKE_CURRENT_SOURCE_DIR here would point at build/cmake/ and break
+# the file:// URL at runtime.
 include("${MITIRU_ENGINE_ROOT}/cmake/MitiruCef.cmake")
-set(SCENE_URL "file:///${CMAKE_CURRENT_SOURCE_DIR}/{{.StartUrl}}")
+set(SCENE_URL "file:///${MITIRU_PROJECT_ROOT}/{{.StartUrl}}")
 target_compile_definitions({{.TargetName}} PRIVATE
     "{{.ScenarioUrlMacro}}=\"${SCENE_URL}\"")
 mitiru_add_cef_game({{.TargetName}})
@@ -108,6 +118,7 @@ func Configure(opts Options) (cmakeSrcDir, cmakeOutDir string, err error) {
 		ProjectName:      opts.ProjectName,
 		TargetName:       sanitiseTargetName(opts.ProjectName),
 		EngineRoot:       toCMakePath(opts.EngineRoot),
+		ProjectRoot:      toCMakePath(opts.ProjectRoot),
 		MainCppAbs:       toCMakePath(mainCpp),
 		StartUrl:         toCMakePath(opts.StartURL),
 		ScenarioUrlMacro: toMacroName(opts.ProjectName),
@@ -154,7 +165,10 @@ func Run(opts Options) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	generator := generatorForVcvars(vcvars)
+	generator := opts.Generator
+	if generator == "" {
+		generator = generatorForVcvars(vcvars)
+	}
 
 	cmakeSrcDir, cmakeOutDir, err := Configure(opts)
 	if err != nil {
@@ -197,9 +211,21 @@ func runCMakeConfigure(vcvars, generator, srcDir, outDir string, opts Options) e
 	}
 
 	script := fmt.Sprintf(
-		"@echo off\r\ncall \"%s\" >NUL\r\nif errorlevel 1 exit /b %%errorlevel%%\r\ncmake -S \"%s\" -B \"%s\" -G \"%s\" %s\r\n",
-		vcvars, srcDir, outDir, generator, archAndType)
+		"%scmake -S \"%s\" -B \"%s\" -G \"%s\" %s\r\n",
+		vcvarsPrelude(vcvars), srcDir, outDir, generator, archAndType)
 	return runBatchScript("mitiru_configure", script, opts)
+}
+
+// vcvarsPrelude emits the boilerplate every cmake-driving batch script needs:
+// puts the VS Installer dir on PATH (so vcvars64.bat can find vswhere.exe
+// without printing "is not recognized" noise), then activates vcvars64.bat.
+func vcvarsPrelude(vcvars string) string {
+	return fmt.Sprintf(
+		"@echo off\r\n"+
+			"set \"PATH=C:\\Program Files (x86)\\Microsoft Visual Studio\\Installer;%%PATH%%\"\r\n"+
+			"call \"%s\" >NUL\r\n"+
+			"if errorlevel 1 exit /b %%errorlevel%%\r\n",
+		vcvars)
 }
 
 func isMultiConfigGenerator(generator string) bool {
@@ -209,28 +235,21 @@ func isMultiConfigGenerator(generator string) bool {
 }
 
 // generatorForVcvars maps a vcvars64.bat path to the CMake generator name
-// for that toolchain. Falls back to "Visual Studio 17 2022" for unknown
-// versions because that's the documented baseline.
+// for that toolchain. NMake Makefiles is the default everywhere on Windows
+// because it consumes the LIB / INCLUDE env vars vcvars64.bat sets directly —
+// the VS multi-config generator instead launches MSBuild, which resolves the
+// Windows SDK via its own .props files and silently fails (LNK1104 ucrtd.lib)
+// on machines where only an older SDK (e.g. 10.0.18362) is installed.
+// Users who want a .sln can opt-in with `mitiru build --generator "Visual Studio 17 2022"`.
 func generatorForVcvars(vcvars string) string {
-	lower := strings.ToLower(vcvars)
-	switch {
-	case strings.Contains(lower, `\18\`), strings.Contains(lower, "visual studio 18"):
-		// VS2026 / "Visual Studio 18" preview. Once CMake ships generator
-		// "Visual Studio 18 2026" use that; until then fall back to NMake.
-		return "NMake Makefiles"
-	case strings.Contains(lower, `\2022\`):
-		return "Visual Studio 17 2022"
-	case strings.Contains(lower, `\2019\`):
-		return "Visual Studio 16 2019"
-	default:
-		return "Visual Studio 17 2022"
-	}
+	_ = vcvars
+	return "NMake Makefiles"
 }
 
 func runCMakeBuild(vcvars, outDir string, opts Options) error {
 	script := fmt.Sprintf(
-		"@echo off\r\ncall \"%s\" >NUL\r\nif errorlevel 1 exit /b %%errorlevel%%\r\ncmake --build \"%s\" --config %s\r\n",
-		vcvars, outDir, opts.Config)
+		"%scmake --build \"%s\" --config %s\r\n",
+		vcvarsPrelude(vcvars), outDir, opts.Config)
 	return runBatchScript("mitiru_build", script, opts)
 }
 
