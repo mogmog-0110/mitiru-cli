@@ -19,6 +19,8 @@ Manage MitiruEngine game projects without touching CMakeLists.txt:
   mitiru new <name>      create a new project
   mitiru build           build the current project
   mitiru run             build and run
+  mitiru debug           build (Debug) and run with engine debug helpers
+  mitiru clean           remove build/ (--all also clears engine cache)
   mitiru doctor          check that prerequisites are installed
   mitiru version         print version`,
 		SilenceUsage:  true,
@@ -28,6 +30,7 @@ Manage MitiruEngine game projects without touching CMakeLists.txt:
 	root.AddCommand(newNewCommand())
 	root.AddCommand(newBuildCommand())
 	root.AddCommand(newRunCommand())
+	root.AddCommand(newDebugCommand())
 	root.AddCommand(newCleanCommand())
 	root.AddCommand(newDoctorCommand())
 	root.AddCommand(newVersionCommand())

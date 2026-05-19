@@ -33,11 +33,13 @@ mitiru run
 | `mitiru new <name>` | テンプレートから新しいプロジェクトを作る (`./<name>/`) |
 | `mitiru build` | `mitiru.toml` を読んでビルド (Debug がデフォルト) |
 | `mitiru run` | ビルドして実行 (stdin/stdout/exitcode を forward) |
+| `mitiru debug` | Debug でビルドしてエンジン debug helper (`MITIRU_DEBUG=1`/`MITIRU_INSPECTOR=1`) 付きで実行 |
 | `mitiru clean` | `build/` を削除。`--all` でグローバルキャッシュ (`~/.mitiru/cache/`) もまとめて削除 |
 | `mitiru doctor` | 前提ツール (Go / CMake / コンパイラ) のチェック |
 | `mitiru version` | バージョン表示 |
 
 `mitiru build` / `mitiru run` には `--release` か `--config <Debug|Release|RelWithDebInfo>` を渡せます。
+`mitiru debug` は常に `--config Debug` を強制します。
 
 ## プロジェクト構成
 
