@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"runtime"
 	"strconv"
+	"strings"
+	"time"
 
 	"github.com/mogmog-0110/mitiru-cli/internal/engine"
 	"github.com/spf13/cobra"
@@ -19,26 +21,31 @@ var (
 
 func newInspectCommand() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "inspect <pid>",
+		Use:   "inspect [pid]",
 		Short: "Open a sub-window inspector watching a running MitiruEngine game (axis 5)",
 		Long: `Launches the engine's standalone inspector as a separate OS-level
 window that polls the snapshot a running MitiruEngine process exports
 to %TEMP%\mitiru_inspector_<pid>.json.
 
 Usage:
-  mitiru inspect 12345        # watch process id 12345
-  mitiru inspect --file <path>  # watch a specific file directly (debug)
+  mitiru inspect               # auto-pick the most recently-updated game
+  mitiru inspect 12345         # explicit pid
+  mitiru inspect --file <path> # watch a specific file directly (debug)
 
 This is the axis 5 (modular sub-window architecture) showcase tool —
 gameplay stays in its own window, the inspector lives in another window
 that can be dragged to a different monitor. No CEF multi-process required.`,
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if inspectFilePath == "" && len(args) != 1 {
-				return fmt.Errorf("inspect: provide a pid argument or --file <path>")
-			}
 			pid := 0
-			if len(args) == 1 {
+			if inspectFilePath == "" && len(args) == 0 {
+				p, err := autoDetectProducerPid()
+				if err != nil {
+					return fmt.Errorf("inspect: %w", err)
+				}
+				pid = p
+				fmt.Printf("Auto-detected producer pid: %d\n", pid)
+			} else if len(args) == 1 {
 				v, err := strconv.Atoi(args[0])
 				if err != nil {
 					return fmt.Errorf("inspect: %q is not a valid pid: %w", args[0], err)
@@ -53,6 +60,54 @@ that can be dragged to a different monitor. No CEF multi-process required.`,
 	cmd.Flags().StringVar(&inspectFilePath, "file", "",
 		"watch a snapshot file directly (instead of a pid). For debugging.")
 	return cmd
+}
+
+// autoDetectProducerPid scans %TEMP% for mitiru_inspector_*.json files and
+// returns the pid encoded in the most-recently-modified one. Lets the user
+// type `mitiru inspect` without hunting for a pid in Task Manager.
+func autoDetectProducerPid() (int, error) {
+	tempDir := os.TempDir()
+	entries, err := os.ReadDir(tempDir)
+	if err != nil {
+		return 0, fmt.Errorf("read temp dir %s: %w", tempDir, err)
+	}
+
+	type candidate struct {
+		pid     int
+		modTime time.Time
+	}
+	var newest *candidate
+	for _, e := range entries {
+		name := e.Name()
+		if !strings.HasPrefix(name, "mitiru_inspector_") ||
+			!strings.HasSuffix(name, ".json") {
+			continue
+		}
+		mid := strings.TrimSuffix(strings.TrimPrefix(name, "mitiru_inspector_"), ".json")
+		pid, err := strconv.Atoi(mid)
+		if err != nil {
+			continue
+		}
+		info, err := e.Info()
+		if err != nil {
+			continue
+		}
+		if newest == nil || info.ModTime().After(newest.modTime) {
+			newest = &candidate{pid: pid, modTime: info.ModTime()}
+		}
+	}
+
+	if newest == nil {
+		return 0, fmt.Errorf("no running MitiruEngine producer found in %s — start a game with `mitiru run` first, or pass an explicit pid",
+			tempDir)
+	}
+	// Reject snapshots that are way stale (>10s since last write) — that's
+	// almost certainly a dead game that left its file behind.
+	if time.Since(newest.modTime) > 10*time.Second {
+		return 0, fmt.Errorf("the most recent snapshot is %s old (looks dead) — start a fresh game with `mitiru run` first, or pass an explicit pid",
+			time.Since(newest.modTime).Round(time.Second))
+	}
+	return newest.pid, nil
 }
 
 func runInspect(pid int, filePath string) error {
