@@ -13,9 +13,9 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// File extensions that should trigger a full rebuild + restart.
+// File extensions that, when modified, should trigger a DLL rebuild.
 // Anything else (e.g. .html, .css, .js under assets/) is picked up by the
-// engine's own asset hot-reload — no need for us to bounce the process.
+// engine's own asset hot reload — no need to bounce anything.
 var cppExts = map[string]bool{
 	".cpp": true, ".cc": true, ".cxx": true,
 	".h": true, ".hpp": true, ".hxx": true,
@@ -25,21 +25,21 @@ var cppExts = map[string]bool{
 func newWatchCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "watch",
-		Short: "Watch src/ for changes; auto-rebuild and re-launch the game",
-		Long: `'mitiru watch' is the editor-loop helper. It watches the current
-project's source tree and, when a C++ file changes, rebuilds and
-re-launches the game automatically — no need to alt-tab to a terminal,
-type 'mitiru run', and wait.
+		Short: "Run with L3 hot reload — rebuild on src/ change, host swaps the DLL live",
+		Long: `'mitiru watch' is the editor loop. It builds and launches the game
+once via mitiru_host --watch, then rebuilds on every src/ change. The
+host detects the new DLL by mtime and reloads it in place — gameplay
+state survives the swap (ADR 0005).
 
-  src/**/*.{cpp,h,hpp,...} change → rebuild + restart game
-  assets/**/*.{html,css,js}      → engine's own hot reload handles it
-                                   (no restart needed)
+  src/**/*.{cpp,h,hpp,...} change → rebuild DLL → host hot-reloads
+  assets/**/*.{html,css,js}      → engine's own hot reload picks it up
 
-Press Ctrl-C to stop watching. Changes during a rebuild are coalesced
-so a burst of saves only triggers one rebuild.
+Press Ctrl-C to stop watching (also closes the game window). Saves
+during a rebuild are coalesced so a burst of writes only triggers one
+build.
 
-With --inspect, also launches the sub-window inspector alongside each
-restart and shuts it down before relaunch.`,
+With --inspect, also launches the sub-window inspector once alongside
+the game.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runWatch()
 		},
@@ -50,7 +50,7 @@ restart and shuts it down before relaunch.`,
 	cmd.Flags().StringVar(&buildGenerator, "generator", "",
 		"explicit CMake generator (default is NMake Makefiles)")
 	cmd.Flags().BoolVar(&runWithInspect, "inspect", false,
-		"also launch the sub-window inspector for each game instance")
+		"also launch the sub-window inspector alongside the game")
 	return cmd
 }
 
@@ -86,24 +86,29 @@ func runWatch() error {
 	}
 
 	fmt.Printf("mitiru watch: watching %s\n", cwd)
-	fmt.Println("  ↳ src/**.{cpp,hpp,...}  →  rebuild + restart")
-	fmt.Println("  ↳ assets/**             →  engine hot-reload (no restart)")
+	fmt.Println("  ↳ src/**.{cpp,hpp,...}  →  rebuild DLL (host hot-reloads in place)")
+	fmt.Println("  ↳ assets/**             →  engine hot-reload (no rebuild)")
 	fmt.Println("  Ctrl-C to stop")
 
 	state := newGameState()
 	defer state.stop()
 
-	// Build requests are funnelled through a serialised goroutine so:
-	//  (a) the fsnotify Events channel keeps draining during long rebuilds —
-	//      otherwise events fired while a build runs get dropped.
-	//  (b) overlapping requests collapse into "build once more after the
-	//      current one finishes" instead of stacking.
+	// Initial build + launch host with --watch. The host then handles all
+	// future DLL swaps internally — subsequent rebuilds only need to update
+	// the DLL on disk; we never relaunch the host.
+	if err := state.firstBuildAndLaunch(); err != nil {
+		return fmt.Errorf("watch: initial build/launch failed: %w", err)
+	}
+
+	// Build requests are funnelled through a serialised goroutine so a
+	// burst of saves collapses into one rebuild, and the fsnotify Events
+	// channel keeps draining during long builds.
 	buildReq := make(chan struct{}, 1)
 	go func() {
 		for range buildReq {
-			fmt.Println("\nmitiru watch: building...")
-			if err := state.rebuildAndRelaunch(); err != nil {
-				fmt.Fprintf(os.Stderr, "watch: build failed: %v\n", err)
+			fmt.Println("\nmitiru watch: rebuilding...")
+			if err := state.rebuildOnly(); err != nil {
+				fmt.Fprintf(os.Stderr, "watch: rebuild failed: %v\n", err)
 			}
 		}
 	}()
@@ -111,15 +116,10 @@ func runWatch() error {
 		select {
 		case buildReq <- struct{}{}:
 		default:
-			// One is already queued; the worker will see the latest source
-			// after it finishes the in-flight build.
+			// One is already queued; the worker picks up the latest
+			// source after the in-flight build completes.
 		}
 	}
-
-	// Kick off the initial build immediately so the user sees the running
-	// state right away. We don't block on it — events fired during the build
-	// still reach us via the goroutine + queued-build pattern above.
-	requestBuild()
 
 	// Debounce: coalesce a burst of save events into one rebuild request.
 	var (
@@ -196,22 +196,26 @@ func (s *gameState) stop() {
 	}
 }
 
-func (s *gameState) rebuildAndRelaunch() error {
-	s.stop()
-
+// firstBuildAndLaunch does the initial DLL build + spawns mitiru_host with
+// --watch. Subsequent rebuilds rely on the host's own DLL mtime polling, so
+// the host process is launched exactly once for the lifetime of `mitiru watch`.
+func (s *gameState) firstBuildAndLaunch() error {
 	result, err := runBuild()
 	if err != nil {
 		return err
 	}
+	art := result.Artifacts
 
-	fmt.Printf("\nRunning %s\n", result.ExePath)
-	cmd := exec.Command(result.ExePath)
+	fmt.Printf("\nLaunching %s %s --watch\n",
+		filepath.Base(art.HostExePath), art.DllRel)
+
+	cmd := exec.Command(art.HostExePath, art.DllRel, "--watch")
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
-	cmd.Stdin  = os.Stdin
-	cmd.Dir    = result.ProjectRoot
+	cmd.Stdin = os.Stdin
+	cmd.Dir = art.DeployDir
 	if err := cmd.Start(); err != nil {
-		return fmt.Errorf("launch %s: %w", result.ExePath, err)
+		return fmt.Errorf("launch %s: %w", art.HostExePath, err)
 	}
 
 	s.mu.Lock()
@@ -229,4 +233,12 @@ func (s *gameState) rebuildAndRelaunch() error {
 		}
 	}
 	return nil
+}
+
+// rebuildOnly re-runs the build. The host (launched once by
+// firstBuildAndLaunch) polls the DLL mtime and reloads in place — gameplay
+// state survives the swap.
+func (s *gameState) rebuildOnly() error {
+	_, err := runBuild()
+	return err
 }

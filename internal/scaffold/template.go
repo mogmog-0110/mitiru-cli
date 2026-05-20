@@ -16,9 +16,17 @@ var embedded embed.FS
 
 // Data is the template payload exposed to *.tmpl files.
 type Data struct {
-	ProjectName      string
-	GameClassName    string
-	ScenarioUrlMacro string
+	// ProjectName is the human-facing name from `mitiru new <name>`, used
+	// verbatim in window titles and on-screen labels.
+	ProjectName string
+
+	// ProjectIdent is the C++-safe identifier form of ProjectName — lower
+	// snake_case, suitable for `namespace <ident> { ... }`.
+	ProjectIdent string
+
+	// UpperIdent is the UPPER_SNAKE_CASE form of ProjectName, used as the
+	// prefix for `#define <UPPER>_DLL_EXPORT` and similar macro guards.
+	UpperIdent string
 }
 
 // Expand walks templates/<template>/ and writes every file (rendering *.tmpl

@@ -1,6 +1,6 @@
 # {{.ProjectName}}
 
-A MitiruEngine project.
+A MitiruEngine project (v0.2.0+, game-as-DLL).
 
 ## 動かしかた
 
@@ -8,15 +8,29 @@ A MitiruEngine project.
 mitiru run
 ```
 
-これだけで Debug ビルド + 起動まで一通り走ります。
+Debug ビルド + `mitiru_host` 経由のゲーム起動まで一通り走ります。
+
+ホットリロード付きで開発する場合は:
+
+```
+mitiru watch
+```
+
+`src/main.cpp` を保存 → 自動で DLL が再ビルド → ホストが新しい DLL を取り込む (ゲーム状態は保持)。
 
 ## 構成
 
-- `src/main.cpp` — ゲームコード (C++)
-- `assets/scene.html` — UI (HTML/CSS/JS)
-- `mitiru.toml` — プロジェクト設定 (ウィンドウサイズ、シーン URL など)
+- `src/main.cpp` — ゲームコード (C++、DLL としてビルドされる)
+- `assets/scene.html` — UI (HTML/CSS/JS、CEF オーバーレイ)
+- `mitiru.toml` — プロジェクト設定 (ウィンドウサイズなど)
 
-`CMakeLists.txt` を編集する必要はありません。`mitiru` CLI が裏で生成して管理します。
+`CMakeLists.txt` を編集する必要はありません。`mitiru` CLI が裏で生成します。
+
+## どう動くのか
+
+- `src/main.cpp` は `<project>.dll` としてビルドされ、エンジン本体ではなく `mitiru_host.exe` にロードされる (ADR 0005)
+- gameplay state は `GameMemory` 構造体に集約。ホットリロード時もポインタが保持されるので、状態をなくさずコードだけ差し替えできる
+- DLL ↔ ホスト間は C-only signal flow (InputSnapshot / FrameIntents) しか通らない
 
 ## ライセンス
 

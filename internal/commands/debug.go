@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 
 	"github.com/spf13/cobra"
 )
@@ -42,14 +43,15 @@ func runDebug() error {
 	if err != nil {
 		return err
 	}
+	art := result.Artifacts
 
-	fmt.Printf("\nRunning %s [debug mode]\n", result.ExePath)
+	fmt.Printf("\nRunning %s %s [debug mode]\n", filepath.Base(art.HostExePath), art.DllRel)
 
-	cmd := exec.Command(result.ExePath)
+	cmd := exec.Command(art.HostExePath, art.DllRel)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	cmd.Stdin = os.Stdin
-	cmd.Dir = result.ProjectRoot
+	cmd.Dir = art.DeployDir
 	cmd.Env = append(os.Environ(),
 		"MITIRU_DEBUG=1",
 		"MITIRU_INSPECTOR=1",
@@ -58,9 +60,9 @@ func runDebug() error {
 	if err := cmd.Run(); err != nil {
 		if exitErr, ok := err.(*exec.ExitError); ok {
 			return fmt.Errorf("%s exited with status %d (see stderr above)",
-				result.ExePath, exitErr.ExitCode())
+				filepath.Base(art.HostExePath), exitErr.ExitCode())
 		}
-		return fmt.Errorf("debug run %s: %w", result.ExePath, err)
+		return fmt.Errorf("debug run %s: %w", filepath.Base(art.HostExePath), err)
 	}
 	return nil
 }

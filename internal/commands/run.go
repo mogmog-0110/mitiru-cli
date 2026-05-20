@@ -45,15 +45,16 @@ func runRun() error {
 		return err
 	}
 
-	fmt.Printf("\nRunning %s\n", result.ExePath)
+	art := result.Artifacts
+	fmt.Printf("\nRunning %s %s\n", filepath.Base(art.HostExePath), art.DllRel)
 
-	cmd := exec.Command(result.ExePath)
+	cmd := exec.Command(art.HostExePath, art.DllRel)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	cmd.Stdin = os.Stdin
-	cmd.Dir = result.ProjectRoot
+	cmd.Dir = art.DeployDir
 	if err := cmd.Start(); err != nil {
-		return fmt.Errorf("run %s: %w", result.ExePath, err)
+		return fmt.Errorf("run %s %s: %w", art.HostExePath, art.DllRel, err)
 	}
 
 	var inspectorCmd *exec.Cmd
@@ -76,9 +77,9 @@ func runRun() error {
 
 	if waitErr != nil {
 		if exitErr, ok := waitErr.(*exec.ExitError); ok {
-			return fmt.Errorf("%s exited with status %d", result.ExePath, exitErr.ExitCode())
+			return fmt.Errorf("%s exited with status %d", filepath.Base(art.HostExePath), exitErr.ExitCode())
 		}
-		return fmt.Errorf("run %s: %w", result.ExePath, waitErr)
+		return fmt.Errorf("run %s: %w", filepath.Base(art.HostExePath), waitErr)
 	}
 	return nil
 }

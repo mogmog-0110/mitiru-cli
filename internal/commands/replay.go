@@ -54,21 +54,24 @@ func runReplay(replayPath string) error {
 	if err != nil {
 		return err
 	}
+	art := result.Artifacts
 
-	fmt.Printf("\nReplaying %s\nRunning  %s\n", absReplay, result.ExePath)
+	fmt.Printf("\nReplaying %s\nRunning  %s %s\n",
+		absReplay, filepath.Base(art.HostExePath), art.DllRel)
 
-	cmd := exec.Command(result.ExePath)
+	cmd := exec.Command(art.HostExePath, art.DllRel)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	cmd.Stdin = os.Stdin
-	cmd.Dir = result.ProjectRoot
+	cmd.Dir = art.DeployDir
 	cmd.Env = append(os.Environ(), "MITIRU_REPLAY="+absReplay)
 
 	if err := cmd.Run(); err != nil {
 		if exitErr, ok := err.(*exec.ExitError); ok {
-			return fmt.Errorf("%s exited with status %d", result.ExePath, exitErr.ExitCode())
+			return fmt.Errorf("%s exited with status %d",
+				filepath.Base(art.HostExePath), exitErr.ExitCode())
 		}
-		return fmt.Errorf("replay %s: %w", result.ExePath, err)
+		return fmt.Errorf("replay %s: %w", filepath.Base(art.HostExePath), err)
 	}
 	return nil
 }

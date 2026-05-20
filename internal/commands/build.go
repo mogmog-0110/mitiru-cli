@@ -42,12 +42,13 @@ Examples:
 	return cmd
 }
 
-// buildResult bundles the parsed project + the resulting binary path so
-// `mitiru run` can chain off `mitiru build` without re-parsing anything.
+// buildResult bundles the parsed project + the resulting artifact paths so
+// `mitiru run` and `mitiru watch` can chain off `mitiru build` without
+// re-parsing anything.
 type buildResult struct {
 	ProjectRoot string
 	Config      *config.ProjectConfig
-	ExePath     string
+	Artifacts   *build.Artifacts
 }
 
 func runBuild() (*buildResult, error) {
@@ -76,23 +77,22 @@ func runBuild() (*buildResult, error) {
 		ProjectRoot: projectRoot,
 		ProjectName: cfg.Project.Name,
 		EngineRoot:  engineRoot,
-		StartURL:    cfg.CEF.StartURL,
 		Config:      cfgName,
 		Generator:   buildGenerator,
 		Stdout:      os.Stdout,
 		Stderr:      os.Stderr,
 	}
 
-	exePath, err := build.Run(opts)
+	artifacts, err := build.Run(opts)
 	if err != nil {
 		return nil, err
 	}
 
-	fmt.Printf("Build OK: %s\n", exePath)
+	fmt.Printf("Build OK: %s\n", artifacts.DllPath)
 	return &buildResult{
 		ProjectRoot: projectRoot,
 		Config:      cfg,
-		ExePath:     exePath,
+		Artifacts:   artifacts,
 	}, nil
 }
 

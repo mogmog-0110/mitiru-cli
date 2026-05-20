@@ -5,7 +5,6 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
-	"strings"
 
 	"github.com/mogmog-0110/mitiru-cli/internal/scaffold"
 	"github.com/spf13/cobra"
@@ -24,11 +23,12 @@ func newNewCommand() *cobra.Command {
 		Short: "Create a new MitiruEngine project",
 		Long: `Create a new MitiruEngine project from a template.
 
+The scaffolded project is built as a SHARED library (DLL) and run via the
+mitiru_host launcher — see ADR 0005 for the host/game contract.
+
 Example:
-  mitiru new myGame                       create ./myGame/ from the 'hello' template (Mode B / CEF)
-  mitiru new myGame -t hello              same as above
-  mitiru new myGame -t native-only        Mode A — pure C++, no CEF, no HTML
-  mitiru new myGame --force               overwrite an existing directory`,
+  mitiru new myGame             create ./myGame/ from the 'hello' template
+  mitiru new myGame --force     overwrite an existing directory`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runNew(args[0])
@@ -36,7 +36,7 @@ Example:
 	}
 
 	cmd.Flags().StringVarP(&newTemplateName, "template", "t", "hello",
-		"template to use: 'hello' (Mode B, default) or 'native-only' (Mode A, no CEF)")
+		"template to use (only 'hello' is shipped today)")
 	cmd.Flags().BoolVar(&newForce, "force", false,
 		"overwrite the target directory if it already exists")
 
@@ -62,9 +62,9 @@ func runNew(name string) error {
 	}
 
 	data := scaffold.Data{
-		ProjectName:      name,
-		GameClassName:    toGameClassName(name),
-		ScenarioUrlMacro: toMacroName(name),
+		ProjectName:  name,
+		ProjectIdent: toLowerSnake(name),
+		UpperIdent:   toUpperSnake(name),
 	}
 
 	if err := scaffold.Expand(newTemplateName, dstDir, data); err != nil {
@@ -78,39 +78,16 @@ func runNew(name string) error {
 	return nil
 }
 
-// toGameClassName turns "my-game" / "my_game" / "myGame" into "MyGameGame",
-// or "myApp" into "MyAppGame". If the project name already ends in "Game"
-// the suffix is dropped to avoid "MyGameGame"-style stutter.
-func toGameClassName(name string) string {
-	camel := toPascalCase(name)
-	if strings.HasSuffix(camel, "Game") {
-		return camel
-	}
-	return camel + "Game"
-}
-
-// toMacroName turns "my-game" / "myGame" into "MY_GAME_SCENE_URL" — a
-// macro-safe identifier suitable for an `#ifndef` guard.
-func toMacroName(name string) string {
-	return toUpperSnake(name) + "_SCENE_URL"
-}
-
-func toPascalCase(s string) string {
-	out := make([]rune, 0, len(s))
-	upperNext := true
-	for _, r := range s {
-		switch {
-		case r == '-' || r == '_':
-			upperNext = true
-		case upperNext:
-			if r >= 'a' && r <= 'z' {
-				r -= 32
-			}
-			out = append(out, r)
-			upperNext = false
-		default:
-			out = append(out, r)
+// toLowerSnake turns "my-game" / "myGame" / "My_Game" into "my_game" — a
+// C++-safe identifier for use as a namespace.
+func toLowerSnake(s string) string {
+	upper := toUpperSnake(s)
+	out := make([]rune, 0, len(upper))
+	for _, r := range upper {
+		if r >= 'A' && r <= 'Z' {
+			r += 32
 		}
+		out = append(out, r)
 	}
 	return string(out)
 }
