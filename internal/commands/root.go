@@ -21,6 +21,7 @@ Manage MitiruEngine game projects without touching CMakeLists.txt:
   mitiru run             build and run
   mitiru debug           build (Debug) and run with engine debug helpers
   mitiru replay <file>   build and run, replaying recorded input
+  mitiru renderer        launch the renderer subsystem standalone (axis 3)
   mitiru clean           remove build/ (--all also clears engine cache)
   mitiru doctor          check that prerequisites are installed
   mitiru version         print version`,
@@ -33,6 +34,7 @@ Manage MitiruEngine game projects without touching CMakeLists.txt:
 	root.AddCommand(newRunCommand())
 	root.AddCommand(newDebugCommand())
 	root.AddCommand(newReplayCommand())
+	root.AddCommand(newRendererCommand())
 	root.AddCommand(newCleanCommand())
 	root.AddCommand(newDoctorCommand())
 	root.AddCommand(newVersionCommand())
