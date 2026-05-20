@@ -20,6 +20,7 @@ Manage MitiruEngine game projects without touching CMakeLists.txt:
   mitiru build           build the current project
   mitiru run             build and run
   mitiru debug           build (Debug) and run with engine debug helpers
+  mitiru watch           file watch + auto rebuild + auto relaunch
   mitiru replay <file>   build and run, replaying recorded input
   mitiru renderer        launch the renderer subsystem standalone (axis 3)
   mitiru audio [file]    launch the audio subsystem standalone (axis 3)
@@ -35,6 +36,7 @@ Manage MitiruEngine game projects without touching CMakeLists.txt:
 	root.AddCommand(newBuildCommand())
 	root.AddCommand(newRunCommand())
 	root.AddCommand(newDebugCommand())
+	root.AddCommand(newWatchCommand())
 	root.AddCommand(newReplayCommand())
 	root.AddCommand(newRendererCommand())
 	root.AddCommand(newAudioCommand())
