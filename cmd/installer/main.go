@@ -23,14 +23,20 @@ const usage = `MitiruEngine Installer
 USAGE:
   MitiruEngine_Installer.exe [flags]
 
+検出: install 済の component は default で skip されます。各 component を
+独立に制御したい場合は対応する flag を指定。
+
 FLAGS:
   --dry-run               プランを表示するだけ、何も書き換えない
   --target-dir <path>     mitiru.exe を置く先
                           (default: %LOCALAPPDATA%\Programs\MitiruEngine\bin)
-  --skip-winget           MSVC install を skip (既に入ってる人向け)
+  --force                 「既に install 済」 による skip を無視 (repair install)
+  --skip-winget           MSVC install を skip (既に入ってる人向け、自動検出も同等)
+  --skip-deploy           mitiru.exe を target dir に copy しない
+  --skip-pathenv          HKCU\Environment\Path を触らない
   --skip-precache         engine source pre-cache を skip
   --skip-longpaths        LongPaths registry を skip
-  --yes, -y               全 prompt を yes (CI 用)
+  --yes, -y               実行前 prompt を skip (CI 用)
   --help, -h              この help
 
 詳しい仕様: https://github.com/mogmog-0110/MitiruEngine/blob/main/docs/INSTALLER.md
@@ -40,7 +46,10 @@ func main() {
 	var opts install.Options
 	flag.BoolVar(&opts.DryRun, "dry-run", false, "")
 	flag.StringVar(&opts.TargetDir, "target-dir", "", "")
+	flag.BoolVar(&opts.Force, "force", false, "")
 	flag.BoolVar(&opts.SkipWinget, "skip-winget", false, "")
+	flag.BoolVar(&opts.SkipDeploy, "skip-deploy", false, "")
+	flag.BoolVar(&opts.SkipPathEnv, "skip-pathenv", false, "")
 	flag.BoolVar(&opts.SkipPrecache, "skip-precache", false, "")
 	flag.BoolVar(&opts.SkipLongPaths, "skip-longpaths", false, "")
 	flag.BoolVar(&opts.AssumeYes, "yes", false, "")

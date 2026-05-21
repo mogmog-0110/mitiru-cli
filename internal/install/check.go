@@ -17,8 +17,11 @@ type envReport struct {
 	hasMsvc   bool
 	hasCMake  bool
 	hasSDK    bool
-	hasMitiru bool
-	onPath    bool
+
+	// mitiruPath is the absolute path of an existing `mitiru` on PATH (or
+	// empty if none found). Distinguishes "already installed at target dir"
+	// vs "installed at some other location — we'd be shadowing it".
+	mitiruPath string
 }
 
 // snapshot returns the current environment state.
@@ -32,12 +35,18 @@ func snapshot() (*envReport, error) {
 	r.hasCMake = hasCMake()
 	r.hasSDK = hasWindowsSDK()
 
-	if _, err := exec.LookPath("mitiru"); err == nil {
-		r.hasMitiru = true
-		r.onPath = true
+	if p, err := exec.LookPath("mitiru"); err == nil {
+		// Resolve to absolute so comparisons against target dir work.
+		if abs, absErr := filepath.Abs(p); absErr == nil {
+			r.mitiruPath = abs
+		} else {
+			r.mitiruPath = p
+		}
 	}
 	return r, nil
 }
+
+func (r *envReport) hasMitiru() bool { return r.mitiruPath != "" }
 
 func (r *envReport) print(w io.Writer) {
 	mark := func(ok bool) string {
@@ -50,7 +59,11 @@ func (r *envReport) print(w io.Writer) {
 	fmt.Fprintf(w, "  %s MSVC Build Tools 2022 (C++ workload)\n", mark(r.hasMsvc))
 	fmt.Fprintf(w, "  %s CMake\n", mark(r.hasCMake))
 	fmt.Fprintf(w, "  %s Windows SDK\n", mark(r.hasSDK))
-	fmt.Fprintf(w, "  %s mitiru.exe on PATH\n", mark(r.hasMitiru))
+	if r.hasMitiru() {
+		fmt.Fprintf(w, "  [OK     ] mitiru on PATH (%s)\n", r.mitiruPath)
+	} else {
+		fmt.Fprintln(w, "  [MISSING] mitiru on PATH")
+	}
 }
 
 // hasVcvars64 — duplicated from internal/commands/doctor.go.
