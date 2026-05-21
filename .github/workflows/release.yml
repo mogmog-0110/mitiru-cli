@@ -34,7 +34,7 @@ jobs:
 
       - name: Generate installer manifest .syso
         run: |
-          "$env:GOPATH\bin\rsrc.exe" -manifest cmd\installer\installer.manifest `
+          & "$env:GOPATH\bin\rsrc.exe" -manifest cmd\installer\installer.manifest `
             -o cmd\installer\installer.syso -arch amd64
         shell: pwsh
 
