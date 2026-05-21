@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<assembly xmlns="urn:schemas-microsoft-com:asm.v1" manifestVersion="1.0">
+    <assemblyIdentity
+        type="win32"
+        name="com.mogmog-0110.MitiruEngine.Installer"
+        version="1.0.0.0"
+        processorArchitecture="amd64" />
+    <description>MitiruEngine Installer</description>
+
+    <!-- Tell Windows NOT to auto-elevate. The installer asks winget to
+         install Visual Studio Build Tools (which prompts its own UAC), but
+         the installer process itself only writes to HKCU / LOCALAPPDATA.
+         Without this manifest, Windows UAC heuristic auto-flags any .exe
+         whose name contains 'install/setup/update/patch' as
+         requireAdministrator, even for processes that don't need it. -->
+    <trustInfo xmlns="urn:schemas-microsoft-com:asm.v3">
+        <security>
+            <requestedPrivileges>
+                <requestedExecutionLevel level="asInvoker" uiAccess="false" />
+            </requestedPrivileges>
+        </security>
+    </trustInfo>
+
+    <!-- Make GetCommandLineW / GetEnvironmentVariableW return long paths
+         (>MAX_PATH) without truncation. Pairs with the LongPaths registry
+         tweak the installer applies. -->
+    <application xmlns="urn:schemas-microsoft-com:asm.v3">
+        <windowsSettings>
+            <longPathAware xmlns="http://schemas.microsoft.com/SMI/2016/WindowsSettings">true</longPathAware>
+        </windowsSettings>
+    </application>
+</assembly>
