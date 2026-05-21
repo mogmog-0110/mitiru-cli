@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"os"
 	"syscall"
+	"time"
 	"unsafe"
 
 	"github.com/mogmog-0110/mitiru-cli/internal/install"
@@ -71,19 +72,32 @@ func main() {
 
 	if err := install.Run(opts); err != nil {
 		fmt.Fprintf(os.Stderr, "\n[ERROR] %v\n", err)
-		// Keep the console open if launched via double-click so the user can
-		// read the error before the window closes.
+		// Failure path: keep the console open if launched via double-click
+		// so the user can read the error before the window closes.
 		if isConsoleStarted() {
-			fmt.Fprintln(os.Stderr, "\n何かキーを押すと閉じます...")
+			fmt.Fprintln(os.Stderr, "\nEnter キーで閉じます...")
 			_, _ = fmt.Scanln()
 		}
 		os.Exit(1)
 	}
 
+	// Success path: auto-close after a short countdown so the user has time
+	// to read the "Next: mitiru new ..." block, but doesn't need to press
+	// Enter. Only when launched from explorer double-click (own-console).
 	if isConsoleStarted() {
-		fmt.Fprintln(os.Stdout, "\nEnter キーで閉じます...")
-		_, _ = fmt.Scanln()
+		autoCloseCountdown(5)
 	}
+}
+
+// autoCloseCountdown prints a single-line countdown ticking down to 0, then
+// returns so the process can exit. Uses \r to overwrite in place so the
+// console doesn't fill with N lines of "閉じます" spam.
+func autoCloseCountdown(seconds int) {
+	for i := seconds; i > 0; i-- {
+		fmt.Fprintf(os.Stdout, "\rこのウィンドウは %d 秒後に閉じます ... ", i)
+		time.Sleep(1 * time.Second)
+	}
+	fmt.Fprintln(os.Stdout)
 }
 
 // isConsoleStarted reports whether this process is its console's sole
