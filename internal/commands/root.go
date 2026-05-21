@@ -25,6 +25,7 @@ Manage MitiruEngine game projects without touching CMakeLists.txt:
   mitiru renderer        launch the renderer subsystem standalone (axis 3)
   mitiru audio [file]    launch the audio subsystem standalone (axis 3)
   mitiru inspect <pid>   open a sub-window inspector for a running game (axis 5)
+  mitiru install         bootstrap MSVC + mitiru.exe + PATH (Windows)
   mitiru clean           remove build/ (--all also clears engine cache)
   mitiru doctor          check that prerequisites are installed
   mitiru version         print version`,
@@ -41,6 +42,7 @@ Manage MitiruEngine game projects without touching CMakeLists.txt:
 	root.AddCommand(newRendererCommand())
 	root.AddCommand(newAudioCommand())
 	root.AddCommand(newInspectCommand())
+	root.AddCommand(newInstallCommand())
 	root.AddCommand(newCleanCommand())
 	root.AddCommand(newDoctorCommand())
 	root.AddCommand(newVersionCommand())
