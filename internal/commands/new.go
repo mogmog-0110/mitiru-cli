@@ -73,8 +73,13 @@ func runNew(name string) error {
 
 	fmt.Printf("Created %s\n\n", dstDir)
 	fmt.Println("Next:")
-	fmt.Printf("  cd %s\n", name)
-	fmt.Println("  mitiru run")
+	fmt.Printf("  cd %s\n\n", name)
+	fmt.Println("Try one of:")
+	fmt.Println("  mitiru run                 build + run (~30s first time)")
+	fmt.Println("  mitiru watch               auto-rebuild + restart on src/ change")
+	fmt.Println("  mitiru run --inspect       also open the sub-window inspector")
+	fmt.Println("")
+	fmt.Println("Stuck? Run 'mitiru doctor' to verify your toolchain.")
 	return nil
 }
 
