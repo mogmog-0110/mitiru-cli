@@ -12,6 +12,8 @@ import (
 	"runtime"
 	"strings"
 	"text/template"
+
+	"github.com/mogmog-0110/mitiru-cli/internal/engine"
 )
 
 // Options drives both CMakeLists.txt generation and the cmake invocation.
@@ -268,6 +270,11 @@ func Run(opts Options) (*Artifacts, error) {
 		if mkErr := os.MkdirAll(cmakeOutDir, 0o755); mkErr != nil {
 			return nil, fmt.Errorf("recreate build dir %s: %w", cmakeOutDir, mkErr)
 		}
+	}
+
+	fmt.Fprintf(opts.Stdout, "Ensuring CEF binaries are present...\n")
+	if err := engine.EnsureCEF(opts.EngineRoot, opts.Stdout); err != nil {
+		return nil, fmt.Errorf("CEF setup failed: %w", err)
 	}
 
 	fmt.Fprintf(opts.Stdout, "Configuring %s (%s)...\n", opts.ProjectName, opts.Config)
