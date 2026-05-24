@@ -8,6 +8,8 @@ import (
 	"runtime"
 
 	"github.com/spf13/cobra"
+
+	"github.com/mogmog-0110/mitiru-cli/internal/config"
 )
 
 func newDoctorCommand() *cobra.Command {
@@ -84,6 +86,18 @@ func runDoctor() error {
 
 	fmt.Println()
 	fmt.Println("All prerequisites look good.")
+
+	// Determinism lint — warn only, never fails the command.
+	cwd, err := os.Getwd()
+	if err == nil {
+		_, projectRoot, manifestErr := config.FindManifest(cwd)
+		if manifestErr == nil {
+			findings := runDeterminismLint(projectRoot)
+			printDeterminismReport(findings)
+		}
+		// If no mitiru.toml is found we silently skip the lint.
+	}
+
 	return nil
 }
 
