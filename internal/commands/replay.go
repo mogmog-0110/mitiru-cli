@@ -3,75 +3,62 @@ package commands
 import (
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 
 	"github.com/spf13/cobra"
 )
 
+var (
+	replayRecordFile string
+	replayPlayFile   string
+)
+
 func newReplayCommand() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "replay <file>",
-		Short: "Build and run the current project replaying a recorded input file",
-		Long: `Build the current project (same as 'mitiru build') and launch the resulting
-executable with MITIRU_REPLAY=<file> in its environment.
+		Use:   "replay",
+		Short: "Record or play back an input replay (deterministic)",
+		Long: `Runs the engine's replay subsystem in isolation. Part of
+MitiruEngine's per-system isolation and the deterministic-replay axis:
+the recorded InputSnapshot stream reproduces a session bit-for-bit.
 
-The engine reads the JSON ReplayData on startup and replays the recorded
-key / mouse events frame-by-frame, reproducing the original session
-deterministically.
-
-Pair with 'mitiru run' under MITIRU_RECORD to capture a session:
-
-  MITIRU_RECORD=./run.json mitiru run
-  mitiru replay ./run.json
-
-The file path is resolved to an absolute path before being passed to the
-child so the engine receives a stable location regardless of where the
-exe is launched from.`,
-		Args: cobra.ExactArgs(1),
+Provide exactly one of:
+  --record <file>   record this session to <file>
+  --replay <file>   play back a previously recorded <file>`,
+		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runReplay(args[0])
+			return runReplay()
 		},
 	}
-	cmd.Flags().BoolVar(&buildRelease, "release", false, "build + replay with Release configuration")
-	cmd.Flags().StringVar(&buildConfigName, "config", "",
-		"explicit CMake configuration (Debug|Release|RelWithDebInfo); overrides --release")
-	cmd.Flags().StringVar(&buildGenerator, "generator", "",
-		"explicit CMake generator (default is NMake Makefiles)")
+	cmd.Flags().StringVar(&replayRecordFile, "record", "", "record a session to <file>")
+	cmd.Flags().StringVar(&replayPlayFile, "replay", "", "play back <file>")
 	return cmd
 }
 
-func runReplay(replayPath string) error {
-	absReplay, err := filepath.Abs(replayPath)
-	if err != nil {
-		return fmt.Errorf("replay: resolve %q: %w", replayPath, err)
+func runReplay() error {
+	record := replayRecordFile != ""
+	play := replayPlayFile != ""
+
+	switch {
+	case record && play:
+		return fmt.Errorf("replay: --record and --replay are mutually exclusive; pass exactly one")
+	case !record && !play:
+		return fmt.Errorf("replay: pass exactly one of --record <file> or --replay <file>")
 	}
-	if _, err := os.Stat(absReplay); err != nil {
-		return fmt.Errorf("replay: %s: %w", absReplay, err)
-	}
 
-	result, err := runBuild()
-	if err != nil {
-		return err
-	}
-	art := result.Artifacts
-
-	fmt.Printf("\nReplaying %s\nRunning  %s %s\n",
-		absReplay, filepath.Base(art.HostExePath), art.DllRel)
-
-	cmd := exec.Command(art.HostExePath, art.DllRel)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	cmd.Stdin = os.Stdin
-	cmd.Dir = art.DeployDir
-	cmd.Env = append(os.Environ(), "MITIRU_REPLAY="+absReplay)
-
-	if err := cmd.Run(); err != nil {
-		if exitErr, ok := err.(*exec.ExitError); ok {
-			return fmt.Errorf("%s exited with status %d",
-				filepath.Base(art.HostExePath), exitErr.ExitCode())
+	if record {
+		abs, err := filepath.Abs(replayRecordFile)
+		if err != nil {
+			return fmt.Errorf("replay: resolve %q: %w", replayRecordFile, err)
 		}
-		return fmt.Errorf("replay %s: %w", filepath.Base(art.HostExePath), err)
+		return launchSubsystem("replay", "--record", abs)
 	}
-	return nil
+
+	abs, err := filepath.Abs(replayPlayFile)
+	if err != nil {
+		return fmt.Errorf("replay: resolve %q: %w", replayPlayFile, err)
+	}
+	if _, err := os.Stat(abs); err != nil {
+		return fmt.Errorf("replay: %s: %w", abs, err)
+	}
+	return launchSubsystem("replay", "--replay", abs)
 }

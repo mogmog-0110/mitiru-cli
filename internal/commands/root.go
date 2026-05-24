@@ -21,9 +21,11 @@ Manage MitiruEngine game projects without touching CMakeLists.txt:
   mitiru run             build and run
   mitiru debug           build (Debug) and run with engine debug helpers
   mitiru watch           file watch + auto rebuild + auto relaunch
-  mitiru replay <file>   build and run, replaying recorded input
   mitiru renderer        launch the renderer subsystem standalone (axis 3)
   mitiru audio [file]    launch the audio subsystem standalone (axis 3)
+  mitiru input           launch the input subsystem standalone (axis 3)
+  mitiru scene           launch the scene subsystem standalone (axis 3)
+  mitiru replay          record / play back an input replay (axis 4)
   mitiru inspect <pid>   open a sub-window inspector for a running game (axis 5)
   mitiru install         bootstrap MSVC + mitiru.exe + PATH (Windows)
   mitiru clean           remove build/ (--all also clears engine cache)
@@ -38,9 +40,11 @@ Manage MitiruEngine game projects without touching CMakeLists.txt:
 	root.AddCommand(newRunCommand())
 	root.AddCommand(newDebugCommand())
 	root.AddCommand(newWatchCommand())
-	root.AddCommand(newReplayCommand())
 	root.AddCommand(newRendererCommand())
 	root.AddCommand(newAudioCommand())
+	root.AddCommand(newInputCommand())
+	root.AddCommand(newSceneCommand())
+	root.AddCommand(newReplayCommand())
 	root.AddCommand(newInspectCommand())
 	root.AddCommand(newInstallCommand())
 	root.AddCommand(newCleanCommand())
