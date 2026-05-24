@@ -12,6 +12,7 @@ import (
 	"syscall"
 
 	"github.com/mogmog-0110/mitiru-cli/internal/config"
+	"github.com/mogmog-0110/mitiru-cli/internal/engine"
 	"github.com/spf13/cobra"
 )
 
@@ -122,7 +123,7 @@ func runUI(args []string, stateFile string, port int) error {
 		return fmt.Errorf("getwd: %w", err)
 	}
 
-	_, projectRoot, err := config.FindManifest(cwd)
+	manifestPath, projectRoot, err := config.FindManifest(cwd)
 	if err != nil {
 		return fmt.Errorf("not inside a mitiru project: %w", err)
 	}
@@ -131,6 +132,19 @@ func runUI(args []string, stateFile string, port int) error {
 	if st, statErr := os.Stat(assetsDir); statErr != nil || !st.IsDir() {
 		return fmt.Errorf("assets/ not found at %s — run 'mitiru build' once to populate it", assetsDir)
 	}
+
+	// The scene references mitiru_runtime/*.js (the declarative binder), which
+	// lives in the engine, not the project's assets/. Resolve the pinned engine
+	// so the preview can serve the real binder (cef_state.js stays mocked below).
+	cfg, cfgErr := config.Load(manifestPath)
+	if cfgErr != nil {
+		return fmt.Errorf("load %s: %w", manifestPath, cfgErr)
+	}
+	engineRoot, engErr := engine.EnsureSource(cfg.EngineTag(), os.Stdout)
+	if engErr != nil {
+		return fmt.Errorf("resolve engine %s: %w", cfg.EngineTag(), engErr)
+	}
+	runtimeDir := filepath.Join(engineRoot, "web", "mitiru_runtime")
 
 	// Determine scene path (URL-relative to assets/).
 	sceneURL := "/scene.html"
@@ -169,6 +183,10 @@ func runUI(args []string, stateFile string, port int) error {
 		w.Header().Set("Cache-Control", "no-store")
 		_, _ = w.Write([]byte(mockJS))
 	})
+	// Serve the engine runtime (mitiru_bind.js, etc.) from the pinned engine.
+	// The exact cef_state.js route above is more specific, so it still wins.
+	mux.Handle("/mitiru_runtime/", http.StripPrefix("/mitiru_runtime/",
+		http.FileServer(http.Dir(runtimeDir))))
 	mux.Handle("/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Block the real mitiru_cef_state.js from disk (already handled above,
 		// but guard in case path casing differs).
