@@ -8,6 +8,7 @@ import (
 	"runtime"
 
 	"github.com/mogmog-0110/mitiru-cli/internal/build"
+	"github.com/mogmog-0110/mitiru-cli/internal/config"
 	"github.com/mogmog-0110/mitiru-cli/internal/engine"
 )
 
@@ -43,25 +44,96 @@ func locateSubsystem(name string) (string, error) {
 		}
 	}
 
-	// (3) Dev tree: the engine source's build/examples output.
-	engineRoot, err := engine.EnsureSource("latest", os.Stdout)
+	// (3) Dev / cache flow: the engine ships as source only, so the prebuilt
+	// exe is usually absent. Resolve the engine the project pins and build the
+	// single subsystem target on demand (configured + cached on first run).
+	engineRoot, err := resolveEngineRoot()
 	if err != nil {
-		return "", fmt.Errorf("%s: locate engine source: %w", name, err)
+		return "", fmt.Errorf("%s: %w", name, err)
 	}
-	dir := filepath.Join(engineRoot, "build", "examples", "mitiru_subsys_"+name)
-	for _, c := range []string{
+	return findOrBuildEngineExe(engineRoot, "mitiru_subsys_"+name, exeName)
+}
+
+// resolveEngineRoot returns the cached engine source tree the current project
+// pins (via mitiru.toml). It deliberately does NOT fall back to the "latest"
+// GitHub release: tags exist but published Releases may not, and subsystems
+// must match the version the project builds against.
+func resolveEngineRoot() (string, error) {
+	cwd, err := os.Getwd()
+	if err != nil {
+		return "", fmt.Errorf("getwd: %w", err)
+	}
+	manifestPath, _, err := config.FindManifest(cwd)
+	if err != nil {
+		return "", fmt.Errorf("run this from inside a mitiru project (mitiru.toml pins the engine version): %w", err)
+	}
+	cfg, err := config.Load(manifestPath)
+	if err != nil {
+		return "", fmt.Errorf("load %s: %w", manifestPath, err)
+	}
+	root, err := engine.EnsureSource(cfg.EngineTag(), os.Stdout)
+	if err != nil {
+		return "", fmt.Errorf("fetch engine %s: %w", cfg.EngineTag(), err)
+	}
+	return root, nil
+}
+
+// findOrBuildEngineExe returns the path to an engine example executable
+// (e.g. mitiru_subsys_replay, mitiru_inspector), building it from the cached
+// engine source when it is not already present.
+func findOrBuildEngineExe(engineRoot, target, exeName string) (string, error) {
+	dir := filepath.Join(engineRoot, "build", "examples", target)
+	candidates := []string{
 		filepath.Join(dir, exeName),
 		filepath.Join(dir, "Debug", exeName),
 		filepath.Join(dir, "Release", exeName),
-	} {
+	}
+	for _, c := range candidates {
 		if _, err := os.Stat(c); err == nil {
 			return c, nil
 		}
 	}
 
-	return "", fmt.Errorf(
-		"mitiru_subsys_%s not found. Build it with: cmake --build build --target mitiru_subsys_%s",
-		name, name)
+	if err := ensureEngineConfigured(engineRoot); err != nil {
+		return "", err
+	}
+	if err := buildEngineTarget(filepath.Join(engineRoot, "build"), target); err != nil {
+		return "", err
+	}
+	for _, c := range candidates {
+		if _, err := os.Stat(c); err == nil {
+			return c, nil
+		}
+	}
+	return "", fmt.Errorf("built %s but no executable appeared under %s", target, dir)
+}
+
+// ensureEngineConfigured makes sure the cached engine has a configured build/
+// tree (CEF fetched + cmake configured) so individual targets can be built.
+// A no-op once CMakeCache.txt exists.
+func ensureEngineConfigured(engineRoot string) error {
+	buildDir := filepath.Join(engineRoot, "build")
+	if _, err := os.Stat(filepath.Join(buildDir, "CMakeCache.txt")); err == nil {
+		return nil
+	}
+	if err := engine.EnsureCEF(engineRoot, os.Stdout); err != nil {
+		return fmt.Errorf("CEF setup failed: %w", err)
+	}
+	vcvars, err := build.FindVcvars64()
+	if err != nil {
+		return err
+	}
+	fmt.Println("Configuring engine (first subsystem build; cached afterwards)...")
+	// MITIRU_BUILD_TESTS defaults ON for a top-level engine configure, but the
+	// release snapshot ships examples/ (the subsystem targets) without tests/,
+	// so keep tests off to avoid add_subdirectory(tests) on a missing dir.
+	body := msvcPrelude(vcvars) + fmt.Sprintf(
+		"cmake -S \"%s\" -B \"%s\" -G Ninja -DCMAKE_BUILD_TYPE=Debug -DMITIRU_BUILD_TESTS=OFF\r\n",
+		engineRoot, buildDir)
+	if err := runMsvcScript("mitiru_engine_configure", body); err != nil {
+		return fmt.Errorf("configure engine at %s: %w", engineRoot, err)
+	}
+	return nil
 }
 
 // subsysExeName returns the platform-specific executable file name for a
@@ -114,21 +186,36 @@ func buildEngineTarget(buildDir, target string) error {
 	if err != nil {
 		return err
 	}
-	script := fmt.Sprintf(
+	body := msvcPrelude(vcvars) + fmt.Sprintf(
+		"cmake --build \"%s\" --config Debug --target %s\r\n", buildDir, target)
+	if err := runMsvcScript("mitiru_target", body); err != nil {
+		return fmt.Errorf("cmake --build %s --target %s: %w", buildDir, target, err)
+	}
+	return nil
+}
+
+// msvcPrelude emits the batch boilerplate that puts the VS Installer on PATH
+// and activates vcvars64.bat before any cmake invocation.
+func msvcPrelude(vcvars string) string {
+	return fmt.Sprintf(
 		"@echo off\r\n"+
 			"set \"PATH=C:\\Program Files (x86)\\Microsoft Visual Studio\\Installer;%%PATH%%\"\r\n"+
 			"call \"%s\" >NUL\r\n"+
-			"if errorlevel 1 exit /b %%errorlevel%%\r\n"+
-			"cmake --build \"%s\" --config Debug --target %s\r\n",
-		vcvars, buildDir, target)
+			"if errorlevel 1 exit /b %%errorlevel%%\r\n",
+		vcvars)
+}
 
-	tmp, err := os.CreateTemp("", "mitiru_target-*.bat")
+// runMsvcScript materialises body as a temp .bat and runs it via cmd /c,
+// streaming output to the console. Writing a file sidesteps cmd quoting bugs
+// when paths contain spaces.
+func runMsvcScript(prefix, body string) error {
+	tmp, err := os.CreateTemp("", prefix+"-*.bat")
 	if err != nil {
 		return fmt.Errorf("create temp batch: %w", err)
 	}
 	scriptPath := tmp.Name()
 	defer os.Remove(scriptPath)
-	if _, err := tmp.WriteString(script); err != nil {
+	if _, err := tmp.WriteString(body); err != nil {
 		tmp.Close()
 		return fmt.Errorf("write temp batch: %w", err)
 	}
@@ -137,8 +224,5 @@ func buildEngineTarget(buildDir, target string) error {
 	cmd := exec.Command("cmd", "/c", scriptPath)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("cmake --build %s --target %s: %w", buildDir, target, err)
-	}
-	return nil
+	return cmd.Run()
 }

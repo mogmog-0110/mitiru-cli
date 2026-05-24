@@ -148,36 +148,23 @@ func autoDetectProducerPid() (int, error) {
 // mitiru_inspector.exe. It is the single source of truth for both the single
 // and --all inspect paths. Returns a clean error on miss — never panics.
 func locateInspectorExe() (string, error) {
-	engineRoot, err := engine.EnsureSource(inspectEngineTag, os.Stdout)
-	if err != nil {
-		return "", fmt.Errorf("inspect: fetch engine source: %w", err)
-	}
-
-	candidates := []string{
-		filepath.Join(engineRoot, "build", "examples", "mitiru_inspector", "mitiru_inspector.exe"),
-		filepath.Join(engineRoot, "build", "examples", "mitiru_inspector", "Debug", "mitiru_inspector.exe"),
-		filepath.Join(engineRoot, "build", "examples", "mitiru_inspector", "Release", "mitiru_inspector.exe"),
-	}
-	for _, c := range candidates {
-		if _, err := os.Stat(c); err == nil {
-			return c, nil
+	// Resolve the engine: honour an explicit --engine override, otherwise use
+	// the version the current project pins. Then find-or-build the inspector
+	// from the cached source (configured + cached on first run).
+	var engineRoot string
+	var err error
+	if inspectEngineTag != "" && inspectEngineTag != "latest" {
+		engineRoot, err = engine.EnsureSource(inspectEngineTag, os.Stdout)
+		if err != nil {
+			return "", fmt.Errorf("inspect: fetch engine %s: %w", inspectEngineTag, err)
+		}
+	} else {
+		engineRoot, err = resolveEngineRoot()
+		if err != nil {
+			return "", fmt.Errorf("inspect: %w", err)
 		}
 	}
-
-	engineBuildDir := filepath.Join(engineRoot, "build")
-	if _, err := os.Stat(filepath.Join(engineBuildDir, "CMakeCache.txt")); err != nil {
-		return "", fmt.Errorf("inspect: engine has not been configured yet; expected %s — run `cmake --preset default` from the engine root first",
-			engineBuildDir)
-	}
-	if err := buildEngineTarget(engineBuildDir, "mitiru_inspector"); err != nil {
-		return "", err
-	}
-	for _, c := range candidates {
-		if _, err := os.Stat(c); err == nil {
-			return c, nil
-		}
-	}
-	return "", fmt.Errorf("inspect: build succeeded but mitiru_inspector.exe was not found under %s", engineBuildDir)
+	return findOrBuildEngineExe(engineRoot, "mitiru_inspector", "mitiru_inspector.exe")
 }
 
 func runInspect(pid int, filePath, inspectable string) error {
