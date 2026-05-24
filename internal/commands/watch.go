@@ -48,7 +48,7 @@ the game.`,
 	cmd.Flags().StringVar(&buildConfigName, "config", "",
 		"explicit CMake configuration (Debug|Release|RelWithDebInfo)")
 	cmd.Flags().StringVar(&buildGenerator, "generator", "",
-		"explicit CMake generator (default is NMake Makefiles)")
+		"explicit CMake generator (default is Ninja)")
 	cmd.Flags().BoolVar(&runWithInspect, "inspect", false,
 		"also launch the sub-window inspector alongside the game")
 	return cmd

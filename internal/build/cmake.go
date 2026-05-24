@@ -3,6 +3,7 @@
 package build
 
 import (
+	"bufio"
 	"fmt"
 	"io"
 	"os"
@@ -252,6 +253,23 @@ func Run(opts Options) (*Artifacts, error) {
 		return nil, err
 	}
 
+	// A previously-configured build dir pins its generator in CMakeCache.txt.
+	// Switching generators (e.g. NMake → Ninja) makes cmake abort with a
+	// "generator mismatch" error, so wipe the output tree when the cached
+	// generator differs from the one we're about to use. The generated source
+	// tree (cmakeSrcDir) is untouched — only the cmake -B output is rebuilt.
+	if mismatch, cached := generatorMismatch(cmakeOutDir, generator); mismatch {
+		fmt.Fprintf(opts.Stdout,
+			"Generator changed (%s -> %s); clearing %s for a clean reconfigure...\n",
+			cached, generator, cmakeOutDir)
+		if rmErr := os.RemoveAll(cmakeOutDir); rmErr != nil {
+			return nil, fmt.Errorf("clear stale build dir %s: %w", cmakeOutDir, rmErr)
+		}
+		if mkErr := os.MkdirAll(cmakeOutDir, 0o755); mkErr != nil {
+			return nil, fmt.Errorf("recreate build dir %s: %w", cmakeOutDir, mkErr)
+		}
+	}
+
 	fmt.Fprintf(opts.Stdout, "Configuring %s (%s)...\n", opts.ProjectName, opts.Config)
 	if err := runCMakeConfigure(vcvars, generator, cmakeSrcDir, cmakeOutDir, opts); err != nil {
 		return nil, err
@@ -346,16 +364,44 @@ func isMultiConfigGenerator(generator string) bool {
 		generator == "Xcode"
 }
 
-// generatorForVcvars maps a vcvars64.bat path to the CMake generator name
-// for that toolchain. NMake Makefiles is the default everywhere on Windows
-// because it consumes the LIB / INCLUDE env vars vcvars64.bat sets directly —
-// the VS multi-config generator instead launches MSBuild, which resolves the
-// Windows SDK via its own .props files and silently fails (LNK1104 ucrtd.lib)
-// on machines where only an older SDK (e.g. 10.0.18362) is installed.
-// Users who want a .sln can opt-in with `mitiru build --generator "Visual Studio 17 2022"`.
+// generatorForVcvars maps a vcvars64.bat path to the CMake generator name for
+// that toolchain. Ninja is the default everywhere on Windows:
+//   - Like NMake it consumes the LIB / INCLUDE env vars vcvars64.bat sets
+//     directly, so it avoids the MSBuild/SDK resolution problem the VS
+//     multi-config generator hits (LNK1104 ucrtd.lib on machines where only an
+//     older Windows SDK is installed).
+//   - Unlike NMake it does NOT choke on the drive-letter colon in Windows paths
+//     inside CMakeFiles\<target>.dir\compiler_depend.make — NMake aborts there
+//     with "fatal error U1033: 構文エラー : 予期しない ':'", Ninja does not.
+//   - VS bundles ninja.exe and vcvars64.bat puts it on PATH, so no extra install.
+// Users who want NMake or a .sln can opt-in with
+// `mitiru build --generator "NMake Makefiles"` / `--generator "Visual Studio 17 2022"`.
 func generatorForVcvars(vcvars string) string {
 	_ = vcvars
-	return "NMake Makefiles"
+	return "Ninja"
+}
+
+// generatorMismatch reports whether outDir holds a CMakeCache.txt whose
+// pinned CMAKE_GENERATOR differs from want. Returns (false, "") when there is
+// no cache yet (a fresh build dir is never a mismatch) or when the cache is
+// unreadable/has no generator line (let cmake itself decide in that case).
+func generatorMismatch(outDir, want string) (bool, string) {
+	f, err := os.Open(filepath.Join(outDir, "CMakeCache.txt"))
+	if err != nil {
+		return false, ""
+	}
+	defer f.Close()
+
+	const prefix = "CMAKE_GENERATOR:INTERNAL="
+	scanner := bufio.NewScanner(f)
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if strings.HasPrefix(line, prefix) {
+			cached := strings.TrimSpace(strings.TrimPrefix(line, prefix))
+			return cached != want, cached
+		}
+	}
+	return false, ""
 }
 
 func runCMakeBuild(vcvars, outDir string, opts Options) error {

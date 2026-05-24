@@ -30,7 +30,7 @@ Standard output, standard error, and exit code are forwarded.`,
 		},
 	}
 	cmd.Flags().StringVar(&buildGenerator, "generator", "",
-		"explicit CMake generator (e.g. \"Visual Studio 17 2022\", \"Ninja\"); default is NMake Makefiles")
+		"explicit CMake generator (e.g. \"Visual Studio 17 2022\", \"NMake Makefiles\"); default is Ninja")
 	return cmd
 }
 
