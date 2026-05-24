@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>{{.ProjectName}}</title>
+<style>
+  :root {
+    --bg:#f4f5f7; --card:#ffffff; --ink:#222831; --muted:#7a8290;
+    --accent:#3b82f6; --line:#dfe3ea;
+  }
+  html, body {
+    margin:0; height:100%; overflow:hidden; background:var(--bg); color:var(--ink);
+    font-family:system-ui, "Segoe UI", "Hiragino Sans", "Noto Sans JP", sans-serif;
+    user-select:none; pointer-events:none;
+  }
+  .wrap { position:absolute; inset:0; display:flex; flex-direction:column;
+          align-items:center; justify-content:center; gap:16px; }
+  .title  { font-size:20px; font-weight:700; }
+  .points { font-size:48px; font-weight:800; }
+  .persec { font-size:15px; color:var(--muted); }
+
+  .tap {
+    pointer-events:auto; font-size:18px; font-weight:700; color:#fff;
+    background:var(--accent); border:none; border-radius:10px; padding:16px 40px; cursor:pointer;
+  }
+  .tap:active { transform:translateY(1px); }
+
+  .shop { display:flex; flex-direction:column; gap:8px; width:460px; }
+  .row {
+    pointer-events:auto; display:flex; align-items:center; gap:12px;
+    background:var(--card); border:1px solid var(--line); border-radius:10px;
+    padding:12px 16px; cursor:pointer;
+  }
+  .row:hover    { background:#eef2f8; }
+  .row.disabled { opacity:0.45; cursor:default; }
+  .row .name { font-weight:700; min-width:96px; }
+  .row .eff  { font-size:13px; color:var(--muted); flex:1; }
+  .row .own  { font-size:13px; color:var(--muted); min-width:36px; text-align:right; }
+  .row .cost { font-weight:700; color:var(--accent); min-width:70px; text-align:right; }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="title">{{.ProjectName}}</div>
+
+    <div class="points" data-m-text="view.points" data-m-format="kmb">0</div>
+    <div class="persec" data-m-tpl="毎秒 {view.persec:kmb} ／ 1クリック {view.perclick:kmb}">毎秒 0 ／ 1クリック 1</div>
+
+    <button class="tap" data-m-action="tap">クリック！</button>
+
+    <div class="shop">
+      <div class="row" data-m-action="buyClick"
+           data-m-show="view.shop.click.seen" data-m-class="disabled: !view.shop.click.afford">
+        <span class="name">クリック強化</span><span class="eff">1 クリックの獲得 +1</span>
+        <span class="own"></span><span class="cost" data-m-text="view.shop.click.cost" data-m-format="kmb">-</span>
+      </div>
+      <div class="row" data-m-action="buy0"
+           data-m-show="view.shop.b0.seen" data-m-class="disabled: !view.shop.b0.afford">
+        <span class="name">ボット</span><span class="eff">毎秒 +1</span>
+        <span class="own" data-m-tpl="x{view.shop.b0.owned}">x0</span><span class="cost" data-m-text="view.shop.b0.cost" data-m-format="kmb">-</span>
+      </div>
+      <div class="row" data-m-action="buy1"
+           data-m-show="view.shop.b1.seen" data-m-class="disabled: !view.shop.b1.afford">
+        <span class="name">工場</span><span class="eff">毎秒 +8</span>
+        <span class="own" data-m-tpl="x{view.shop.b1.owned}">x0</span><span class="cost" data-m-text="view.shop.b1.cost" data-m-format="kmb">-</span>
+      </div>
+      <div class="row" data-m-action="buy2"
+           data-m-show="view.shop.b2.seen" data-m-class="disabled: !view.shop.b2.afford">
+        <span class="name">発電所</span><span class="eff">毎秒 +50</span>
+        <span class="own" data-m-tpl="x{view.shop.b2.owned}">x0</span><span class="cost" data-m-text="view.shop.b2.cost" data-m-format="kmb">-</span>
+      </div>
+    </div>
+  </div>
+
+  <script src="mitiru_runtime/mitiru_cef_state.js"></script>
+  <script src="mitiru_runtime/mitiru_bind.js"></script>
+</body>
+</html>

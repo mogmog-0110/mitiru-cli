@@ -1,0 +1,19 @@
+[project]
+name = "{{.ProjectName}}"
+version = "0.1.0"
+engine = "0.4.0"
+
+[window]
+title = "{{.ProjectName}}"
+width = 1280
+height = 720
+vsync = true
+
+[cef]
+# The host derives the scene URL from the DLL path
+# (default: file:///./<project>/assets/scene.html).
+# Set start_url here to override.
+skip_default_font = true
+
+[build]
+backend = "auto"

@@ -26,9 +26,12 @@ func newNewCommand() *cobra.Command {
 The scaffolded project is built as a SHARED library (DLL) and run via the
 mitiru_host launcher — see ADR 0005 for the host/game contract.
 
+Templates: hello (minimal), clicker (incremental loop), shooter (vertical STG).
+
 Example:
-  mitiru new myGame             create ./myGame/ from the 'hello' template
-  mitiru new myGame --force     overwrite an existing directory`,
+  mitiru new myGame                create ./myGame/ from the 'hello' template
+  mitiru new myGame -t clicker     start from the clicker template
+  mitiru new myGame --force        overwrite an existing directory`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runNew(args[0])
@@ -36,7 +39,7 @@ Example:
 	}
 
 	cmd.Flags().StringVarP(&newTemplateName, "template", "t", "hello",
-		"template to use (only 'hello' is shipped today)")
+		"template to use: hello | clicker | shooter")
 	cmd.Flags().BoolVar(&newForce, "force", false,
 		"overwrite the target directory if it already exists")
 

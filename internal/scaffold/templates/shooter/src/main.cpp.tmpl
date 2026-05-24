@@ -1,0 +1,394 @@
+// {{.ProjectName}} — 縦スクロール・シューティング (グラディウス風)。
+// ロジックは C++ (このファイル)、見た目はすべて HTML/CSS (assets/scene.html)。
+//
+// 敵の出現は完全にスクリプト化したタイムライン (ランダム無し＝毎回同じ)。
+// パワーアップ (スピード / 連射 / 拡散) を拾って自機を強化し、最後はボス戦。
+//
+// 信号 (ADR 0005): host→DLL=InputSnapshot、DLL→host=FrameIntents。
+// 毎フレーム全エンティティを 1 本の文字列 (view.scene) で push する。
+
+#include <cmath>
+#include <cstring>
+#include <string>
+
+#include <mitiru/core/Screen.hpp>
+#include <mitiru/module/ModuleApi.hpp>
+#include <mitiru/bridge/StateWriter.hpp>   // 宣言的バインダ向けスキーマを楽に push
+
+namespace {{.ProjectIdent}}
+{
+
+namespace vk
+{
+constexpr int Escape = 0x1B, Space = 0x20, Left = 0x25, Up = 0x26, Right = 0x27, Down = 0x28, R = 0x52;
+}
+
+constexpr float kFieldW = 420.0f;
+constexpr float kFieldH = 640.0f;
+
+constexpr int kMaxBullets  = 64;
+constexpr int kMaxEnemies  = 40;
+constexpr int kMaxEBullets = 64;
+constexpr int kMaxPowerups = 8;
+
+constexpr float kBulletSpd = 780.0f;
+constexpr float kBossTime  = 28.0f;   // この秒数でボスが出る (タイムライン終端)
+constexpr int   kBossHp    = 150;
+
+// 敵種別:   0=直進  1=ウェーブ  2=ダイバー(自機へ寄る)  3=キャリア(倒すとアイテム)
+// アイテム: 0=スピード  1=連射  2=拡散
+
+struct Bullet  { float x = 0, y = 0, vx = 0, vy = 0; bool active = false; };
+struct Enemy   { float x = 0, y = 0, x0 = 0, age = 0; int kind = 0; int hp = 0; bool active = false; };
+struct Powerup { float x = 0, y = 0; int kind = 0; bool active = false; };
+struct Boss    { float x = 0, y = 0, age = 0; int hp = 0; bool active = false; bool entering = false; float fireCd = 0; };
+
+struct GameMemory
+{
+    float px = kFieldW * 0.5f;
+    float py = kFieldH - 70.0f;
+    int   speedLv = 0, rapidLv = 0, spreadLv = 0;   // パワーアップ段階
+    float fireCd  = 0;
+    float invuln  = 0;       // 被弾後の無敵時間 (>0 の間は当たらない)
+    int   lives   = 3;
+    int   score   = 0;
+    bool  gameOver = false;
+    bool  won      = false;
+    float elapsed  = 0;      // タイムライン時計
+    int   waveIdx  = 0;      // 次に出すウェーブ
+    int   dropCycle = 0;     // キャリアが落とすアイテム種別の循環
+    bool  bossSpawned = false;
+    int   tick = 0;
+    Boss    boss;
+    Bullet  bullets[kMaxBullets]   = {};
+    Enemy   enemies[kMaxEnemies]   = {};
+    Bullet  ebullets[kMaxEBullets] = {};   // 敵弾 (ボスが撃つ)
+    Powerup powerups[kMaxPowerups] = {};
+};
+
+// ── 出現スケジュール (完全固定。time 秒に kind の敵を count 体、form 配置で出す) ──
+// form: 0=横一列  1=左から斜め  2=右から斜め  3=param の x に単体
+struct Wave { float time; int kind; int count; int form; float param; };
+static const Wave kWaves[] = {
+    { 1.5f, 0, 4, 0,   0 },
+    { 3.5f, 1, 3, 0,   0 },
+    { 5.0f, 3, 1, 3, 210 },   // キャリア (アイテム)
+    { 5.5f, 0, 3, 1,   0 },
+    { 8.0f, 1, 4, 0,   0 },
+    {10.0f, 2, 3, 0,   0 },   // ダイバー
+    {12.0f, 3, 1, 3, 120 },
+    {12.6f, 0, 5, 2,   0 },
+    {15.0f, 2, 4, 0,   0 },
+    {17.0f, 1, 5, 0,   0 },
+    {19.0f, 3, 1, 3, 300 },
+    {19.6f, 0, 6, 0,   0 },
+    {22.0f, 2, 5, 0,   0 },
+    {24.5f, 1, 6, 0,   0 },
+};
+constexpr int kNumWaves = (int)(sizeof(kWaves) / sizeof(kWaves[0]));
+
+// ── 小物 ────────────────────────────────────────────────────────────────
+static float clampf(float v, float lo, float hi) { return v < lo ? lo : (v > hi ? hi : v); }
+static std::string iv(float v) { return std::to_string((int)std::lround(v)); }
+static int hpFor(int kind)    { return kind == 2 ? 2 : 1; }
+static int scoreFor(int kind) { static const int s[4] = {10, 15, 25, 30}; return s[kind & 3]; }
+
+template <class T> static T* freeSlot(T* pool, int n)
+{
+    for (int i = 0; i < n; ++i) { if (!pool[i].active) { return &pool[i]; } }
+    return nullptr;
+}
+
+// ── 表示用ヘルパー (整形は C++ 側。HTML は値を出すだけ) ──────────────────────
+static int ri(float v) { return (int)std::lround(v); }                 // compact 列用に丸め
+static std::string pips(int lv, int max)                               // ●●○ のピップ
+{
+    std::string s;
+    for (int i = 0; i < max; ++i) { s += (i < lv) ? "●" : "○"; }
+    return s;
+}
+static std::string livesStr(int n) { std::string s; for (int i = 0; i < n; ++i) { s += "▲"; } return s; }
+
+// ── 生成 ────────────────────────────────────────────────────────────────
+static void spawnEnemy(GameMemory& m, int kind, float x, float y)
+{
+    if (auto* e = freeSlot(m.enemies, kMaxEnemies))
+    {
+        e->x = x; e->y = y; e->x0 = x; e->age = 0; e->kind = kind; e->hp = hpFor(kind); e->active = true;
+    }
+}
+static void spawnBullet(GameMemory& m, float x, float y, float vx, float vy)
+{
+    if (auto* b = freeSlot(m.bullets, kMaxBullets)) { *b = {x, y, vx, vy, true}; }
+}
+static void spawnEBullet(GameMemory& m, float x, float y, float vx, float vy)
+{
+    if (auto* b = freeSlot(m.ebullets, kMaxEBullets)) { *b = {x, y, vx, vy, true}; }
+}
+static void spawnPowerup(GameMemory& m, float x, float y, int kind)
+{
+    if (auto* p = freeSlot(m.powerups, kMaxPowerups)) { p->x = x; p->y = y; p->kind = kind; p->active = true; }
+}
+
+static void spawnWave(GameMemory& m, const Wave& w)
+{
+    for (int i = 0; i < w.count; ++i)
+    {
+        float x, y;
+        switch (w.form)
+        {
+        case 1:  x = 40.0f + i * 64.0f;            y = -20.0f - i * 42.0f; break;   // 左斜め
+        case 2:  x = kFieldW - 40.0f - i * 64.0f;  y = -20.0f - i * 42.0f; break;   // 右斜め
+        case 3:  x = w.param;                       y = -20.0f;             break;   // 単体
+        default: x = w.count == 1 ? kFieldW * 0.5f
+                       : 40.0f + (kFieldW - 80.0f) * ((float)i / (w.count - 1));
+                 y = -20.0f - (i % 2) * 16.0f;      break;                           // 横一列
+        }
+        spawnEnemy(m, w.kind, clampf(x, 16.0f, kFieldW - 16.0f), y);
+    }
+}
+
+// ── 自機 ────────────────────────────────────────────────────────────────
+static float playerSpeed(const GameMemory& m) { return 240.0f + m.speedLv * 55.0f; }
+static float fireInterval(const GameMemory& m) { return std::fmax(0.06f, 0.20f - m.rapidLv * 0.045f); }
+
+static void fireShot(GameMemory& m)
+{
+    const int n = (m.spreadLv == 0) ? 1 : (m.spreadLv == 1 ? 3 : 5);
+    static const float a1[] = {0.0f};
+    static const float a3[] = {-0.20f, 0.0f, 0.20f};
+    static const float a5[] = {-0.38f, -0.19f, 0.0f, 0.19f, 0.38f};
+    const float* a = (n == 1) ? a1 : (n == 3 ? a3 : a5);
+    for (int i = 0; i < n; ++i)
+    {
+        spawnBullet(m, m.px, m.py - 16.0f, std::sin(a[i]) * kBulletSpd, -std::cos(a[i]) * kBulletSpd);
+    }
+}
+
+static void updatePlayer(GameMemory& m, float dt, const mitiru::module::InputSnapshot* in)
+{
+    const float spd = playerSpeed(m);
+    if (in->keysDown[vk::Left])  { m.px -= spd * dt; }
+    if (in->keysDown[vk::Right]) { m.px += spd * dt; }
+    if (in->keysDown[vk::Up])    { m.py -= spd * dt; }
+    if (in->keysDown[vk::Down])  { m.py += spd * dt; }
+    m.px = clampf(m.px, 16.0f, kFieldW - 16.0f);
+    m.py = clampf(m.py, 40.0f, kFieldH - 30.0f);
+
+    m.fireCd -= dt;
+    if (in->keysDown[vk::Space] && m.fireCd <= 0.0f) { fireShot(m); m.fireCd = fireInterval(m); }
+    if (m.invuln > 0.0f) { m.invuln -= dt; }
+}
+
+// ── 敵の移動 ─────────────────────────────────────────────────────────────
+static void updateEnemies(GameMemory& m, float dt)
+{
+    for (auto& e : m.enemies)
+    {
+        if (!e.active) { continue; }
+        e.age += dt;
+        switch (e.kind)
+        {
+        case 1:  e.y += 95.0f * dt;  e.x = e.x0 + std::sin(e.age * 3.2f) * 70.0f; break;   // ウェーブ
+        case 2:  e.y += 135.0f * dt; e.x += clampf(m.px - e.x, -75.0f * dt, 75.0f * dt); break;   // ダイバー
+        case 3:  e.y += 70.0f * dt;  break;                                                // キャリア (遅い)
+        default: e.y += 115.0f * dt; break;                                                // 直進
+        }
+        e.x = clampf(e.x, 8.0f, kFieldW - 8.0f);
+        if (e.y > kFieldH + 30.0f) { e.active = false; }   // 下を抜けたら消滅 (ペナルティ無し)
+    }
+}
+
+static void updateMovers(GameMemory& m, float dt)
+{
+    for (auto& b : m.bullets)  { if (b.active) { b.x += b.vx * dt; b.y += b.vy * dt; if (b.y < -16 || b.x < -16 || b.x > kFieldW + 16) { b.active = false; } } }
+    for (auto& b : m.ebullets) { if (b.active) { b.x += b.vx * dt; b.y += b.vy * dt; if (b.y > kFieldH + 16 || b.y < -16 || b.x < -16 || b.x > kFieldW + 16) { b.active = false; } } }
+    for (auto& p : m.powerups) { if (p.active) { p.y += 85.0f * dt; if (p.y > kFieldH + 20) { p.active = false; } } }
+}
+
+// ── ボス ────────────────────────────────────────────────────────────────
+static void updateBoss(GameMemory& m, float dt)
+{
+    Boss& b = m.boss;
+    if (!b.active) { return; }
+    if (b.entering)
+    {
+        b.y += 80.0f * dt;
+        if (b.y >= 95.0f) { b.y = 95.0f; b.entering = false; }
+        return;
+    }
+    b.age += dt;
+    b.x = kFieldW * 0.5f + std::sin(b.age * 0.9f) * 125.0f;
+    b.fireCd -= dt;
+    if (b.fireCd <= 0.0f)
+    {
+        const float base = std::atan2(m.py - b.y, m.px - b.x);   // 自機方向へ 3-way
+        for (float k : {-0.28f, 0.0f, 0.28f})
+        {
+            spawnEBullet(m, b.x, b.y + 30.0f, std::cos(base + k) * 235.0f, std::sin(base + k) * 235.0f);
+        }
+        b.fireCd = 0.95f;
+    }
+}
+
+// ── タイムライン進行 ──────────────────────────────────────────────────────
+static void updateTimeline(GameMemory& m, float dt)
+{
+    m.elapsed += dt;
+    while (m.waveIdx < kNumWaves && kWaves[m.waveIdx].time <= m.elapsed) { spawnWave(m, kWaves[m.waveIdx]); ++m.waveIdx; }
+    if (!m.bossSpawned && m.elapsed >= kBossTime)
+    {
+        m.boss = {kFieldW * 0.5f, -60.0f, 0.0f, kBossHp, true, true, 1.2f};
+        m.bossSpawned = true;
+    }
+}
+
+// ── 被弾 / 取得 ───────────────────────────────────────────────────────────
+static void hitPlayer(GameMemory& m)
+{
+    if (m.invuln > 0.0f) { return; }
+    m.invuln = 1.4f;
+    if (--m.lives <= 0) { m.lives = 0; m.gameOver = true; }
+}
+static void applyPowerup(GameMemory& m, int kind)
+{
+    if (kind == 0)      { m.speedLv  = m.speedLv  < 3 ? m.speedLv + 1  : 3; }
+    else if (kind == 1) { m.rapidLv  = m.rapidLv  < 3 ? m.rapidLv + 1  : 3; }
+    else                { m.spreadLv = m.spreadLv < 2 ? m.spreadLv + 1 : 2; }
+}
+
+static void collide(GameMemory& m)
+{
+    // 自弾 × 敵
+    for (auto& e : m.enemies)
+    {
+        if (!e.active) { continue; }
+        for (auto& b : m.bullets)
+        {
+            if (!b.active) { continue; }
+            if (std::fabs(b.x - e.x) < 18.0f && std::fabs(b.y - e.y) < 20.0f)
+            {
+                b.active = false;
+                if (--e.hp <= 0)
+                {
+                    m.score += scoreFor(e.kind);
+                    if (e.kind == 3) { spawnPowerup(m, e.x, e.y, m.dropCycle % 3); ++m.dropCycle; }
+                    e.active = false;
+                }
+                break;
+            }
+        }
+    }
+    // 自弾 × ボス
+    if (m.boss.active && !m.boss.entering)
+    {
+        for (auto& b : m.bullets)
+        {
+            if (!b.active) { continue; }
+            if (std::fabs(b.x - m.boss.x) < 46.0f && std::fabs(b.y - m.boss.y) < 32.0f)
+            {
+                b.active = false;
+                if (--m.boss.hp <= 0) { m.boss.active = false; m.won = true; }
+            }
+        }
+    }
+    // 敵 / 敵弾 / ボス × 自機
+    for (auto& e : m.enemies)
+    {
+        if (e.active && std::fabs(e.x - m.px) < 24.0f && std::fabs(e.y - m.py) < 24.0f) { e.active = false; hitPlayer(m); }
+    }
+    for (auto& b : m.ebullets)
+    {
+        if (b.active && std::fabs(b.x - m.px) < 14.0f && std::fabs(b.y - m.py) < 16.0f) { b.active = false; hitPlayer(m); }
+    }
+    if (m.boss.active && std::fabs(m.boss.x - m.px) < 46.0f && std::fabs(m.boss.y - m.py) < 34.0f) { hitPlayer(m); }
+    // アイテム × 自機
+    for (auto& p : m.powerups)
+    {
+        if (p.active && std::fabs(p.x - m.px) < 24.0f && std::fabs(p.y - m.py) < 24.0f) { applyPowerup(m, p.kind); p.active = false; }
+    }
+}
+
+// ── モジュールコールバック ───────────────────────────────────────────────────
+void on_init(void* /*memory*/) {}
+
+void on_update(void* memory, float dt,
+               const mitiru::module::InputSnapshot* input,
+               mitiru::module::FrameIntents* intents)
+{
+    if (memory == nullptr || input == nullptr || intents == nullptr) { return; }
+    auto& m = *static_cast<GameMemory*>(memory);
+
+    ++m.tick;
+    if (input->keysJustPressed[vk::Escape]) { intents->requestStop = 1; }
+    if (input->keysJustPressed[vk::R])      { m = GameMemory{}; }   // リスタート
+
+    if (!m.gameOver && !m.won)
+    {
+        updateTimeline(m, dt);
+        updatePlayer(m, dt, input);
+        updateEnemies(m, dt);
+        updateBoss(m, dt);
+        updateMovers(m, dt);
+        collide(m);
+    }
+
+    // 全エンティティを 1 本の compact 列で push ("t,x,y,v"、HTML の data-m-fields と対応)。
+    mitiru::bridge::StateWriter w(intents);
+    {
+        auto L = w.list("view.scene");
+        L.item().field(0).field(ri(m.px)).field(ri(m.py)).field(m.invuln > 0.0f ? 1 : 0);
+        for (const auto& b : m.bullets)  { if (b.active) { L.item().field(1).field(ri(b.x)).field(ri(b.y)).field(0); } }
+        for (const auto& e : m.enemies)  { if (e.active) { L.item().field(2).field(ri(e.x)).field(ri(e.y)).field(e.kind); } }
+        for (const auto& b : m.ebullets) { if (b.active) { L.item().field(3).field(ri(b.x)).field(ri(b.y)).field(0); } }
+        for (const auto& p : m.powerups) { if (p.active) { L.item().field(4).field(ri(p.x)).field(ri(p.y)).field(p.kind); } }
+        if (m.boss.active) { L.item().field(5).field(ri(m.boss.x)).field(ri(m.boss.y)).field(0); }
+    }
+    if (m.tick % 4 == 0)
+    {
+        w.set("view.score", m.score);
+        w.set("view.lives", livesStr(m.lives));
+        w.set("view.spd", pips(m.speedLv, 3));
+        w.set("view.rpd", pips(m.rapidLv, 3));
+        w.set("view.wid", pips(m.spreadLv, 2));
+        w.object("view.boss").set("active", m.boss.active).set("pct", m.boss.active ? m.boss.hp * 100 / kBossHp : 0);
+        w.set("view.state", m.won ? "clear" : (m.gameOver ? "over" : ""));
+    }
+}
+
+void on_draw(void* memory, mitiru::Screen* screen)
+{
+    if (memory == nullptr || screen == nullptr) { return; }
+    screen->clear(sgc::Colorf{0.04f, 0.05f, 0.09f, 1.0f});   // 背後の宇宙色 (見た目は HTML)
+}
+
+void on_shutdown(void* /*memory*/) {}
+
+}  // namespace {{.ProjectIdent}}
+
+extern "C"
+{
+
+#if defined(_WIN32)
+#define {{.UpperIdent}}_DLL_EXPORT __declspec(dllexport)
+#else
+#define {{.UpperIdent}}_DLL_EXPORT __attribute__((visibility("default")))
+#endif
+
+{{.UpperIdent}}_DLL_EXPORT
+void mitiru_module_load(mitiru::module::ModuleApi* api, void** memory)
+{
+    if (api == nullptr || memory == nullptr) { return; }
+    if (*memory == nullptr) { *memory = new {{.ProjectIdent}}::GameMemory{}; }
+
+    api->version     = mitiru::module::kCurrentApiVersion;
+    api->on_init     = &{{.ProjectIdent}}::on_init;
+    api->on_update   = &{{.ProjectIdent}}::on_update;
+    api->on_draw     = &{{.ProjectIdent}}::on_draw;
+    api->on_shutdown = &{{.ProjectIdent}}::on_shutdown;
+}
+
+{{.UpperIdent}}_DLL_EXPORT
+void mitiru_module_unload(void* /*memory*/) {}
+
+}  // extern "C"

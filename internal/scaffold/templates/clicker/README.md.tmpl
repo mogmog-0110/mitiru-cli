@@ -1,0 +1,42 @@
+# {{.ProjectName}}
+
+MitiruEngine プロジェクト — クッキークリッカー風テンプレート (v0.4.0+, game-as-DLL)。
+
+クリックでポイントを稼ぎ、施設を買って自動化するループを体験できる最小構成のクリッカーゲームです。
+
+## 動かしかた
+
+```
+mitiru run
+```
+
+ホットリロード付きで開発する場合は:
+
+```
+mitiru watch
+```
+
+`src/main.cpp` を保存 → 自動で DLL が再ビルド → ホストが新しい DLL を取り込む (ゲーム状態は保持)。
+
+## 構成
+
+- `src/main.cpp` — ゲームコード (C++、DLL としてビルドされる)
+- `assets/scene.html` — UI (HTML/CSS、CEF オーバーレイ)
+- `mitiru.toml` — プロジェクト設定 (ウィンドウサイズなど)
+
+## どう動くのか
+
+- `src/main.cpp` は `<project>.dll` としてビルドされ、`mitiru_host.exe` にロードされる (ADR 0005)
+- gameplay state は `GameMemory` 構造体に集約。ホットリロード時もポインタが保持される
+- DLL ↔ ホスト間は C-only signal flow (InputSnapshot / FrameIntents) しか通らない
+- HTML のボタンは `data-m-action` でアクション名を dispatch → C++ が `actionEvents` で受ける
+
+## カスタマイズのヒント
+
+- `Building` 配列を増やせば施設を追加できる
+- `kClickRevealAt` / `revealAt` を調整して解放タイミングを変える
+- `scene.html` の CSS を変えて見た目を変更 (C++ を触らずに可能)
+
+## ライセンス
+
+このテンプレートのコードは MIT License です。お好きにどうぞ。

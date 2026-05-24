@@ -26,6 +26,7 @@ Manage MitiruEngine game projects without touching CMakeLists.txt:
   mitiru input           launch the input subsystem standalone (axis 3)
   mitiru scene           launch the scene subsystem standalone (axis 3)
   mitiru replay          record / play back an input replay (axis 4)
+  mitiru ui [scene.html] preview HTML/CSS UI in the browser with mock state, no build needed
   mitiru inspect <pid>   open a sub-window inspector for a running game (axis 5)
   mitiru install         bootstrap MSVC + mitiru.exe + PATH (Windows)
   mitiru clean           remove build/ (--all also clears engine cache)
@@ -45,6 +46,7 @@ Manage MitiruEngine game projects without touching CMakeLists.txt:
 	root.AddCommand(newInputCommand())
 	root.AddCommand(newSceneCommand())
 	root.AddCommand(newReplayCommand())
+	root.AddCommand(newUICommand())
 	root.AddCommand(newInspectCommand())
 	root.AddCommand(newInstallCommand())
 	root.AddCommand(newCleanCommand())

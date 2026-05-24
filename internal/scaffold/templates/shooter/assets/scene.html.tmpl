@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>{{.ProjectName}}</title>
+<style>
+  :root { --ink:#222831; --muted:#7a8290; --line:#dfe3ea; --accent:#3b82f6;
+          --field-w:420px; --field-h:640px; }
+  html, body {
+    margin:0; height:100%; overflow:hidden; background:#0e1320; color:var(--ink);
+    font-family:system-ui, "Segoe UI", "Hiragino Sans", "Noto Sans JP", sans-serif;
+    user-select:none; pointer-events:none;
+  }
+  .wrap { position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:10px; }
+  .head { display:flex; align-items:flex-end; gap:10px; width:var(--field-w); justify-content:space-between; }
+  .title { font-size:16px; font-weight:700; color:#eef1f6; }
+  .stats { display:flex; gap:8px; }
+  .box { background:#fff; border:1px solid var(--line); border-radius:8px; padding:4px 12px; text-align:center; }
+  .box .label { font-size:9px; color:var(--muted); }
+  .box .val   { font-size:15px; font-weight:800; margin-top:1px; }
+  .box .val.life { color:#e0405a; letter-spacing:2px; }
+  .power { display:flex; gap:16px; width:var(--field-w); justify-content:center; font-size:11px; color:#aeb6c4; }
+  .power b { color:#ff7a90; margin-left:4px; }
+
+  .field {
+    position:relative; width:var(--field-w); height:var(--field-h); overflow:hidden; border-radius:8px;
+    background:
+      radial-gradient(1px 1px at 20% 30%, #ffffff55 1px, transparent 1px),
+      radial-gradient(1px 1px at 70% 60%, #ffffff44 1px, transparent 1px),
+      radial-gradient(1px 1px at 45% 85%, #ffffff33 1px, transparent 1px),
+      linear-gradient(#0c1024, #141a33);
+    background-size: 140px 200px, 180px 240px, 220px 300px, 100% 100%;
+  }
+  .entities { position:absolute; inset:0; }
+  .ent { position:absolute; left:0; top:0; will-change:transform; }
+
+  .player { width:0; height:0; border-left:14px solid transparent; border-right:14px solid transparent;
+            border-bottom:26px solid #ff4d6a; }
+  .player.blink { animation: blink 0.12s steps(2) infinite; }
+  @keyframes blink { 0%{opacity:1;} 50%{opacity:0.25;} 100%{opacity:1;} }
+
+  .bullet  { width:4px; height:14px; border-radius:2px; background:#ffd0d8; }
+  .ebullet { width:9px; height:9px; border-radius:50%; background:#ffb030; }
+
+  .ewrap .enemy { position:absolute; left:0; top:0; width:22px; height:22px; border-radius:4px; transform:translate(-50%,-50%); }
+  .enemy.k0 { background:#c8ccd6; transform:translate(-50%,-50%) rotate(45deg); }
+  .enemy.k1 { background:#33b6c8; }
+  .enemy.k2 { width:0; height:0; background:transparent; border-radius:0;
+              border-left:13px solid transparent; border-right:13px solid transparent;
+              border-top:24px solid #e0405a; transform:translate(-50%,-55%); }
+  .enemy.k3 { background:#f2c23a; animation: carrier 0.5s steps(2) infinite; }
+  @keyframes carrier { 0%{filter:brightness(1);} 50%{filter:brightness(1.6);} 100%{filter:brightness(1);} }
+
+  .pu { width:24px; height:24px; border-radius:6px; display:flex; align-items:center; justify-content:center;
+        font-size:13px; font-weight:800; color:#15202b; animation: pufloat 0.7s ease-in-out infinite alternate; }
+  .pu.p0 { background:#46c8e0; } .pu.p1 { background:#ffd24a; } .pu.p2 { background:#ff5a78; }
+  .pu.p0::after { content:"S"; } .pu.p1::after { content:"R"; } .pu.p2::after { content:"W"; }
+  @keyframes pufloat { from{filter:brightness(1);} to{filter:brightness(1.5);} }
+
+  .boss { width:92px; height:60px; border-radius:8px; background:linear-gradient(#9aa0b4,#5a6076); }
+  .bosshp { position:absolute; left:8px; right:8px; top:8px; height:9px; border-radius:4px; background:#2a2f44; }
+  .bosshp .fill { height:100%; border-radius:4px; background:#e0405a; }
+
+  .overlay { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; background:rgba(8,11,23,0.80); }
+  .overlay .msg { font-size:26px; font-weight:800; text-align:center; }
+  .overlay.over  .msg { color:#ff4d6a; }
+  .overlay.clear .msg { color:#46e08a; }
+  .overlay .sub { font-size:14px; color:#aeb6c4; margin-top:12px; }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="head">
+      <div class="title">{{.ProjectName}}</div>
+      <div class="stats">
+        <div class="box"><div class="label">SCORE</div><div class="val" data-m-text="view.score">0</div></div>
+        <div class="box"><div class="label">LIVES</div><div class="val life" data-m-text="view.lives">▲▲▲</div></div>
+      </div>
+    </div>
+
+    <div class="power">
+      <span>SPD<b data-m-text="view.spd"></b></span>
+      <span>RPD<b data-m-text="view.rpd"></b></span>
+      <span>WID<b data-m-text="view.wid"></b></span>
+    </div>
+
+    <div class="field">
+      <div class="bosshp" data-m-show="view.boss.active">
+        <div class="fill" data-m-style="width: {view.boss.pct}%"></div>
+      </div>
+
+      <div class="entities" data-m-repeat="view.scene" data-m-fields="t,x,y,v" data-m-type="t">
+        <template data-m-case="0"><div class="ent player" data-m-pos="x,y" data-m-anchor="14,13" data-m-class="blink: v"></div></template>
+        <template data-m-case="1"><div class="ent bullet" data-m-pos="x,y" data-m-anchor="2,7"></div></template>
+        <template data-m-case="2"><div class="ent ewrap" data-m-pos="x,y"><div class="enemy" data-m-class="k0: v==0; k1: v==1; k2: v==2; k3: v==3"></div></div></template>
+        <template data-m-case="3"><div class="ent ebullet" data-m-pos="x,y" data-m-anchor="4,4"></div></template>
+        <template data-m-case="4"><div class="ent pu" data-m-pos="x,y" data-m-anchor="12,12" data-m-class="p0: v==0; p1: v==1; p2: v==2"></div></template>
+        <template data-m-case="5"><div class="ent boss" data-m-pos="x,y" data-m-anchor="46,30"></div></template>
+      </div>
+
+      <div class="overlay over" data-m-show="view.state == over">
+        <div><div class="msg">GAME OVER</div><div class="sub">R でリスタート</div></div>
+      </div>
+      <div class="overlay clear" data-m-show="view.state == clear">
+        <div><div class="msg">STAGE CLEAR!</div><div class="sub">R でリスタート</div></div>
+      </div>
+    </div>
+  </div>
+
+  <script src="mitiru_runtime/mitiru_cef_state.js"></script>
+  <script src="mitiru_runtime/mitiru_bind.js"></script>
+</body>
+</html>
