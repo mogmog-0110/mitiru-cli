@@ -1,11 +1,11 @@
 //go:build windows
 
-// installer — one-shot bootstrap to get a fresh Windows machine from zero
-// to `mitiru new my_game && mitiru run` in ~5 minutes.
+// installer — まっさらな Windows machine をゼロから
+// `mitiru new my_game && mitiru run` まで ~5 分で立ち上げる one-shot bootstrap。
 //
-// Spec: docs/INSTALLER.md (engine repo).
-// Distribution: ships inside MitiruEngine release zip, side-by-side with
-// mitiru.exe. Double-click the file and follow the prompts.
+// Spec: docs/INSTALLER.md (engine repo)。
+// 配布: MitiruEngine release zip 内に mitiru.exe と並べて同梱される。
+// ファイルを double-click して prompt に従う。
 package main
 
 import (
@@ -72,8 +72,8 @@ func main() {
 
 	if err := install.Run(opts); err != nil {
 		fmt.Fprintf(os.Stderr, "\n[ERROR] %v\n", err)
-		// Failure path: keep the console open if launched via double-click
-		// so the user can read the error before the window closes.
+		// 失敗時: double-click 起動なら console を開いたまま保ち、
+		// window が閉じる前に user が error を読めるようにする。
 		if isConsoleStarted() {
 			fmt.Fprintln(os.Stderr, "\nEnter キーで閉じます...")
 			_, _ = fmt.Scanln()
@@ -81,17 +81,17 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Success path: auto-close after a short countdown so the user has time
-	// to read the "Next: mitiru new ..." block, but doesn't need to press
-	// Enter. Only when launched from explorer double-click (own-console).
+	// 成功時: 短い countdown 後に auto-close する。user が "Next: mitiru new ..."
+	// block を読む時間は確保しつつ、Enter を押す必要は無くす。
+	// explorer の double-click 起動 (own-console) のときのみ。
 	if isConsoleStarted() {
 		autoCloseCountdown(5)
 	}
 }
 
-// autoCloseCountdown prints a single-line countdown ticking down to 0, then
-// returns so the process can exit. Uses \r to overwrite in place so the
-// console doesn't fill with N lines of "閉じます" spam.
+// autoCloseCountdown は 0 までカウントダウンする 1 行を表示し、その後
+// process が exit できるよう return する。\r で同じ行を上書きするので、
+// console が "閉じます" の N 行で埋まらない。
 func autoCloseCountdown(seconds int) {
 	for i := seconds; i > 0; i-- {
 		fmt.Fprintf(os.Stdout, "\rこのウィンドウは %d 秒後に閉じます ... ", i)
@@ -100,15 +100,14 @@ func autoCloseCountdown(seconds int) {
 	fmt.Fprintln(os.Stdout)
 }
 
-// isConsoleStarted reports whether this process is its console's sole
-// occupant — i.e. it was launched by double-click rather than from an
-// existing terminal. We use this to decide whether to "Press Enter to
-// close" pause before exit.
+// isConsoleStarted は、この process が console の唯一の占有者か
+// — つまり既存 terminal からではなく double-click で起動されたか — を返す。
+// exit 前に "Enter で閉じる" pause を入れるかの判断に使う。
 //
-// Reliable signal: GetConsoleProcessList. When invoked from explorer
-// double-click, the new console hosts this process only (count == 1).
-// When invoked from cmd / powershell, the parent shell shares the console
-// (count >= 2).
+// 信頼できる signal: GetConsoleProcessList。explorer の double-click 起動なら
+// 新しい console はこの process だけを抱える (count == 1)。
+// cmd / powershell から起動した場合は親 shell が console を共有する
+// (count >= 2)。
 func isConsoleStarted() bool {
 	kernel32 := syscall.NewLazyDLL("kernel32.dll")
 	proc := kernel32.NewProc("GetConsoleProcessList")

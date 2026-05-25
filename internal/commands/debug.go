@@ -35,7 +35,7 @@ Standard output, standard error, and exit code are forwarded.`,
 }
 
 func runDebug() error {
-	// Force Debug configuration regardless of --release flag presence.
+	// --release flag の有無に関わらず Debug configuration を強制する。
 	buildRelease = false
 	buildConfigName = "Debug"
 

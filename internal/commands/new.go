@@ -88,8 +88,8 @@ func runNew(name string) error {
 	return nil
 }
 
-// toLowerSnake turns "my-game" / "myGame" / "My_Game" into "my_game" — a
-// C++-safe identifier for use as a namespace.
+// toLowerSnake は "my-game" / "myGame" / "My_Game" を "my_game" に変換する。
+// namespace として使える C++-safe な identifier になる。
 func toLowerSnake(s string) string {
 	upper := toUpperSnake(s)
 	out := make([]rune, 0, len(upper))

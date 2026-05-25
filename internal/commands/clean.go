@@ -35,7 +35,7 @@ func runClean() error {
 		return fmt.Errorf("getwd: %w", err)
 	}
 
-	// Project-local build/ — only required if we're inside a project.
+	// project ローカルの build/ — project 内にいる場合のみ必要。
 	_, projectRoot, manifestErr := config.FindManifest(cwd)
 	if manifestErr == nil {
 		buildDir := filepath.Join(projectRoot, "build")
@@ -43,10 +43,10 @@ func runClean() error {
 			return err
 		}
 	} else if !cleanAll {
-		// No project AND no --all → nothing to do; surface the manifest error.
+		// project も --all も無い → 何もすることがない。manifest error を返す。
 		return manifestErr
 	} else {
-		// --all without a project is fine — fall through to cache wipe.
+		// project 無しの --all は OK — cache 削除へ進む。
 		fmt.Println("Note: not inside a mitiru project; skipping local build/ cleanup.")
 	}
 

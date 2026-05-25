@@ -12,27 +12,26 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// The bind lint catches the silent-failure class that the loose C↔HTML boundary
-// (ADR 0005) makes possible: a scene.html data-m-* binding that references a
-// state key the C++ never pushes (a typo shows the fallback, never an error).
-// It also flags structurally broken data-m-* markup. It is a best-effort static
-// check — warnings by default, `--strict` to fail.
+// bind lint は、緩い C↔HTML 境界 (ADR 0005) が生む silent-failure クラスを捕捉する:
+// scene.html の data-m-* binding が、C++ が一度も push しない state key を参照する
+// (typo は fallback を表示するだけでエラーにならない)。構造的に壊れた data-m-* markup
+// も flag する。best-effort な静的 check であり、デフォルトは warning、`--strict` で失敗。
 
-// dottedPath matches a state-key path like "view.hud.hp" (≥2 dot-separated
-// segments). Bare item-scope fields inside data-m-repeat (e.g. "name") have no
-// dot and are intentionally NOT matched.
+// dottedPath は "view.hud.hp" のような state-key path (ドット区切り 2 segment 以上) に
+// match する。data-m-repeat 内の item-scope な裸 field (例 "name") はドットを持たず、
+// 意図的に match しない。
 var dottedPath = regexp.MustCompile(`[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z0-9_]+)+`)
 
-// dataMAttr matches a data-m-<verb>="<value>" attribute on a line.
+// dataMAttr は行中の data-m-<verb>="<value>" 属性に match する。
 var dataMAttr = regexp.MustCompile(`data-m-([a-z]+)\s*=\s*"([^"]*)"`)
 
-// quotedDotted matches a dotted path that appears inside a C++ string literal,
-// e.g. w.set("view.hp", ...) or pushStr(it, "view.hp", ...).
+// quotedDotted は C++ の文字列リテラル内に現れる dotted path に match する。
+// 例 w.set("view.hp", ...) や pushStr(it, "view.hp", ...)。
 var quotedDotted = regexp.MustCompile(`"([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z0-9_]+)+)"`)
 
 type bindFinding struct {
-	line   int    // 0 = file-level (no specific line)
-	kind   string // short category
+	line   int    // 0 = file-level (特定行なし)
+	kind   string // 短い category
 	detail string
 }
 
@@ -99,8 +98,8 @@ func runLint(strict bool) error {
 	return nil
 }
 
-// sceneRelPath resolves the project-relative scene path from the manifest,
-// defaulting to assets/scene.html.
+// sceneRelPath は manifest から project 相対の scene path を解決する。
+// デフォルトは assets/scene.html。
 func sceneRelPath(cfg *config.ProjectConfig) string {
 	if cfg.CEF.StartURL != "" {
 		return cfg.CEF.StartURL
@@ -108,8 +107,8 @@ func sceneRelPath(cfg *config.ProjectConfig) string {
 	return "assets/scene.html"
 }
 
-// analyzeScene extracts the set of dotted state keys consumed by data-m-*
-// bindings (key -> first line seen) and any structural findings.
+// analyzeScene は data-m-* binding が consume する dotted state key の集合
+// (key -> 最初に見た行) と、構造的 finding を抽出する。
 func analyzeScene(html string) (map[string]int, []bindFinding) {
 	consumed := map[string]int{}
 	var structural []bindFinding
@@ -155,7 +154,7 @@ func analyzeScene(html string) (map[string]int, []bindFinding) {
 	return consumed, structural
 }
 
-// structuralChecks validates a single data-m-<verb>="value" attribute.
+// structuralChecks は単一の data-m-<verb>="value" 属性を検証する。
 func structuralChecks(verb, value string, line int) []bindFinding {
 	var out []bindFinding
 	switch verb {
@@ -178,10 +177,10 @@ func structuralChecks(verb, value string, line int) []bindFinding {
 	return out
 }
 
-// scanProducedKeys collects every dotted path that appears inside a C++ string
-// literal under srcDir — this captures StateWriter set/array/object/list keys
-// AND any hand-rolled push helper, since the key is always a quoted literal.
-// Over-capturing here is safe: more produced keys → fewer false "unpushed" flags.
+// scanProducedKeys は srcDir 配下の C++ 文字列リテラル内に現れる全 dotted path を
+// 収集する。key は常に quoted literal なので、StateWriter set/array/object/list の
+// key も自前 push helper も捕捉できる。
+// ここでの過剰捕捉は安全: produced key が多いほど false な "unpushed" flag が減る。
 func scanProducedKeys(srcDir string) map[string]bool {
 	produced := map[string]bool{}
 	_ = filepath.WalkDir(srcDir, func(path string, d os.DirEntry, err error) error {
@@ -204,10 +203,10 @@ func scanProducedKeys(srcDir string) map[string]bool {
 	return produced
 }
 
-// producedCovers reports whether some produced key matches the consumed key by
-// segment-prefix (either direction) or exactly. This treats a pushed object
-// "view.shop" as covering "view.shop.b0.cost" (a sub-field of the JSON object),
-// while still flagging a misspelled "view.eintnet" against "view.eintent".
+// producedCovers は、いずれかの produced key が consumed key を segment-prefix
+// (どちらの向きでも) または完全一致で cover するかを返す。push 済み object
+// "view.shop" は "view.shop.b0.cost" (JSON object の sub-field) を cover する一方、
+// "view.eintent" に対する誤記 "view.eintnet" は依然として flag される。
 func producedCovers(produced map[string]bool, key string) bool {
 	ks := strings.Split(key, ".")
 	for p := range produced {
@@ -218,8 +217,8 @@ func producedCovers(produced map[string]bool, key string) bool {
 	return false
 }
 
-// segmentPrefix reports whether the shorter of a/b is a leading-segment prefix
-// of the longer (equal counts as a prefix).
+// segmentPrefix は a/b の短い方が長い方の先頭 segment prefix かを返す
+// (長さが等しい場合も prefix とみなす)。
 func segmentPrefix(a, b []string) bool {
 	if len(a) > len(b) {
 		a, b = b, a

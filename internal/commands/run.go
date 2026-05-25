@@ -99,10 +99,10 @@ func runRun() error {
 	return nil
 }
 
-// startInspectorChild locates the engine's pre-built mitiru_inspector.exe
-// and launches it as a child process pointed at the just-started game's pid.
-// Polls briefly for the game's snapshot file before launching, so the
-// inspector doesn't immediately report "waiting for producer..."
+// startInspectorChild は engine の pre-built な mitiru_inspector.exe を探し、
+// 起動直後のゲームの pid を指す child process として launch する。
+// launch 前にゲームの snapshot file を短時間 poll し、inspector が即座に
+// "waiting for producer..." を報告しないようにする。
 func startInspectorChild(gamePid int) (*exec.Cmd, error) {
 	if runtime.GOOS != "windows" {
 		return nil, fmt.Errorf("--inspect is Windows-only for now")
@@ -125,7 +125,7 @@ func startInspectorChild(gamePid int) (*exec.Cmd, error) {
 		return nil, fmt.Errorf("mitiru_inspector.exe not found — run `cmake --build <engine>/build --target mitiru_inspector` once")
 	}
 
-	// Wait briefly for the producer to write its first snapshot file.
+	// producer が最初の snapshot file を書くのを短時間待つ。
 	snap := filepath.Join(os.TempDir(),
 		fmt.Sprintf("mitiru_inspector_%d.json", gamePid))
 	deadline := time.Now().Add(2 * time.Second)

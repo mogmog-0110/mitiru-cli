@@ -1,9 +1,10 @@
 //go:build windows
 
-// Package install drives the one-shot `installer.exe` workflow that gets a
-// fresh Windows machine from zero to `mitiru new my_game && mitiru run`.
+// Package install は、まっさらな Windows マシンをゼロから
+// `mitiru new my_game && mitiru run` まで持っていく一発の `installer.exe`
+// ワークフローを駆動する。
 //
-// Spec: docs/INSTALLER.md (engine repo).
+// Spec: docs/INSTALLER.md (engine repo)。
 package install
 
 import (
@@ -15,46 +16,46 @@ import (
 	"strings"
 )
 
-// Options gates each step of the installer and routes destructive operations
-// past --dry-run.
+// Options は installer の各 step を制御し、破壊的操作を --dry-run に
+// 通す。
 type Options struct {
-	// DryRun: print the plan, change nothing on disk / registry / network.
+	// DryRun: プランを表示し、disk / registry / network には何も変更しない。
 	DryRun bool
 
-	// TargetDir: where mitiru.exe lands. Defaults to
-	// %LOCALAPPDATA%\Programs\MitiruEngine\bin.
+	// TargetDir: mitiru.exe の配置先。デフォルトは
+	// %LOCALAPPDATA%\Programs\MitiruEngine\bin。
 	TargetDir string
 
-	// SkipWinget: don't invoke winget. Use this if MSVC is already present.
+	// SkipWinget: winget を呼ばない。MSVC が既にある場合に使う。
 	SkipWinget bool
 
-	// SkipDeploy: don't copy mitiru.exe into TargetDir. Use this if the user
-	// already has their own mitiru build somewhere else and wants to keep it.
+	// SkipDeploy: mitiru.exe を TargetDir に copy しない。ユーザが既に
+	// 別の場所に自前の mitiru build を持っていて、それを残したい場合に使う。
 	SkipDeploy bool
 
-	// SkipPathEnv: don't append TargetDir to HKCU\Environment\Path. Use this
-	// if PATH is managed elsewhere (chocolatey, scoop, profile script, etc.).
+	// SkipPathEnv: TargetDir を HKCU\Environment\Path に追加しない。PATH を
+	// 別の仕組み (chocolatey, scoop, profile script 等) で管理している場合に使う。
 	SkipPathEnv bool
 
-	// SkipPrecache: don't pre-download the engine source tarball.
+	// SkipPrecache: engine source tarball を事前 download しない。
 	SkipPrecache bool
 
-	// SkipLongPaths: don't touch HKLM\…\LongPathsEnabled.
+	// SkipLongPaths: HKLM\…\LongPathsEnabled に触らない。
 	SkipLongPaths bool
 
-	// AssumeYes: skip the "proceed?" prompt (CI / automation).
+	// AssumeYes: 「続行する?」プロンプトを skip する (CI / 自動化)。
 	AssumeYes bool
 
-	// Force: override the "already installed → skip" heuristics. Useful
-	// for repair installs.
+	// Force: 「既に install 済み → skip」のヒューリスティックを上書きする。
+	// 修復 install に便利。
 	Force bool
 
-	// Stdout / Stderr: defaulted to os.Stdout / os.Stderr if nil.
+	// Stdout / Stderr: nil の場合は os.Stdout / os.Stderr が既定値。
 	Stdout io.Writer
 	Stderr io.Writer
 }
 
-// DefaultTargetDir returns the canonical install directory under LOCALAPPDATA.
+// DefaultTargetDir は LOCALAPPDATA 下の canonical な install ディレクトリを返す。
 func DefaultTargetDir() (string, error) {
 	local := os.Getenv("LOCALAPPDATA")
 	if local == "" {
@@ -63,16 +64,16 @@ func DefaultTargetDir() (string, error) {
 	return filepath.Join(local, "Programs", "MitiruEngine", "bin"), nil
 }
 
-// stepAction describes one row in the "what will happen" plan summary that
-// is shown to the user before any destructive action.
+// stepAction は、破壊的操作の前にユーザへ表示する「何が起きるか」プラン
+// 要約の 1 行を表す。
 type stepAction struct {
-	name   string // human label
+	name   string // 人間向けラベル
 	will   string // "run" | "skip" | "missing"
-	reason string // why (e.g. "既存", "--skip-winget", etc.)
+	reason string // 理由 (例: "既存", "--skip-winget" 等)
 }
 
-// buildPlan returns the per-step actions derived from envReport + opts.
-// This is what gets printed before y/n consent.
+// buildPlan は envReport + opts から導かれる step ごとの action を返す。
+// y/n の同意の前に表示されるもの。
 func buildPlan(opts Options, r *envReport) []stepAction {
 	steps := []stepAction{}
 
@@ -110,8 +111,8 @@ func buildPlan(opts Options, r *envReport) []stepAction {
 	case opts.SkipPathEnv:
 		steps = append(steps, stepAction{"PATH 追加", "skip", "--skip-pathenv"})
 	default:
-		// Idempotency check happens inside appendUserPath. We can't predict
-		// here without reading the registry — show as "run" optimistically.
+		// 冪等性チェックは appendUserPath 内部で行う。registry を読まずに
+		// ここでは予測できない — 楽観的に "run" として表示する。
 		steps = append(steps, stepAction{"PATH 追加", "run", "HKCU\\Environment\\Path (重複なら skip)"})
 	}
 
@@ -148,8 +149,8 @@ func printPlan(w io.Writer, steps []stepAction) (toRun int) {
 	return toRun
 }
 
-// promptConsent reads y/n from stdin. ENTER without input = yes.
-// "Press y / Enter to continue, anything else to abort."
+// promptConsent は stdin から y/n を読む。入力なしの ENTER = yes。
+// 「y / Enter で続行、それ以外で中止」。
 func promptConsent(opts Options) (bool, error) {
 	if opts.AssumeYes || opts.DryRun {
 		return true, nil
@@ -164,8 +165,8 @@ func promptConsent(opts Options) (bool, error) {
 	return ans == "" || ans == "y" || ans == "yes", nil
 }
 
-// Run executes the installer flow according to opts. It is the single entry
-// point used by cmd/installer/main.go.
+// Run は opts に従って installer flow を実行する。cmd/installer/main.go
+// が使う唯一の entry point。
 func Run(opts Options) error {
 	if opts.Stdout == nil {
 		opts.Stdout = os.Stdout
@@ -190,7 +191,7 @@ func Run(opts Options) error {
 	}
 	fmt.Fprintln(opts.Stdout)
 
-	// Step 1: environment check
+	// Step 1: environment チェック
 	fmt.Fprintln(opts.Stdout, "Step 1/5: 環境を確認...")
 	report, err := snapshot()
 	if err != nil {
@@ -205,7 +206,7 @@ func Run(opts Options) error {
 				"  Microsoft Store の 'App Installer' を入れるか、--skip-winget で手動 install してください。")
 	}
 
-	// Plan summary (driven by detection + flags)
+	// プラン要約 (検出結果 + フラグで決まる)
 	plan := buildPlan(opts, report)
 	toRun := printPlan(opts.Stdout, plan)
 
@@ -215,7 +216,7 @@ func Run(opts Options) error {
 		return nil
 	}
 
-	// Existing mitiru at non-target location warning
+	// target 以外の location に既存 mitiru がある場合の警告
 	if report.hasMitiru() && !strings.EqualFold(filepath.Dir(report.mitiruPath), opts.TargetDir) && !opts.SkipDeploy {
 		fmt.Fprintf(opts.Stdout, "\n警告: mitiru は既に PATH 経由で %s から見えています\n", report.mitiruPath)
 		fmt.Fprintf(opts.Stdout, "        target dir (%s) にも deploy します。後勝ち / 先勝ちは PATH の順序で決まります。\n", opts.TargetDir)
@@ -232,7 +233,7 @@ func Run(opts Options) error {
 	}
 	fmt.Fprintln(opts.Stdout)
 
-	// Step 2: install MSVC Build Tools via winget.
+	// Step 2: winget 経由で MSVC Build Tools を install する。
 	fmt.Fprintln(opts.Stdout, "Step 2/5: MSVC Build Tools 2022 を install")
 	switch {
 	case opts.SkipWinget:
@@ -246,7 +247,7 @@ func Run(opts Options) error {
 	}
 	fmt.Fprintln(opts.Stdout)
 
-	// Step 3: deploy mitiru.exe.
+	// Step 3: mitiru.exe を deploy する。
 	fmt.Fprintln(opts.Stdout, "Step 3/5: mitiru.exe を deploy")
 	switch {
 	case opts.SkipDeploy:
@@ -260,7 +261,7 @@ func Run(opts Options) error {
 	}
 	fmt.Fprintln(opts.Stdout)
 
-	// Step 4: append user PATH.
+	// Step 4: ユーザ PATH に追加する。
 	fmt.Fprintln(opts.Stdout, "Step 4/5: PATH に追加")
 	switch {
 	case opts.SkipPathEnv:
@@ -272,7 +273,7 @@ func Run(opts Options) error {
 	}
 	fmt.Fprintln(opts.Stdout)
 
-	// Step 5: pre-cache engine source.
+	// Step 5: engine source を pre-cache する。
 	fmt.Fprintln(opts.Stdout, "Step 5/5: engine source を pre-cache")
 	if opts.SkipPrecache {
 		fmt.Fprintln(opts.Stdout, "  --skip-precache が指定されたため skip")
@@ -282,7 +283,7 @@ func Run(opts Options) error {
 	}
 	fmt.Fprintln(opts.Stdout)
 
-	// Optional: LongPaths registry.
+	// Optional: LongPaths registry。
 	if !opts.SkipLongPaths {
 		fmt.Fprintln(opts.Stdout, "Optional: LongPaths registry")
 		if err := enableLongPaths(opts); err != nil {

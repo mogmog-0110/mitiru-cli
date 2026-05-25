@@ -8,9 +8,9 @@ import (
 	"github.com/mogmog-0110/mitiru-cli/internal/engine"
 )
 
-// precacheEngine downloads the engine source tarball ahead of time so the
-// user's first `mitiru build` skips the ~30s download phase. This is
-// non-fatal: failure here just means the user pays that 30s on first build.
+// precacheEngine は engine source tarball を事前に download し、ユーザの
+// 初回 `mitiru build` が ~30s の download フェーズを skip できるようにする。
+// 非致命的: ここで失敗しても、ユーザが初回 build で 30s 払うだけ。
 func precacheEngine(opts Options) error {
 	fmt.Fprintln(opts.Stdout, "  MitiruEngine 'latest' を ~/.mitiru/cache/ に展開...")
 
@@ -19,8 +19,8 @@ func precacheEngine(opts Options) error {
 		return nil
 	}
 
-	// EnsureSource is idempotent — if the cache already holds this version
-	// it returns immediately. So pre-cache is safe to re-run.
+	// EnsureSource は冪等 — cache が既にこの version を保持していれば
+	// 即座に返る。よって pre-cache は再実行しても安全。
 	root, err := engine.EnsureSource("latest", opts.Stdout)
 	if err != nil {
 		return err

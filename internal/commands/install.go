@@ -7,10 +7,10 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// install command wraps the standalone MitiruEngine_Installer.exe logic so
-// users who already have mitiru on PATH can run `mitiru install` (or
-// `mitiru install --force` to repair) without locating the installer .exe in
-// the release zip. See docs/INSTALLER.md.
+// install command は standalone の MitiruEngine_Installer.exe ロジックを wrap し、
+// 既に mitiru が PATH にあるユーザーが release zip 内の installer .exe を探さずに
+// `mitiru install` (修復は `mitiru install --force`) を実行できるようにする。
+// docs/INSTALLER.md 参照。
 func newInstallCommand() *cobra.Command {
 	var opts install.Options
 

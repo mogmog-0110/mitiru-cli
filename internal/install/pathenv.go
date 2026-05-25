@@ -11,11 +11,11 @@ import (
 	"golang.org/x/sys/windows/registry"
 )
 
-// appendUserPath adds opts.TargetDir to the user's PATH via
-// HKCU\Environment\Path. No admin required. Broadcasts WM_SETTINGCHANGE so
-// new processes (and newly-opened shells) see the change immediately.
+// appendUserPath は HKCU\Environment\Path 経由で opts.TargetDir をユーザの
+// PATH に追加する。admin 不要。WM_SETTINGCHANGE を broadcast し、新しい
+// プロセス (および新規に開いた shell) が変更を即座に認識できるようにする。
 //
-// Idempotent: if the dir is already on PATH the registry write is skipped.
+// 冪等: dir が既に PATH 上にあれば registry の書き込みは skip する。
 func appendUserPath(opts Options) error {
 	dir := opts.TargetDir
 	fmt.Fprintf(opts.Stdout, "  registry: HKCU\\Environment\\Path += %s\n", dir)
@@ -51,9 +51,9 @@ func appendUserPath(opts Options) error {
 	}
 	next += dir
 
-	// The user PATH stored under HKCU\Environment is practically capped near
-	// ~2KB by the legacy environment-block format; pushing past it silently
-	// truncates PATH and breaks unrelated tools. Refuse rather than corrupt.
+	// HKCU\Environment 下に保存されるユーザ PATH は、旧来の environment-block
+	// 形式により実質 ~2KB 付近で頭打ちになる。これを超えると PATH が黙って
+	// 切り詰められ、無関係なツールが壊れる。破壊するより拒否する。
 	// (spec: docs/INSTALLER.md, failure mode step 4)
 	const maxUserPathLen = 2000
 	if len(next) > maxUserPathLen {
@@ -63,9 +63,9 @@ func appendUserPath(opts Options) error {
 			len(next), maxUserPathLen, dir)
 	}
 
-	// Use EXPAND_SZ to preserve any %SystemRoot% style expansions present in
-	// the original PATH. If the original was REG_SZ we'd downgrade compared
-	// to OS behaviour — REG_EXPAND_SZ is the universal-safe form.
+	// 元の PATH に含まれる %SystemRoot% 形式の展開を保つため EXPAND_SZ を使う。
+	// 元が REG_SZ だった場合でも、OS の挙動と比べて格下げにならない —
+	// REG_EXPAND_SZ がどこでも安全な形式。
 	if err := k.SetExpandStringValue("Path", next); err != nil {
 		return fmt.Errorf("write PATH: %w", err)
 	}
@@ -75,9 +75,9 @@ func appendUserPath(opts Options) error {
 	return nil
 }
 
-// broadcastSettingChange notifies the shell that environment variables
-// changed. Without this, already-running explorer / cmd / powershell don't
-// pick up the new PATH until reboot.
+// broadcastSettingChange は environment variable が変わったことを shell に
+// 通知する。これがないと、既に起動中の explorer / cmd / powershell は
+// reboot まで新しい PATH を認識しない。
 func broadcastSettingChange() {
 	user32 := syscall.NewLazyDLL("user32.dll")
 	send := user32.NewProc("SendMessageTimeoutW")

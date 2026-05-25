@@ -24,9 +24,9 @@ var (
 	inspectJSON        bool
 )
 
-// allInspectables is the panel set spawned by `mitiru inspect --all`. Each
-// name maps to a named inspectable the engine's inspector knows how to render
-// in its own OS-level window — one tool, one concern, one window (axis 5).
+// allInspectables は `mitiru inspect --all` が起動する panel 集合。各 name は
+// engine の inspector が独自の OS-level window に描画できる named inspectable に
+// 対応する — 1 ツール、1 関心事、1 ウィンドウ (axis 5)。
 var allInspectables = []string{"gameplay", "input", "timetravel"}
 
 func newInspectCommand() *cobra.Command {
@@ -96,9 +96,9 @@ multi-process required.`,
 	return cmd
 }
 
-// autoDetectProducerPid scans %TEMP% for mitiru_inspector_*.json files and
-// returns the pid encoded in the most-recently-modified one. Lets the user
-// type `mitiru inspect` without hunting for a pid in Task Manager.
+// autoDetectProducerPid は %TEMP% の mitiru_inspector_*.json を scan し、最も
+// 直近に更新されたファイルに埋め込まれた pid を返す。ユーザーが Task Manager で
+// pid を探さずに `mitiru inspect` と打てるようにする。
 func autoDetectProducerPid() (int, error) {
 	tempDir := os.TempDir()
 	entries, err := os.ReadDir(tempDir)
@@ -135,8 +135,8 @@ func autoDetectProducerPid() (int, error) {
 		return 0, fmt.Errorf("no running MitiruEngine producer found in %s — start a game with `mitiru run` first, or pass an explicit pid",
 			tempDir)
 	}
-	// Reject snapshots that are way stale (>10s since last write) — that's
-	// almost certainly a dead game that left its file behind.
+	// 古すぎる snapshot (最終書き込みから >10s) は reject する — ほぼ確実に
+	// ファイルを残したまま死んだ game。
 	if time.Since(newest.modTime) > 10*time.Second {
 		return 0, fmt.Errorf("the most recent snapshot is %s old (looks dead) — start a fresh game with `mitiru run` first, or pass an explicit pid",
 			time.Since(newest.modTime).Round(time.Second))
@@ -144,13 +144,13 @@ func autoDetectProducerPid() (int, error) {
 	return newest.pid, nil
 }
 
-// locateInspectorExe finds (and, in a dev tree, builds on demand) the engine's
-// mitiru_inspector.exe. It is the single source of truth for both the single
-// and --all inspect paths. Returns a clean error on miss — never panics.
+// locateInspectorExe は engine の mitiru_inspector.exe を見つける (dev tree では
+// 必要に応じて build する)。single と --all 両方の inspect path にとって single
+// source of truth。見つからなければ clean な error を返す — panic しない。
 func locateInspectorExe() (string, error) {
-	// Resolve the engine: honour an explicit --engine override, otherwise use
-	// the version the current project pins. Then find-or-build the inspector
-	// from the cached source (configured + cached on first run).
+	// engine を解決する: 明示的な --engine override を尊重し、なければ現在の
+	// project が pin した version を使う。その後 cached source から inspector を
+	// find-or-build する (初回実行時に configure + cache)。
 	var engineRoot string
 	var err error
 	if inspectEngineTag != "" && inspectEngineTag != "latest" {
@@ -208,7 +208,7 @@ func runInspect(pid int, filePath, inspectable string) error {
 	return nil
 }
 
-// artifactPaths returns the %TEMP% file paths the engine writes for a given pid.
+// artifactPaths は engine が指定 pid 向けに書く %TEMP% file path を返す。
 // snapshotPath: mitiru_inspector_<pid>.json  (SharedSnapshot)
 // eventsPath:   mitiru_events_<pid>.jsonl    (EventLog)
 func artifactPaths(pid int) (snapshotPath, eventsPath string) {
@@ -218,7 +218,7 @@ func artifactPaths(pid int) (snapshotPath, eventsPath string) {
 	return
 }
 
-// jsonInspectEvent is a single entry from the JSONL event log.
+// jsonInspectEvent は JSONL event log の 1 entry。
 type jsonInspectEvent struct {
 	Frame uint32          `json:"frame"`
 	T     float64         `json:"t"`
@@ -226,20 +226,20 @@ type jsonInspectEvent struct {
 	Data  json.RawMessage `json:"data"`
 }
 
-// jsonInspectViolation is a single invariant violation extracted from events.
+// jsonInspectViolation は events から抽出した 1 件の invariant violation。
 type jsonInspectViolation struct {
 	Frame  uint32 `json:"frame"`
 	Name   string `json:"name"`
 	Detail string `json:"detail"`
 }
 
-// jsonInspectInvariants summarises invariant health from the event log.
+// jsonInspectInvariants は event log から invariant の健全性を要約する。
 type jsonInspectInvariants struct {
 	OK         bool                   `json:"ok"`
 	Violations []jsonInspectViolation `json:"violations"`
 }
 
-// jsonInspectOutput is the top-level shape emitted by --json.
+// jsonInspectOutput は --json が出力する top-level の形。
 type jsonInspectOutput struct {
 	PID        int                    `json:"pid"`
 	State      json.RawMessage        `json:"state,omitempty"`
@@ -247,8 +247,8 @@ type jsonInspectOutput struct {
 	Invariants *jsonInspectInvariants `json:"invariants,omitempty"`
 }
 
-// readSnapshotJSON reads %TEMP%/mitiru_inspector_<pid>.json and returns raw JSON.
-// Returns a clear error if the file is absent (game not running).
+// readSnapshotJSON は %TEMP%/mitiru_inspector_<pid>.json を読み raw JSON を返す。
+// ファイルが無い場合 (game 未起動) は明確な error を返す。
 func readSnapshotJSON(path string) (json.RawMessage, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -263,8 +263,8 @@ func readSnapshotJSON(path string) (json.RawMessage, error) {
 	return json.RawMessage(data), nil
 }
 
-// readEventsJSONL reads %TEMP%/mitiru_events_<pid>.jsonl, returns up to tailN
-// most recent events. Torn/invalid lines are silently skipped (mid-write).
+// readEventsJSONL は %TEMP%/mitiru_events_<pid>.jsonl を読み、最大 tailN 件の
+// 直近 event を返す。破損/不正な行は黙って skip する (書き込み途中)。
 func readEventsJSONL(path string, tailN int) ([]jsonInspectEvent, error) {
 	f, err := os.Open(path)
 	if err != nil {
@@ -284,7 +284,7 @@ func readEventsJSONL(path string, tailN int) ([]jsonInspectEvent, error) {
 		}
 		var ev jsonInspectEvent
 		if err := json.Unmarshal(line, &ev); err != nil {
-			continue // torn last line; skip
+			continue // 破損した最終行; skip
 		}
 		all = append(all, ev)
 	}
@@ -298,8 +298,8 @@ func readEventsJSONL(path string, tailN int) ([]jsonInspectEvent, error) {
 	return all, nil
 }
 
-// extractInvariants scans events for invariant_violation entries and builds a
-// summary. "ok" is true iff no violations appear in the tail window.
+// extractInvariants は events から invariant_violation entry を scan し summary を
+// 作る。"ok" は tail window 内に violation が一切無い場合のみ true。
 func extractInvariants(events []jsonInspectEvent) jsonInspectInvariants {
 	inv := jsonInspectInvariants{OK: true, Violations: []jsonInspectViolation{}}
 	for _, ev := range events {
@@ -321,14 +321,14 @@ func extractInvariants(events []jsonInspectEvent) jsonInspectInvariants {
 	return inv
 }
 
-// runInspectJSON reads the %TEMP% artifacts the engine writes and prints a
-// single structured JSON document to stdout. scope selects one of
-// "state", "events", "invariants"; empty means all three.
+// runInspectJSON は engine が書く %TEMP% artifact を読み、単一の構造化 JSON
+// document を stdout に出力する。scope は "state", "events", "invariants" の
+// いずれかを選ぶ; 空なら 3 つ全て。
 func runInspectJSON(pid int, scope string) error {
 	const validScopes = "state, events, invariants"
 	switch scope {
 	case "", "state", "events", "invariants":
-		// ok
+		// ok (問題なし)
 	default:
 		return fmt.Errorf("inspect --json: unknown --inspectable %q; valid scopes for --json: %s", scope, validScopes)
 	}
@@ -352,11 +352,11 @@ func runInspectJSON(pid int, scope string) error {
 		out.State = snap
 	}
 
-	// Events and invariants both come from the JSONL file.
+	// events と invariants はどちらも JSONL file 由来。
 	if wantEvents || wantInvariants {
 		events, err := readEventsJSONL(eventsPath, 64)
 		if err != nil {
-			// If scope restricts to state only we wouldn't reach here, but guard anyway.
+			// scope が state のみなら到達しないが、念のため guard する。
 			return err
 		}
 		if wantEvents {
@@ -376,11 +376,10 @@ func runInspectJSON(pid int, scope string) error {
 	return nil
 }
 
-// runInspectAll spawns one inspector window per name in allInspectables, each
-// watching the same game pid. Windows are independent OS processes: the CLI
-// starts all three and returns immediately without waiting. Best-effort — a
-// failed spawn is a warning, not a hard stop, so the remaining panels still
-// open. Requires at least one window to launch to succeed.
+// runInspectAll は allInspectables の name ごとに inspector window を 1 つ起動し、
+// それぞれ同じ game pid を watch する。各 window は独立した OS process: CLI は 3 つ
+// 全てを start し、待たずに即座に return する。best-effort — 起動失敗は warning で
+// あり hard stop ではないので、残りの panel は開く。成功には最低 1 window の起動が要る。
 func runInspectAll(pid int) error {
 	if runtime.GOOS != "windows" {
 		return fmt.Errorf("mitiru inspect --all is currently Windows-only (running on %s)",

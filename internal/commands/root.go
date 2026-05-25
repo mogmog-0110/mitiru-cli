@@ -8,10 +8,10 @@ const (
 	cliName    = "mitiru"
 	cliVersion = "0.6.0"
 
-	// defaultEngineVersion is the engine release a freshly scaffolded project
-	// pins in its mitiru.toml. Bump this on every engine release so new
-	// projects build against an engine that has the features the templates
-	// rely on (e.g. the zero-JS declarative binder, ADR 0007).
+	// defaultEngineVersion は、新規 scaffold されたプロジェクトが mitiru.toml に
+	// pin する engine release。engine release ごとにこれを bump し、新規プロジェクトが
+	// template の依存する機能 (例 zero-JS declarative binder、ADR 0007) を持つ engine
+	// に対して build されるようにする。
 	defaultEngineVersion = "0.5.2"
 )
 

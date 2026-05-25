@@ -1,5 +1,5 @@
-// Package engine handles fetching and caching MitiruEngine source archives
-// under ~/.mitiru/cache/engine-<version>/.
+// Package engine は MitiruEngine の source archive を取得し、
+// ~/.mitiru/cache/engine-<version>/ 配下に cache する処理を担う。
 package engine
 
 import (
@@ -17,17 +17,16 @@ import (
 )
 
 const (
-	// PublicRepo is the public release repository.
+	// publicRepo は public release repository。
 	publicRepo = "mogmog-0110/MitiruEngine"
 
-	// httpTimeout caps any single network request. The tarball is ~10 MB so
-	// the default needs to be generous enough for slow corporate proxies.
+	// httpTimeout は単一の network request の上限。tarball は ~10 MB なので、
+	// 遅い corporate proxy でも足りるよう default は余裕を持たせる。
 	httpTimeout = 5 * time.Minute
 )
 
-// CacheRoot returns the absolute path of the on-disk engine cache root.
-// Defaults to ~/.mitiru/cache but is overridable via MITIRU_CACHE_DIR for
-// tests.
+// CacheRoot は on-disk engine cache root の absolute path を返す。
+// default は ~/.mitiru/cache だが、test 用に MITIRU_CACHE_DIR で上書き可能。
 func CacheRoot() (string, error) {
 	if v := os.Getenv("MITIRU_CACHE_DIR"); v != "" {
 		return filepath.Abs(v)
@@ -39,16 +38,16 @@ func CacheRoot() (string, error) {
 	return filepath.Join(home, ".mitiru", "cache"), nil
 }
 
-// EnsureSource makes sure the engine source for `version` is unpacked on
-// disk and returns the absolute path of the source root (the directory that
-// contains the engine's top-level CMakeLists.txt).
+// EnsureSource は `version` の engine source が disk 上に展開済みであることを
+// 保証し、source root (engine の top-level CMakeLists.txt を含む directory) の
+// absolute path を返す。
 //
-// version may be:
-//   - a literal tag like "v0.1.0" or "0.1.0" (the latter is normalised to "v0.1.0")
-//   - "latest", which resolves to the latest GitHub release tag
+// version は以下のいずれか:
+//   - "v0.1.0" や "0.1.0" のような literal tag (後者は "v0.1.0" に正規化される)
+//   - "latest"。最新の GitHub release tag に解決される
 //
-// Tests and power-users can short-circuit the download by pointing
-// MITIRU_ENGINE_ROOT at an already-extracted engine source tree.
+// test や power-user は MITIRU_ENGINE_ROOT を展開済みの engine source tree に
+// 向けることで download を short-circuit できる。
 func EnsureSource(version string, progress io.Writer) (string, error) {
 	if progress == nil {
 		progress = io.Discard
@@ -82,13 +81,13 @@ func EnsureSource(version string, progress io.Writer) (string, error) {
 	if _, err := os.Stat(markerFile); err == nil {
 		root, rerr := findSourceRoot(versionDir)
 		if rerr == nil {
-			// Cache hit — nothing fetched, so stay silent. The download path
-			// below narrates itself; a no-op shouldn't add a line (and a long
-			// absolute path) to every build/run.
+			// Cache hit — 何も fetch していないので何も出さない。下の download
+			// path は自分で進捗を語る。no-op が build/run のたびに 1 行
+			// (しかも長い absolute path) を増やすべきではない。
 			return root, nil
 		}
-		// Marker present but source layout is corrupt — fall through and
-		// re-fetch.
+		// marker はあるが source layout が壊れている — fall through して
+		// 再 fetch する。
 		_ = os.RemoveAll(versionDir)
 	} else if !os.IsNotExist(err) {
 		return "", fmt.Errorf("stat %s: %w", markerFile, err)
@@ -100,7 +99,7 @@ func EnsureSource(version string, progress io.Writer) (string, error) {
 
 	fmt.Fprintf(progress, "Downloading MitiruEngine %s...\n", tag)
 	if err := downloadAndExtract(tag, versionDir, progress); err != nil {
-		// Best-effort: don't leave a half-populated cache behind.
+		// Best-effort: 中途半端な cache を残さない。
 		_ = os.RemoveAll(versionDir)
 		return "", err
 	}
@@ -117,7 +116,7 @@ func EnsureSource(version string, progress io.Writer) (string, error) {
 	return root, nil
 }
 
-// resolveTag turns a user-facing version into a concrete git tag string.
+// resolveTag は user 向けの version を具体的な git tag 文字列に変換する。
 func resolveTag(version string, progress io.Writer) (string, error) {
 	v := strings.TrimSpace(version)
 	if v == "" {
@@ -199,8 +198,8 @@ func downloadAndExtract(tag, destDir string, progress io.Writer) error {
 	return extractTarGz(resp.Body, destDir, progress)
 }
 
-// extractTarGz extracts a gzip-compressed tar stream into destDir. The
-// archive's single top-level directory is preserved (e.g. MitiruEngine-0.1.0/).
+// extractTarGz は gzip 圧縮された tar stream を destDir に展開する。
+// archive の単一 top-level directory は保持される (例: MitiruEngine-0.1.0/)。
 func extractTarGz(r io.Reader, destDir string, progress io.Writer) error {
 	gz, err := gzip.NewReader(r)
 	if err != nil {
@@ -221,7 +220,7 @@ func extractTarGz(r io.Reader, destDir string, progress io.Writer) error {
 			return fmt.Errorf("read tar header: %w", err)
 		}
 
-		// Sanitise the entry name. Reject path traversal attempts.
+		// entry 名を sanitise する。path traversal の試みは拒否する。
 		cleanName := filepath.Clean(hdr.Name)
 		if strings.HasPrefix(cleanName, "..") ||
 			strings.Contains(cleanName, string(filepath.Separator)+"..") {
@@ -229,7 +228,7 @@ func extractTarGz(r io.Reader, destDir string, progress io.Writer) error {
 		}
 		outPath := filepath.Join(destDir, cleanName)
 
-		// Guard against absolute paths or symlinks pointing outside destDir.
+		// destDir の外を指す absolute path や symlink を防ぐ。
 		rel, err := filepath.Rel(destDir, outPath)
 		if err != nil || strings.HasPrefix(rel, "..") {
 			return fmt.Errorf("tar entry escapes destination: %q", hdr.Name)
@@ -263,11 +262,11 @@ func extractTarGz(r io.Reader, destDir string, progress io.Writer) error {
 					fileCount, float64(totalBytes)/(1024*1024))
 			}
 		case tar.TypeSymlink, tar.TypeLink:
-			// Skip symlinks — Windows defaults to disallowing them without
-			// admin and they're not load-bearing in the engine archive.
+			// symlink は skip — Windows は admin 無しでは default で許可せず、
+			// engine archive 内でも load-bearing ではない。
 			continue
 		default:
-			// Skip other types (xattr headers, sparse files, etc.) silently.
+			// その他の type (xattr header、sparse file 等) は黙って skip。
 			continue
 		}
 	}
@@ -277,11 +276,11 @@ func extractTarGz(r io.Reader, destDir string, progress io.Writer) error {
 	return nil
 }
 
-// findSourceRoot returns the absolute path of the directory inside versionDir
-// that contains the top-level engine CMakeLists.txt. GitHub source archives
-// wrap the repo in <Repo>-<sha-or-tag>/ so we look one level deep.
+// findSourceRoot は versionDir 内で top-level の engine CMakeLists.txt を含む
+// directory の absolute path を返す。GitHub の source archive は repo を
+// <Repo>-<sha-or-tag>/ で包むので、1 階層下も見る。
 func findSourceRoot(versionDir string) (string, error) {
-	// First: maybe destDir itself contains CMakeLists.txt directly.
+	// まず: versionDir 自体が直接 CMakeLists.txt を含むかもしれない。
 	if _, err := os.Stat(filepath.Join(versionDir, "CMakeLists.txt")); err == nil {
 		return versionDir, nil
 	}

@@ -117,7 +117,7 @@ Press Ctrl+C to stop the server.`,
 }
 
 func runUI(args []string, stateFile string, port int) error {
-	// Resolve project root and assets dir.
+	// project root と assets dir を解決する。
 	cwd, err := os.Getwd()
 	if err != nil {
 		return fmt.Errorf("getwd: %w", err)
@@ -133,9 +133,9 @@ func runUI(args []string, stateFile string, port int) error {
 		return fmt.Errorf("assets/ not found at %s — run 'mitiru build' once to populate it", assetsDir)
 	}
 
-	// The scene references mitiru_runtime/*.js (the declarative binder), which
-	// lives in the engine, not the project's assets/. Resolve the pinned engine
-	// so the preview can serve the real binder (cef_state.js stays mocked below).
+	// scene は mitiru_runtime/*.js (declarative binder) を参照するが、これは
+	// プロジェクトの assets/ ではなく engine 側にある。pin した engine を解決し、
+	// preview が本物の binder を serve できるようにする (cef_state.js は下で mock のまま)。
 	cfg, cfgErr := config.Load(manifestPath)
 	if cfgErr != nil {
 		return fmt.Errorf("load %s: %w", manifestPath, cfgErr)
@@ -146,18 +146,18 @@ func runUI(args []string, stateFile string, port int) error {
 	}
 	runtimeDir := filepath.Join(engineRoot, "web", "mitiru_runtime")
 
-	// Determine scene path (URL-relative to assets/).
+	// scene path を決める (assets/ からの URL 相対)。
 	sceneURL := "/scene.html"
 	if len(args) == 1 {
 		rel, relErr := filepath.Rel(assetsDir, filepath.Join(projectRoot, filepath.FromSlash(args[0])))
 		if relErr != nil {
-			// Treat arg as already relative to assets/.
+			// arg は既に assets/ 相対として扱う。
 			rel = filepath.ToSlash(args[0])
 		}
 		sceneURL = "/" + filepath.ToSlash(rel)
 	}
 
-	// Load initial mock state.
+	// 初期 mock state を読み込む。
 	initialState := map[string]interface{}{}
 	if stateFile != "" {
 		raw, readErr := os.ReadFile(stateFile)
@@ -175,7 +175,7 @@ func runUI(args []string, stateFile string, port int) error {
 	}
 	mockJS := fmt.Sprintf(mockCEFStateTemplate, string(stateJSON))
 
-	// Build HTTP handler: intercept mitiru_cef_state.js, serve rest from assets/.
+	// HTTP handler を構築: mitiru_cef_state.js を intercept し、残りは assets/ から serve。
 	fileServer := http.FileServer(http.Dir(assetsDir))
 	mux := http.NewServeMux()
 	mux.HandleFunc(cefStateURLPath, func(w http.ResponseWriter, r *http.Request) {
@@ -183,13 +183,13 @@ func runUI(args []string, stateFile string, port int) error {
 		w.Header().Set("Cache-Control", "no-store")
 		_, _ = w.Write([]byte(mockJS))
 	})
-	// Serve the engine runtime (mitiru_bind.js, etc.) from the pinned engine.
-	// The exact cef_state.js route above is more specific, so it still wins.
+	// engine runtime (mitiru_bind.js 等) を pin した engine から serve する。
+	// 上の cef_state.js route の方がより具体的なので、依然としてそちらが優先される。
 	mux.Handle("/mitiru_runtime/", http.StripPrefix("/mitiru_runtime/",
 		http.FileServer(http.Dir(runtimeDir))))
 	mux.Handle("/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Block the real mitiru_cef_state.js from disk (already handled above,
-		// but guard in case path casing differs).
+		// disk 上の本物の mitiru_cef_state.js を block する (上で既に処理済みだが、
+		// path の大文字小文字が異なる場合に備えた guard)。
 		if strings.EqualFold(r.URL.Path, cefStateURLPath) {
 			w.Header().Set("Content-Type", "application/javascript; charset=utf-8")
 			_, _ = w.Write([]byte(mockJS))
@@ -203,17 +203,17 @@ func runUI(args []string, stateFile string, port int) error {
 
 	server := &http.Server{Addr: addr, Handler: mux}
 
-	// Start listener before opening browser so the page is ready.
+	// browser を開く前に listener を起動し、page が ready な状態にする。
 	fmt.Printf("mitiru ui  →  %s\n", url)
 	fmt.Println("Ctrl+C to stop.")
 
 	errCh := make(chan error, 1)
 	go func() { errCh <- server.ListenAndServe() }()
 
-	// Open browser (Windows).
+	// browser を開く (Windows)。
 	_ = exec.Command("cmd", "/c", "start", url).Start()
 
-	// Block until Ctrl+C or server error.
+	// Ctrl+C か server error まで block する。
 	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)
 	select {

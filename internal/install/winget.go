@@ -8,12 +8,13 @@ import (
 	"os/exec"
 )
 
-// installBuildTools invokes winget to install Microsoft.VisualStudio.2022.BuildTools
-// with the C++ workload (which brings CMake + Windows SDK + ATL etc. via
-// --includeRecommended). UAC will prompt — that's the only interactive moment.
+// installBuildTools は winget を呼び、C++ workload 付きで
+// Microsoft.VisualStudio.2022.BuildTools を install する (--includeRecommended
+// により CMake + Windows SDK + ATL 等も入る)。UAC が出る — それが唯一の
+// 対話的な瞬間。
 //
-// winget is idempotent: if Build Tools are already installed it returns
-// quickly with a "found existing" message. We treat exit code 0 as success.
+// winget は冪等: Build Tools が既に install 済みなら "found existing"
+// メッセージとともに素早く返る。exit code 0 を成功として扱う。
 func installBuildTools(opts Options) error {
 	args := []string{
 		"install",
@@ -45,8 +46,8 @@ func installBuildTools(opts Options) error {
 	return nil
 }
 
-// quoteArgs builds a shell-friendly representation of argv for log output.
-// Not used to execute anything — just for the "what we ran" trace.
+// quoteArgs はログ出力用に argv の shell フレンドリーな表現を組み立てる。
+// 実行には使わない — 「何を実行したか」のトレース用。
 func quoteArgs(args []string) string {
 	out := ""
 	for i, a := range args {

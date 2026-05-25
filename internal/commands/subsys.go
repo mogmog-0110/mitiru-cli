@@ -12,23 +12,23 @@ import (
 	"github.com/mogmog-0110/mitiru-cli/internal/engine"
 )
 
-// locateSubsystem finds the standalone subsystem executable for `name`
-// (e.g. "renderer" -> mitiru_subsys_renderer.exe). It is the single source
-// of truth for how the subsystem launch commands (renderer / audio / input /
-// scene / replay) discover their backing exe.
+// locateSubsystem は `name` に対応する standalone な subsystem 実行ファイルを探す
+// (例 "renderer" -> mitiru_subsys_renderer.exe)。subsystem launch コマンド
+// (renderer / audio / input / scene / replay) がバックの exe を発見する方法の
+// single source of truth。
 //
-// Search order:
+// 探索順:
 //  1. $MITIRU_HOME/bin/mitiru_subsys_<name>.exe   (installed layout)
-//  2. <dir of the mitiru CLI exe>/mitiru_subsys_<name>.exe (release zip,
-//     subsystems shipped alongside mitiru.exe)
-//  3. <engine source>/build/examples/mitiru_subsys_<name>/...  (dev tree,
-//     where the engine repo builds them — Debug / Release subdirs included)
+//  2. <mitiru CLI exe のディレクトリ>/mitiru_subsys_<name>.exe (release zip、
+//     subsystem は mitiru.exe と同梱)
+//  3. <engine source>/build/examples/mitiru_subsys_<name>/...  (dev tree、
+//     engine repo がそこで build する — Debug / Release の subdir を含む)
 //
-// On miss it returns a clean error telling the user how to build the target.
+// miss 時は target の build 方法を伝える clean な error を返す。
 func locateSubsystem(name string) (string, error) {
 	exeName := subsysExeName(name)
 
-	// (1) Installed layout under $MITIRU_HOME/bin.
+	// (1) $MITIRU_HOME/bin 配下の installed layout。
 	if home := os.Getenv("MITIRU_HOME"); home != "" {
 		c := filepath.Join(home, "bin", exeName)
 		if _, err := os.Stat(c); err == nil {
@@ -36,7 +36,7 @@ func locateSubsystem(name string) (string, error) {
 		}
 	}
 
-	// (2) Alongside the running CLI executable (release zip layout).
+	// (2) 実行中の CLI 実行ファイルと同じ場所 (release zip layout)。
 	if self, err := os.Executable(); err == nil {
 		c := filepath.Join(filepath.Dir(self), exeName)
 		if _, err := os.Stat(c); err == nil {
@@ -44,9 +44,9 @@ func locateSubsystem(name string) (string, error) {
 		}
 	}
 
-	// (3) Dev / cache flow: the engine ships as source only, so the prebuilt
-	// exe is usually absent. Resolve the engine the project pins and build the
-	// single subsystem target on demand (configured + cached on first run).
+	// (3) Dev / cache flow: engine は source のみ配布なので prebuilt exe は通常存在
+	// しない。プロジェクトが pin する engine を解決し、単一の subsystem target を
+	// on-demand で build する (初回に configure + cache される)。
 	engineRoot, err := resolveEngineRoot()
 	if err != nil {
 		return "", fmt.Errorf("%s: %w", name, err)
@@ -54,10 +54,10 @@ func locateSubsystem(name string) (string, error) {
 	return findOrBuildEngineExe(engineRoot, "mitiru_subsys_"+name, exeName)
 }
 
-// resolveEngineRoot returns the cached engine source tree the current project
-// pins (via mitiru.toml). It deliberately does NOT fall back to the "latest"
-// GitHub release: tags exist but published Releases may not, and subsystems
-// must match the version the project builds against.
+// resolveEngineRoot は現在のプロジェクトが (mitiru.toml 経由で) pin する cache 済み
+// engine source tree を返す。意図的に "latest" GitHub release には fall back しない:
+// tag は存在しても publish された Release は存在しないことがあり、subsystem は
+// プロジェクトが build する version と一致する必要があるため。
 func resolveEngineRoot() (string, error) {
 	cwd, err := os.Getwd()
 	if err != nil {
@@ -78,9 +78,9 @@ func resolveEngineRoot() (string, error) {
 	return root, nil
 }
 
-// findOrBuildEngineExe returns the path to an engine example executable
-// (e.g. mitiru_subsys_replay, mitiru_inspector), building it from the cached
-// engine source when it is not already present.
+// findOrBuildEngineExe は engine の example 実行ファイル (例 mitiru_subsys_replay、
+// mitiru_inspector) への path を返す。まだ存在しない場合は cache 済み engine source
+// から build する。
 func findOrBuildEngineExe(engineRoot, target, exeName string) (string, error) {
 	dir := filepath.Join(engineRoot, "build", "examples", target)
 	candidates := []string{
@@ -108,9 +108,9 @@ func findOrBuildEngineExe(engineRoot, target, exeName string) (string, error) {
 	return "", fmt.Errorf("built %s but no executable appeared under %s", target, dir)
 }
 
-// ensureEngineConfigured makes sure the cached engine has a configured build/
-// tree (CEF fetched + cmake configured) so individual targets can be built.
-// A no-op once CMakeCache.txt exists.
+// ensureEngineConfigured は cache 済み engine が configure 済みの build/ tree
+// (CEF 取得 + cmake configure 済み) を持つことを保証し、個別 target を build できる
+// ようにする。CMakeCache.txt が存在すれば no-op。
 func ensureEngineConfigured(engineRoot string) error {
 	buildDir := filepath.Join(engineRoot, "build")
 	if _, err := os.Stat(filepath.Join(buildDir, "CMakeCache.txt")); err == nil {
@@ -124,9 +124,9 @@ func ensureEngineConfigured(engineRoot string) error {
 		return err
 	}
 	fmt.Println("Configuring engine (first subsystem build; cached afterwards)...")
-	// MITIRU_BUILD_TESTS defaults ON for a top-level engine configure, but the
-	// release snapshot ships examples/ (the subsystem targets) without tests/,
-	// so keep tests off to avoid add_subdirectory(tests) on a missing dir.
+	// MITIRU_BUILD_TESTS は top-level engine configure では ON がデフォルトだが、
+	// release snapshot は examples/ (subsystem target 群) を tests/ なしで配布するため、
+	// 存在しない dir への add_subdirectory(tests) を避けるべく tests は off にする。
 	body := msvcPrelude(vcvars) + fmt.Sprintf(
 		"cmake -S \"%s\" -B \"%s\" -G Ninja -DCMAKE_BUILD_TYPE=Debug -DMITIRU_BUILD_TESTS=OFF\r\n",
 		engineRoot, buildDir)
@@ -136,9 +136,9 @@ func ensureEngineConfigured(engineRoot string) error {
 	return nil
 }
 
-// subsysExeName returns the platform-specific executable file name for a
-// subsystem. The engine targets ship as .exe on Windows; on other platforms
-// the bare target name is used so the locator still composes valid paths.
+// subsysExeName は subsystem の platform 固有な実行ファイル名を返す。engine target は
+// Windows では .exe として配布される。他 platform では bare な target 名を使い、
+// locator が依然として valid な path を組み立てられるようにする。
 func subsysExeName(name string) string {
 	base := "mitiru_subsys_" + name
 	if runtime.GOOS == "windows" {
@@ -147,9 +147,9 @@ func subsysExeName(name string) string {
 	return base
 }
 
-// launchSubsystem locates and runs the subsystem exe for `name`, forwarding
-// stdio and passing `args` through to the child. The exit code is surfaced as
-// an error so the CLI can mirror the subsystem's status.
+// launchSubsystem は `name` の subsystem exe を探して実行し、stdio を forward して
+// `args` を child へ渡す。exit code は error として表面化させ、CLI が subsystem の
+// status を mirror できるようにする。
 func launchSubsystem(name string, args ...string) error {
 	if runtime.GOOS != "windows" {
 		return fmt.Errorf("mitiru %s is currently Windows-only (running on %s)",
@@ -178,9 +178,9 @@ func launchSubsystem(name string, args ...string) error {
 	return nil
 }
 
-// buildEngineTarget builds a single CMake target inside the engine's own
-// build tree, going through an MSVC environment (vcvars64) first. Used by the
-// audio / inspector commands when a pre-built exe is not yet present.
+// buildEngineTarget は engine 自身の build tree 内で単一の CMake target を build する。
+// 先に MSVC 環境 (vcvars64) を通す。pre-built な exe がまだ存在しないとき
+// audio / inspector コマンドが使う。
 func buildEngineTarget(buildDir, target string) error {
 	vcvars, err := build.FindVcvars64()
 	if err != nil {
@@ -194,8 +194,8 @@ func buildEngineTarget(buildDir, target string) error {
 	return nil
 }
 
-// msvcPrelude emits the batch boilerplate that puts the VS Installer on PATH
-// and activates vcvars64.bat before any cmake invocation.
+// msvcPrelude は、VS Installer を PATH に置き、cmake 呼び出し前に vcvars64.bat を
+// 有効化する batch の boilerplate を出力する。
 func msvcPrelude(vcvars string) string {
 	return fmt.Sprintf(
 		"@echo off\r\n"+
@@ -205,9 +205,9 @@ func msvcPrelude(vcvars string) string {
 		vcvars)
 }
 
-// runMsvcScript materialises body as a temp .bat and runs it via cmd /c,
-// streaming output to the console. Writing a file sidesteps cmd quoting bugs
-// when paths contain spaces.
+// runMsvcScript は body を一時 .bat として書き出し cmd /c 経由で実行し、出力を
+// console に stream する。file に書くことで、path に空白を含むときの cmd quoting bug
+// を回避する。
 func runMsvcScript(prefix, body string) error {
 	tmp, err := os.CreateTemp("", prefix+"-*.bat")
 	if err != nil {

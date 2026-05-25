@@ -42,9 +42,9 @@ Examples:
 	return cmd
 }
 
-// buildResult bundles the parsed project + the resulting artifact paths so
-// `mitiru run` and `mitiru watch` can chain off `mitiru build` without
-// re-parsing anything.
+// buildResult はパース済み project と生成された artifact path をまとめる。
+// これにより `mitiru run` / `mitiru watch` が再パースなしで `mitiru build`
+// に連鎖できる。
 type buildResult struct {
 	ProjectRoot string
 	Config      *config.ProjectConfig

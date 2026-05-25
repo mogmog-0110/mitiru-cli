@@ -2,22 +2,23 @@
 
 package main
 
-// The installer embeds installer.manifest (asInvoker + longPathAware) via a
-// compiled resource object: rsrc_windows_amd64.syso, which the Go toolchain
-// links automatically when building this package on windows/amd64.
+// installer は installer.manifest (asInvoker + longPathAware) を
+// compiled resource object である rsrc_windows_amd64.syso 経由で埋め込む。
+// windows/amd64 でこの package を build すると Go toolchain が自動でリンクする。
 //
-// Why this matters: Windows' installer-detection heuristic auto-flags any
-// .exe whose name contains "install"/"setup"/"update"/"patch" as
-// requireAdministrator — even when the process only writes to HKCU and
-// LOCALAPPDATA (no admin needed). The embedded manifest's asInvoker level
-// overrides that heuristic so the double-click flow does not trigger a
-// spurious UAC prompt. Without the .syso, MitiruEngine_Installer.exe demands
-// admin on launch, breaking the "admin 不要" promise in docs/INSTALLER.md.
+// なぜ重要か: Windows の installer 検出 heuristic は、
+// 名前に "install"/"setup"/"update"/"patch" を含む .exe を
+// requireAdministrator として自動 flag する — process が HKCU と
+// LOCALAPPDATA にしか書き込まない (admin 不要) 場合でも同様。埋め込んだ
+// manifest の asInvoker level がこの heuristic を上書きし、double-click flow が
+// 不要な UAC prompt を出さないようにする。.syso が無いと
+// MitiruEngine_Installer.exe は起動時に admin を要求し、docs/INSTALLER.md の
+// 「admin 不要」 約束を破ってしまう。
 //
-// Regenerate after editing installer.manifest:
+// installer.manifest を編集したら再生成すること:
 //
 //	go generate ./cmd/installer
 //
-// Requires `rsrc` on PATH (go install github.com/akavel/rsrc@latest).
+// `rsrc` が PATH にあること (go install github.com/akavel/rsrc@latest)。
 //
 //go:generate rsrc -manifest installer.manifest -arch amd64 -o rsrc_windows_amd64.syso

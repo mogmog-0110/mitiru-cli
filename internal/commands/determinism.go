@@ -8,7 +8,7 @@ import (
 	"strings"
 )
 
-// detPattern is a source pattern that breaks determinism/replay.
+// detPattern は determinism/replay を壊す source pattern。
 type detPattern struct {
 	token      string
 	suggestion string
@@ -29,7 +29,7 @@ var detPatterns = []detPattern{
 	{"QueryPerformanceCounter", "wall-clock breaks determinism/replay; use dt"},
 }
 
-// detFinding is a single flagged line.
+// detFinding は flag された 1 行。
 type detFinding struct {
 	file       string
 	line       int
@@ -37,8 +37,8 @@ type detFinding struct {
 	suggestion string
 }
 
-// runDeterminismLint scans src/**/*.cpp and src/**/*.hpp under projectRoot.
-// It returns all findings (never an error — a missing src/ is treated as zero findings).
+// runDeterminismLint は projectRoot 下の src/**/*.cpp と src/**/*.hpp を scan する。
+// 全 findings を返す (error は返さない — src/ が無い場合は findings ゼロ扱い)。
 func runDeterminismLint(projectRoot string) []detFinding {
 	srcDir := filepath.Join(projectRoot, "src")
 	var findings []detFinding
@@ -58,7 +58,7 @@ func runDeterminismLint(projectRoot string) []detFinding {
 	return findings
 }
 
-// scanFile returns all determinism findings in a single file.
+// scanFile は単一ファイル内の全 determinism findings を返す。
 func scanFile(path string) []detFinding {
 	f, err := os.Open(path)
 	if err != nil {
@@ -75,14 +75,14 @@ func scanFile(path string) []detFinding {
 		raw := scanner.Text()
 		trimmed := strings.TrimSpace(raw)
 
-		// Skip single-line comments (limitation: does not handle block comments).
+		// 単一行 comment を skip (制限: block comment は扱わない)。
 		if strings.HasPrefix(trimmed, "//") {
 			continue
 		}
 
-		// Skip string literals heuristically: if the token only appears inside
-		// double-quoted regions, skip. We use a simple approach — strip content
-		// inside double quotes before matching.
+		// string literal を heuristic に skip: token が double-quote 内にしか
+		// 現れないなら skip。簡易手法 — match 前に double-quote 内の内容を
+		// 除去する。
 		stripped := stripStringLiterals(trimmed)
 
 		for _, p := range detPatterns {
@@ -93,7 +93,7 @@ func scanFile(path string) []detFinding {
 					token:      p.token,
 					suggestion: p.suggestion,
 				})
-				// Only report the first matching pattern per line to avoid duplicates.
+				// 重複回避のため 1 行につき最初に match した pattern のみ report。
 				break
 			}
 		}
@@ -102,9 +102,9 @@ func scanFile(path string) []detFinding {
 	return findings
 }
 
-// stripStringLiterals removes content inside double-quoted strings to avoid
-// false positives from log messages that happen to contain pattern text.
-// This is a best-effort heuristic and does not handle raw string literals.
+// stripStringLiterals は double-quote 文字列内の内容を除去し、pattern text を
+// たまたま含む log message からの false positive を避ける。
+// best-effort な heuristic で、raw string literal は扱わない。
 func stripStringLiterals(line string) string {
 	var b strings.Builder
 	inString := false
@@ -121,8 +121,8 @@ func stripStringLiterals(line string) string {
 	return b.String()
 }
 
-// printDeterminismReport writes the lint output to stdout.
-// It does NOT return an error — findings are warnings only.
+// printDeterminismReport は lint 出力を stdout に書く。
+// error は返さない — findings は warning のみ。
 func printDeterminismReport(findings []detFinding) {
 	fmt.Println()
 	fmt.Println("  --- determinism lint ---")

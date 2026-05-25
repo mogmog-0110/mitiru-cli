@@ -10,21 +10,21 @@ import (
 	"path/filepath"
 )
 
-// envReport is the snapshot of "what's currently on this machine" used at
-// Step 1 to drive the rest of the installer.
+// envReport は「今このマシンに何があるか」の snapshot。Step 1 で取得し、
+// 以降の installer の動作を駆動する。
 type envReport struct {
 	hasWinget bool
 	hasMsvc   bool
 	hasCMake  bool
 	hasSDK    bool
 
-	// mitiruPath is the absolute path of an existing `mitiru` on PATH (or
-	// empty if none found). Distinguishes "already installed at target dir"
-	// vs "installed at some other location — we'd be shadowing it".
+	// mitiruPath は PATH 上の既存 `mitiru` の絶対パス (なければ空)。
+	// 「target dir に既に install 済み」と「別の location に install 済み —
+	// それを shadow することになる」を区別する。
 	mitiruPath string
 }
 
-// snapshot returns the current environment state.
+// snapshot は現在の environment 状態を返す。
 func snapshot() (*envReport, error) {
 	r := &envReport{}
 
@@ -36,7 +36,7 @@ func snapshot() (*envReport, error) {
 	r.hasSDK = hasWindowsSDK()
 
 	if p, err := exec.LookPath("mitiru"); err == nil {
-		// Resolve to absolute so comparisons against target dir work.
+		// target dir との比較が効くよう絶対パスに解決する。
 		if abs, absErr := filepath.Abs(p); absErr == nil {
 			r.mitiruPath = abs
 		} else {
@@ -66,8 +66,8 @@ func (r *envReport) print(w io.Writer) {
 	}
 }
 
-// hasVcvars64 — duplicated from internal/commands/doctor.go.
-// (kept inline to avoid a cyclic dependency: commands imports install.)
+// hasVcvars64 — internal/commands/doctor.go からの複製。
+// (循環依存を避けるため inline に保持: commands が install を import している。)
 func hasVcvars64() bool {
 	candidates := []string{
 		`C:\Program Files\Microsoft Visual Studio\18\Community\VC\Auxiliary\Build\vcvars64.bat`,

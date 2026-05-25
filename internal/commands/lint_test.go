@@ -5,20 +5,20 @@ import "testing"
 func TestProducedCovers(t *testing.T) {
 	produced := map[string]bool{
 		"view.hud.hp": true,
-		"view.shop":   true, // pushed as a JSON object; sub-fields are bound
+		"view.shop":   true, // JSON object として push、sub-field が bind される
 		"view.eintent": true,
 	}
 	cases := []struct {
 		key  string
 		want bool
 	}{
-		{"view.hud.hp", true},         // exact
-		{"view.shop.b0.cost", true},   // sub-field of a pushed object
-		{"view.shop", true},           // exact object
-		{"view.eintent", true},        // exact
-		{"view.eintnet", false},       // typo — must be flagged
-		{"view.hud.mana", false},      // sibling never pushed
-		{"player.gold", false},        // unrelated root
+		{"view.hud.hp", true},         // 完全一致
+		{"view.shop.b0.cost", true},   // push 済み object の sub-field
+		{"view.shop", true},           // object に完全一致
+		{"view.eintent", true},        // 完全一致
+		{"view.eintnet", false},       // typo — flag 必須
+		{"view.hud.mana", false},      // 兄弟だが push されていない
+		{"player.gold", false},        // 無関係な root
 	}
 	for _, c := range cases {
 		if got := producedCovers(produced, c.key); got != c.want {
@@ -72,7 +72,7 @@ func TestAnalyzeSceneExtractsKeysAndStructural(t *testing.T) {
 	}
 }
 
-// splitDots mirrors strings.Split(s,".") for test readability.
+// splitDots は test の可読性のため strings.Split(s,".") を再現する。
 func splitDots(s string) []string {
 	out := []string{}
 	cur := ""

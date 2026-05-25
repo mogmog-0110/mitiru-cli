@@ -87,7 +87,7 @@ func runDoctor() error {
 	fmt.Println()
 	fmt.Println("All prerequisites look good.")
 
-	// Determinism lint — warn only, never fails the command.
+	// determinism lint — warn のみ、command を fail させない。
 	cwd, err := os.Getwd()
 	if err == nil {
 		_, projectRoot, manifestErr := config.FindManifest(cwd)
@@ -95,15 +95,15 @@ func runDoctor() error {
 			findings := runDeterminismLint(projectRoot)
 			printDeterminismReport(findings)
 		}
-		// If no mitiru.toml is found we silently skip the lint.
+		// mitiru.toml が見つからなければ lint を黙って skip する。
 	}
 
 	return nil
 }
 
-// hasCMake reports whether a usable cmake.exe is reachable. CMake comes from
-// either a stand-alone install (cmake on PATH) or the "C++ CMake tools for
-// Windows" component shipped inside Visual Studio 2022. We accept either.
+// hasCMake は利用可能な cmake.exe に到達できるか報告する。CMake は
+// stand-alone install (PATH 上の cmake) か、Visual Studio 2022 同梱の
+// "C++ CMake tools for Windows" component のどちらか由来。両方とも受け入れる。
 func hasCMake() bool {
 	if _, err := exec.LookPath("cmake"); err == nil {
 		return true

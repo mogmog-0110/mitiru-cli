@@ -16,32 +16,32 @@ const (
 	cefPlatform  = "windows64"
 	cefDistType  = "minimal"
 	cefCDNBase   = "https://cef-builds.spotifycdn.com"
-	cefTimeout   = httpTimeout // reuse 5-minute cap from cache.go
+	cefTimeout   = httpTimeout // cache.go の 5 分上限を再利用
 )
 
-// cefArchiveName returns the .tar.bz2 filename for the pinned CEF build.
+// cefArchiveName は pin した CEF build の .tar.bz2 ファイル名を返す。
 func cefArchiveName() string {
 	return fmt.Sprintf("cef_binary_%s_%s_%s.tar.bz2", cefVersion, cefPlatform, cefDistType)
 }
 
-// cefDirName is the top-level directory extracted from the archive.
-// fetch_cef.py keeps this directory inside external/cef/, so cmake's
-// FindCEF resolves to external/cef/<dirName>/{Release,Resources,include,...}.
+// cefDirName は archive から展開される top-level directory。
+// fetch_cef.py はこの directory を external/cef/ 内に保つので、cmake の
+// FindCEF は external/cef/<dirName>/{Release,Resources,include,...} に解決する。
 func cefDirName() string {
 	return fmt.Sprintf("cef_binary_%s_%s", cefVersion, cefPlatform)
 }
 
-// cefDownloadURL returns the percent-encoded URL for the CEF archive.
-// The version string contains '+' which must be encoded as %2B.
+// cefDownloadURL は CEF archive の percent-encoded な URL を返す。
+// version 文字列は '+' を含み、これは %2B に encode する必要がある。
 func cefDownloadURL() string {
 	archiveName := cefArchiveName()
 	encoded := strings.ReplaceAll(archiveName, "+", "%2B")
 	return cefCDNBase + "/" + encoded
 }
 
-// EnsureCEF guarantees that <engineRoot>/external/cef/<cefDirName> exists and
-// is populated. If it is already present, it returns nil immediately (cached).
-// Otherwise it downloads and extracts the minimal CEF binary archive.
+// EnsureCEF は <engineRoot>/external/cef/<cefDirName> が存在し中身が
+// 揃っていることを保証する。既にあれば即 nil を返す (cached)。
+// 無ければ minimal CEF binary archive を download して展開する。
 func EnsureCEF(engineRoot string, progress io.Writer) error {
 	if progress == nil {
 		progress = io.Discard
@@ -51,8 +51,8 @@ func EnsureCEF(engineRoot string, progress io.Writer) error {
 	targetDir := filepath.Join(externalCef, cefDirName())
 
 	if dirNonEmpty(targetDir) {
-		// Cache hit — CEF is already extracted, so report nothing. The
-		// download branch below narrates its (multi-minute) work itself.
+		// Cache hit — CEF は展開済みなので何も報告しない。下の download
+		// branch が自分で (数分かかる) 作業を語る。
 		return nil
 	}
 
@@ -87,14 +87,14 @@ func EnsureCEF(engineRoot string, progress io.Writer) error {
 
 	fmt.Fprintln(progress, "  Extracting CEF archive...")
 	if err := extractTarBz2(resp.Body, externalCef, progress); err != nil {
-		// Best-effort cleanup — leave no half-extracted tree.
+		// Best-effort cleanup — 中途半端に展開された tree を残さない。
 		_ = os.RemoveAll(targetDir)
 		return fmt.Errorf("extract CEF archive: %w", err)
 	}
 
-	// fetch_cef.py renames the _minimal-suffixed dir to the canonical name if
-	// needed. Mirror that: if the exact targetDir is absent but a prefixed
-	// sibling exists, rename it.
+	// fetch_cef.py は必要に応じて _minimal suffix 付きの dir を canonical 名に
+	// rename する。これを真似る: 正確な targetDir が無く prefix 付きの
+	// sibling がある場合は rename する。
 	if !dirNonEmpty(targetDir) {
 		if err := fixupCEFDirName(externalCef, targetDir); err != nil {
 			return err
@@ -112,8 +112,8 @@ func EnsureCEF(engineRoot string, progress io.Writer) error {
 	return nil
 }
 
-// extractTarBz2 extracts a bzip2-compressed tar stream into destDir,
-// preserving the archive's top-level directory (matching fetch_cef.py behaviour).
+// extractTarBz2 は bzip2 圧縮された tar stream を destDir に展開し、
+// archive の top-level directory を保持する (fetch_cef.py の挙動に合わせる)。
 func extractTarBz2(r io.Reader, destDir string, progress io.Writer) error {
 	bzr := bzip2.NewReader(r)
 	tr := tar.NewReader(bzr)
@@ -170,7 +170,7 @@ func extractTarBz2(r io.Reader, destDir string, progress io.Writer) error {
 					fileCount, float64(totalBytes)/(1024*1024))
 			}
 		default:
-			// Skip symlinks and special entries (Windows doesn't need them).
+			// symlink や特殊 entry は skip (Windows では不要)。
 			continue
 		}
 	}
@@ -180,9 +180,9 @@ func extractTarBz2(r io.Reader, destDir string, progress io.Writer) error {
 	return nil
 }
 
-// fixupCEFDirName renames the first directory under parent whose name begins
-// with cefDirName() to the exact canonical name. This mirrors fetch_cef.py's
-// handling of the "_minimal" suffix variant.
+// fixupCEFDirName は parent 配下で名前が cefDirName() で始まる最初の
+// directory を、正確な canonical 名に rename する。これは fetch_cef.py の
+// "_minimal" suffix variant の扱いを真似たもの。
 func fixupCEFDirName(parent, want string) error {
 	prefix := cefDirName()
 	entries, err := os.ReadDir(parent)
@@ -204,8 +204,7 @@ func fixupCEFDirName(parent, want string) error {
 	return nil
 }
 
-// dirNonEmpty reports whether path exists as a directory and contains at least
-// one entry.
+// dirNonEmpty は path が directory として存在し、entry を 1 つ以上含むかを返す。
 func dirNonEmpty(path string) bool {
 	entries, err := os.ReadDir(path)
 	return err == nil && len(entries) > 0

@@ -10,14 +10,14 @@ import (
 	"path/filepath"
 )
 
-// deployMitiru copies the `mitiru.exe` that lives next to the installer (in
-// the same release zip) into opts.TargetDir.
+// deployMitiru は installer の隣 (同じ release zip 内) にある `mitiru.exe`
+// を opts.TargetDir へ copy する。
 //
-// Locating the source: installer.exe and mitiru.exe ship side-by-side in the
-// release zip, so os.Executable() + "/../mitiru.exe" is the canonical path.
-// If the installer is invoked from `go run ./cmd/installer`, that path won't
-// resolve to a real .exe — we fall back to looking in the cwd in that case
-// so dev-time `--dry-run` still works.
+// source の特定: installer.exe と mitiru.exe は release zip 内で隣り合って
+// 配布されるので、os.Executable() + "/../mitiru.exe" が canonical なパス。
+// installer を `go run ./cmd/installer` から起動した場合、このパスは実在の
+// .exe に解決しない — その場合は cwd を見るフォールバックを行い、開発時の
+// `--dry-run` も動くようにする。
 func deployMitiru(opts Options) error {
 	src, srcErr := findMitiruSource()
 	dst := filepath.Join(opts.TargetDir, "mitiru.exe")
@@ -51,14 +51,14 @@ func deployMitiru(opts Options) error {
 }
 
 func findMitiruSource() (string, error) {
-	// Try next-to-installer first (release-zip layout).
+	// まず installer の隣を試す (release-zip レイアウト)。
 	if exe, err := os.Executable(); err == nil {
 		cand := filepath.Join(filepath.Dir(exe), "mitiru.exe")
 		if st, err := os.Stat(cand); err == nil && !st.IsDir() {
 			return cand, nil
 		}
 	}
-	// Fall back to cwd (dev-time runs via `go run`).
+	// cwd にフォールバック (`go run` での開発時実行)。
 	cwd, err := os.Getwd()
 	if err == nil {
 		cand := filepath.Join(cwd, "mitiru.exe")

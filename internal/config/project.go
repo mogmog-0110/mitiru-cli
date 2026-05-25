@@ -1,4 +1,4 @@
-// Package config loads and validates the per-project mitiru.toml manifest.
+// Package config はプロジェクトごとの mitiru.toml manifest を読み込み・検証する。
 package config
 
 import (
@@ -9,12 +9,12 @@ import (
 	"github.com/BurntSushi/toml"
 )
 
-// ManifestFilename is the on-disk name of the project manifest. Always lives
-// at the project root next to src/.
+// ManifestFilename はプロジェクト manifest のディスク上の名前。常に
+// プロジェクトルートの src/ の隣に置かれる。
 const ManifestFilename = "mitiru.toml"
 
-// ProjectConfig mirrors the schema documented in the scaffold templates.
-// Field tags follow BurntSushi/toml conventions (lowercase, underscored).
+// ProjectConfig は scaffold テンプレートに記載された schema を反映する。
+// Field tag は BurntSushi/toml の慣習 (小文字・アンダースコア) に従う。
 type ProjectConfig struct {
 	Project ProjectSection `toml:"project"`
 	Window  WindowSection  `toml:"window"`
@@ -44,9 +44,9 @@ type BuildSection struct {
 	Backend string `toml:"backend"`
 }
 
-// FindManifest walks upward from startDir looking for mitiru.toml. Returns
-// the absolute path of the manifest and the project root (its directory),
-// or an error if none was found before hitting the filesystem root.
+// FindManifest は startDir から上方向に mitiru.toml を探す。manifest の
+// 絶対パスとプロジェクトルート (その親ディレクトリ) を返す。filesystem の
+// ルートに達するまで見つからなければ error を返す。
 func FindManifest(startDir string) (manifestPath, projectRoot string, err error) {
 	dir, err := filepath.Abs(startDir)
 	if err != nil {
@@ -65,7 +65,7 @@ func FindManifest(startDir string) (manifestPath, projectRoot string, err error)
 	}
 }
 
-// Load reads and validates the manifest at path.
+// Load は path にある manifest を読み込み・検証する。
 func Load(path string) (*ProjectConfig, error) {
 	body, err := os.ReadFile(path)
 	if err != nil {
@@ -115,8 +115,8 @@ func (c *ProjectConfig) applyDefaults() {
 	}
 }
 
-// EngineTag returns the engine version normalised to a `v`-prefixed git tag.
-// project.engine = "0.1.0" → "v0.1.0"; "v0.1.0" → unchanged; "latest" → "latest".
+// EngineTag は engine version を `v` 接頭辞付きの git tag に正規化して返す。
+// project.engine = "0.1.0" → "v0.1.0"; "v0.1.0" → そのまま; "latest" → "latest"。
 func (c *ProjectConfig) EngineTag() string {
 	v := c.Project.Engine
 	if v == "" || v == "latest" {

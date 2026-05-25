@@ -13,9 +13,9 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// File extensions that, when modified, should trigger a DLL rebuild.
-// Anything else (e.g. .html, .css, .js under assets/) is picked up by the
-// engine's own asset hot reload — no need to bounce anything.
+// 変更されたら DLL rebuild を trigger すべき file 拡張子。
+// それ以外 (例 assets/ 配下の .html, .css, .js) は engine 自身の asset hot reload が
+// 拾うので、何も bounce する必要はない。
 var cppExts = map[string]bool{
 	".cpp": true, ".cc": true, ".cxx": true,
 	".h": true, ".hpp": true, ".hxx": true,
@@ -66,7 +66,7 @@ func runWatch() error {
 	}
 	defer watcher.Close()
 
-	// Walk src/ + assets/ and add every directory the watcher needs to follow.
+	// src/ + assets/ を walk し、watcher が追う必要のある全 directory を追加する。
 	for _, sub := range []string{"src", "assets"} {
 		root := filepath.Join(cwd, sub)
 		if _, err := os.Stat(root); err != nil {
@@ -93,16 +93,16 @@ func runWatch() error {
 	state := newGameState()
 	defer state.stop()
 
-	// Initial build + launch host with --watch. The host then handles all
-	// future DLL swaps internally — subsequent rebuilds only need to update
-	// the DLL on disk; we never relaunch the host.
+	// 初回 build + host を --watch で launch する。以降の DLL swap は host が内部で
+	// すべて処理する — 後続の rebuild は disk 上の DLL を更新するだけでよく、
+	// host は relaunch しない。
 	if err := state.firstBuildAndLaunch(); err != nil {
 		return fmt.Errorf("watch: initial build/launch failed: %w", err)
 	}
 
-	// Build requests are funnelled through a serialised goroutine so a
-	// burst of saves collapses into one rebuild, and the fsnotify Events
-	// channel keeps draining during long builds.
+	// build request は直列化された goroutine に集約され、save の burst が 1 回の
+	// rebuild に collapse される。さらに長い build 中も fsnotify の Events channel が
+	// drain され続ける。
 	buildReq := make(chan struct{}, 1)
 	go func() {
 		for range buildReq {
@@ -116,12 +116,12 @@ func runWatch() error {
 		select {
 		case buildReq <- struct{}{}:
 		default:
-			// One is already queued; the worker picks up the latest
-			// source after the in-flight build completes.
+			// 既に 1 件 queue 済み。worker は in-flight な build 完了後に
+			// 最新の source を拾う。
 		}
 	}
 
-	// Debounce: coalesce a burst of save events into one rebuild request.
+	// Debounce: save event の burst を 1 回の rebuild request に coalesce する。
 	var (
 		debounceMu   sync.Mutex
 		pendingTimer *time.Timer
@@ -139,7 +139,7 @@ func runWatch() error {
 		select {
 		case ev, ok := <-watcher.Events:
 			if !ok { return nil }
-			// Watch newly-created subdirectories too.
+			// 新規作成された subdirectory も watch する。
 			if ev.Op&fsnotify.Create != 0 {
 				if st, err := os.Stat(ev.Name); err == nil && st.IsDir() {
 					_ = watcher.Add(ev.Name)
@@ -156,14 +156,14 @@ func runWatch() error {
 }
 
 func shouldTrigger(path string, op fsnotify.Op) bool {
-	// Only react to writes / creates / renames; chmod alone doesn't matter.
+	// write / create / rename のみに反応する。chmod だけは無視。
 	if op&(fsnotify.Write|fsnotify.Create|fsnotify.Rename) == 0 {
 		return false
 	}
-	// Engine takes care of asset hot reload itself; we only restart on C++.
+	// asset hot reload は engine 自身が面倒を見る。こちらは C++ 変更時のみ restart する。
 	ext := strings.ToLower(filepath.Ext(path))
 	if !cppExts[ext] { return false }
-	// Editors often write temp / swap files we don't care about.
+	// editor は気にしなくてよい temp / swap file をしばしば書き出す。
 	base := filepath.Base(path)
 	if strings.HasPrefix(base, ".") || strings.HasSuffix(base, "~") {
 		return false
@@ -171,8 +171,8 @@ func shouldTrigger(path string, op fsnotify.Op) bool {
 	return true
 }
 
-// gameState holds the currently-running game (and optional inspector child).
-// Each rebuild kills the old process before spawning the new one.
+// gameState は現在実行中のゲーム (と任意の inspector child) を保持する。
+// 各 rebuild は新 process を spawn する前に旧 process を kill する。
 type gameState struct {
 	mu     sync.Mutex
 	game   *exec.Cmd
@@ -196,9 +196,9 @@ func (s *gameState) stop() {
 	}
 }
 
-// firstBuildAndLaunch does the initial DLL build + spawns mitiru_host with
-// --watch. Subsequent rebuilds rely on the host's own DLL mtime polling, so
-// the host process is launched exactly once for the lifetime of `mitiru watch`.
+// firstBuildAndLaunch は初回 DLL build を行い、mitiru_host を --watch 付きで spawn
+// する。後続の rebuild は host 自身の DLL mtime polling に依存するため、host process
+// は `mitiru watch` の生存期間中ちょうど 1 回だけ launch される。
 func (s *gameState) firstBuildAndLaunch() error {
 	result, err := runBuild()
 	if err != nil {
@@ -235,9 +235,8 @@ func (s *gameState) firstBuildAndLaunch() error {
 	return nil
 }
 
-// rebuildOnly re-runs the build. The host (launched once by
-// firstBuildAndLaunch) polls the DLL mtime and reloads in place — gameplay
-// state survives the swap.
+// rebuildOnly は build を再実行する。host (firstBuildAndLaunch で 1 回 launch 済み)
+// が DLL mtime を poll し in-place で reload する — gameplay state は swap を生き延びる。
 func (s *gameState) rebuildOnly() error {
 	_, err := runBuild()
 	return err

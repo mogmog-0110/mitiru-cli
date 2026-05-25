@@ -94,7 +94,7 @@ func runReplay() error {
 		return launchSubsystem("replay", "--replay", abs)
 	}
 
-	// --test mode: headless, no window, no CEF.
+	// --test モード: headless、window なし、CEF なし。
 	abs, err := filepath.Abs(replayTestFile)
 	if err != nil {
 		return fmt.Errorf("replay: resolve %q: %w", replayTestFile, err)
@@ -103,8 +103,8 @@ func runReplay() error {
 		return fmt.Errorf("replay: %s: %w", abs, err)
 	}
 
-	// --game: replay THIS project's DLL through the host (a real game), not the
-	// standalone demo subsystem. Builds the project, then runs the host headless.
+	// --game: standalone な demo subsystem ではなく、このプロジェクトの DLL を host
+	// 経由で replay する (実ゲーム)。プロジェクトを build してから host を headless 実行。
 	if replayGame {
 		return runReplayGameTest(abs)
 	}
@@ -124,10 +124,10 @@ func runReplay() error {
 	return launchSubsystem("replay", subsysArgs...)
 }
 
-// runReplayGameTest builds the current project and replays the recorded session
-// through the project's host DLL headlessly (`mitiru_host <dll> --replay-test`),
-// asserting the final pushed view.* state against --expect when given. The
-// host's exit code is propagated so CI sees the regression result.
+// runReplayGameTest は現在のプロジェクトを build し、記録した session をプロジェクトの
+// host DLL 経由で headless に replay する (`mitiru_host <dll> --replay-test`)。--expect
+// 指定時は最終 push された view.* state を assert する。host の exit code はそのまま
+// 伝播するので CI が regression 結果を見られる。
 func runReplayGameTest(absFile string) error {
 	result, err := runBuild()
 	if err != nil {
@@ -153,7 +153,7 @@ func runReplayGameTest(absFile string) error {
 	cmd.Dir = art.DeployDir
 	if err := cmd.Run(); err != nil {
 		if exitErr, ok := err.(*exec.ExitError); ok {
-			os.Exit(exitErr.ExitCode()) // faithful regression-gate exit code
+			os.Exit(exitErr.ExitCode()) // regression-gate の exit code を忠実に伝える
 		}
 		return fmt.Errorf("replay --game: %w", err)
 	}

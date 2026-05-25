@@ -8,9 +8,9 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// Non-Windows stub: the installer wraps Windows-only behavior (winget +
-// HKCU\Environment\Path + LongPaths registry). Print a helpful message
-// instead of silently omitting the subcommand.
+// 非 Windows 向け stub: installer は Windows 専用の挙動 (winget +
+// HKCU\Environment\Path + LongPaths registry) を wrap する。subcommand を黙って
+// 省くのではなく、役立つ message を出力する。
 func newInstallCommand() *cobra.Command {
 	return &cobra.Command{
 		Use:   "install",

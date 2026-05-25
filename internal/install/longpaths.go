@@ -8,12 +8,12 @@ import (
 	"golang.org/x/sys/windows/registry"
 )
 
-// enableLongPaths sets HKLM\SYSTEM\CurrentControlSet\Control\FileSystem\
-// LongPathsEnabled = 1 so CEF / engine paths that exceed MAX_PATH (260)
-// during build don't blow up.
+// enableLongPaths は HKLM\SYSTEM\CurrentControlSet\Control\FileSystem\
+// LongPathsEnabled = 1 を設定し、build 中に MAX_PATH (260) を超える
+// CEF / engine のパスで破綻しないようにする。
 //
-// Requires admin. We attempt the write and surface the error to the caller
-// (the orchestrator downgrades it to a warning).
+// admin が必要。書き込みを試み、error は caller に伝える
+// (orchestrator が warning に格下げする)。
 func enableLongPaths(opts Options) error {
 	const keyPath = `SYSTEM\CurrentControlSet\Control\FileSystem`
 	const valueName = "LongPathsEnabled"

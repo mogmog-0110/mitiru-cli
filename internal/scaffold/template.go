@@ -1,4 +1,4 @@
-// Package scaffold expands the embedded project templates onto disk.
+// Package scaffold は埋め込まれたプロジェクトテンプレートを disk へ展開する。
 package scaffold
 
 import (
@@ -14,31 +14,32 @@ import (
 //go:embed all:templates
 var embedded embed.FS
 
-// Data is the template payload exposed to *.tmpl files.
+// Data は *.tmpl ファイルに公開されるテンプレート payload。
 type Data struct {
-	// ProjectName is the human-facing name from `mitiru new <name>`, used
-	// verbatim in window titles and on-screen labels.
+	// ProjectName は `mitiru new <name>` で渡される人間向けの名前。window
+	// title や画面上のラベルにそのまま使われる。
 	ProjectName string
 
-	// ProjectIdent is the C++-safe identifier form of ProjectName — lower
-	// snake_case, suitable for `namespace <ident> { ... }`.
+	// ProjectIdent は ProjectName の C++ で安全な識別子形式 — lower
+	// snake_case で、`namespace <ident> { ... }` に適する。
 	ProjectIdent string
 
-	// UpperIdent is the UPPER_SNAKE_CASE form of ProjectName, used as the
-	// prefix for `#define <UPPER>_DLL_EXPORT` and similar macro guards.
+	// UpperIdent は ProjectName の UPPER_SNAKE_CASE 形式。`#define
+	// <UPPER>_DLL_EXPORT` のような macro guard の接頭辞に使う。
 	UpperIdent string
 
-	// EngineVersion is the engine release the scaffolded project pins in its
-	// mitiru.toml (e.g. "0.5.0"). Sourced from defaultEngineVersion so a new
-	// project never lands on an engine older than the templates require.
+	// EngineVersion は scaffold したプロジェクトが mitiru.toml で pin する
+	// engine release (例 "0.5.0")。defaultEngineVersion を source とし、新規
+	// プロジェクトがテンプレートの要求より古い engine に当たらないようにする。
 	EngineVersion string
 }
 
-// Expand walks templates/<template>/ and writes every file (rendering *.tmpl
-// through text/template, copying everything else byte-for-byte) into dstDir.
+// Expand は templates/<template>/ を walk し、すべてのファイルを dstDir へ
+// 書き出す (*.tmpl は text/template でレンダリングし、それ以外は
+// byte-for-byte で copy する)。
 //
-// Files named gitignore.tmpl land as `.gitignore` on disk (embed cannot ship
-// a literal `.gitignore` because go:embed ignores dotfiles).
+// gitignore.tmpl という名前のファイルは disk 上で `.gitignore` になる
+// (go:embed は dotfile を無視するため、リテラルの `.gitignore` は配布できない)。
 func Expand(templateName, dstDir string, data Data) error {
 	rootInEmbed := "templates/" + templateName
 
