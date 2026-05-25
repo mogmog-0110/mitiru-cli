@@ -51,7 +51,8 @@ func EnsureCEF(engineRoot string, progress io.Writer) error {
 	targetDir := filepath.Join(externalCef, cefDirName())
 
 	if dirNonEmpty(targetDir) {
-		fmt.Fprintf(progress, "CEF already present at %s\n", targetDir)
+		// Cache hit — CEF is already extracted, so report nothing. The
+		// download branch below narrates its (multi-minute) work itself.
 		return nil
 	}
 

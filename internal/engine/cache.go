@@ -82,7 +82,9 @@ func EnsureSource(version string, progress io.Writer) (string, error) {
 	if _, err := os.Stat(markerFile); err == nil {
 		root, rerr := findSourceRoot(versionDir)
 		if rerr == nil {
-			fmt.Fprintf(progress, "Using cached MitiruEngine %s at %s\n", tag, root)
+			// Cache hit — nothing fetched, so stay silent. The download path
+			// below narrates itself; a no-op shouldn't add a line (and a long
+			// absolute path) to every build/run.
 			return root, nil
 		}
 		// Marker present but source layout is corrupt — fall through and

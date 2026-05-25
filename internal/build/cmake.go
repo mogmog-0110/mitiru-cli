@@ -4,6 +4,7 @@ package build
 
 import (
 	"bufio"
+	"bytes"
 	"fmt"
 	"io"
 	"os"
@@ -272,7 +273,6 @@ func Run(opts Options) (*Artifacts, error) {
 		}
 	}
 
-	fmt.Fprintf(opts.Stdout, "Ensuring CEF binaries are present...\n")
 	if err := engine.EnsureCEF(opts.EngineRoot, opts.Stdout); err != nil {
 		return nil, fmt.Errorf("CEF setup failed: %w", err)
 	}
@@ -350,7 +350,26 @@ func runCMakeConfigure(vcvars, generator, srcDir, outDir string, opts Options) e
 	script := fmt.Sprintf(
 		"%scmake -S \"%s\" -B \"%s\" -G \"%s\" %s\r\n",
 		vcvarsPrelude(vcvars), srcDir, outDir, generator, archAndType)
-	return runBatchScript("mitiru_configure", script, opts)
+
+	// CMake's configure output is pure diagnostic noise on success — feature
+	// detection lines like "Jolt not found", "Tracy not found" that read as
+	// errors to a first-time user and blow the first-touch output budget.
+	// Capture it and surface it only if configure actually fails. Opt back in
+	// with MITIRU_VERBOSE=1 (dry-run already routes through its own printer).
+	if os.Getenv("MITIRU_DRY_RUN") == "1" || os.Getenv("MITIRU_VERBOSE") == "1" {
+		return runBatchScript("mitiru_configure", script, opts)
+	}
+	var buf bytes.Buffer
+	quiet := opts
+	quiet.Stdout = &buf
+	quiet.Stderr = &buf
+	if err := runBatchScript("mitiru_configure", script, quiet); err != nil {
+		if buf.Len() > 0 {
+			fmt.Fprint(opts.Stderr, buf.String())
+		}
+		return err
+	}
+	return nil
 }
 
 // vcvarsPrelude emits the boilerplate every cmake-driving batch script needs:
