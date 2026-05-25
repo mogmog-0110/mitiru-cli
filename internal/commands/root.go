@@ -6,7 +6,7 @@ import (
 
 const (
 	cliName    = "mitiru"
-	cliVersion = "0.1.0"
+	cliVersion = "0.6.0"
 
 	// defaultEngineVersion is the engine release a freshly scaffolded project
 	// pins in its mitiru.toml. Bump this on every engine release so new

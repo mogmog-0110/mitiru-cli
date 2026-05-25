@@ -13,6 +13,7 @@ func newVersionCommand() *cobra.Command {
 		Short: "Print version information",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			fmt.Printf("mitiru %s (%s/%s)\n", cliVersion, runtime.GOOS, runtime.GOARCH)
+			fmt.Printf("  scaffolds engine %s by default\n", defaultEngineVersion)
 			return nil
 		},
 	}
