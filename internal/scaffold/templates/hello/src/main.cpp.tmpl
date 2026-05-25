@@ -1,4 +1,4 @@
-// {{.ProjectName}} — game-as-DLL entry point (v0.3.0 / ADR 0005)
+// {{.ProjectName}} — game-as-DLL entry point (ADR 0005)
 //
 // Everything persistent lives in GameMemory. The host owns the pointer, so
 // state survives DLL hot-reloads when you launch with `mitiru watch` (or
@@ -8,10 +8,16 @@
 //   host → DLL: InputSnapshot   keys / mouse / CEF action events
 //   DLL → host: FrameIntents    state pushes / quit / screenshot / palette
 //
+// The HUD in assets/scene.html is plain HTML/CSS. You drive it WITHOUT writing
+// any JavaScript: push named values here with StateWriter, and the declarative
+// binder (data-m-* attributes) renders them. That is the engine's whole point —
+// HTML/CSS + C++, zero hand-written JS glue (ADR 0007).
+//
 // The host calls mitiru_module_load() once on launch and once again on every
 // reload. *memory is preserved across reloads — only the function pointers
 // (and code) change.
 
+#include <mitiru/bridge/StateWriter.hpp>
 #include <mitiru/core/Screen.hpp>
 #include <mitiru/module/ModuleApi.hpp>
 
@@ -51,10 +57,21 @@ void on_update(void* memory, float dt,
     //   the player speed updates live without restarting (DLL hot-reload).
     //   Try 320 → 800 and watch it move faster instantly.
     constexpr float kSpeed = 320.0f;
-    if (input->keysDown[vk::Left])  { mem.playerX -= kSpeed * dt; }
-    if (input->keysDown[vk::Right]) { mem.playerX += kSpeed * dt; }
-    if (input->keysDown[vk::Up])    { mem.playerY -= kSpeed * dt; }
-    if (input->keysDown[vk::Down])  { mem.playerY += kSpeed * dt; }
+    const bool left  = input->keysDown[vk::Left]  != 0;
+    const bool right = input->keysDown[vk::Right] != 0;
+    const bool up    = input->keysDown[vk::Up]    != 0;
+    const bool down  = input->keysDown[vk::Down]  != 0;
+    if (left)  { mem.playerX -= kSpeed * dt; }
+    if (right) { mem.playerX += kSpeed * dt; }
+    if (up)    { mem.playerY -= kSpeed * dt; }
+    if (down)  { mem.playerY += kSpeed * dt; }
+
+    // Push state to the HTML HUD — no JavaScript needed. assets/scene.html
+    // binds these names with data-m-* attributes (view.x, view.y, view.moving).
+    mitiru::bridge::StateWriter w(intents);
+    w.set("view.x", static_cast<int>(mem.playerX));
+    w.set("view.y", static_cast<int>(mem.playerY));
+    w.set("view.moving", left || right || up || down);
 }
 
 void on_draw(void* memory, mitiru::Screen* screen)

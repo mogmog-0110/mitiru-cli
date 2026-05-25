@@ -6,36 +6,60 @@
 <style>
   /* The HUD is a TRANSPARENT overlay composited on top of your C++ drawing.
      Keep the background transparent so whatever you draw in on_draw() (the
-     native render layer) shows through. Put your HUD elements (score, timers,
-     menus) here in HTML/CSS; drive them from C++ via FrameIntents state pushes
-     + window.mitiru.onStateChange(...). See examples/hello_game for the full
-     bridge wiring. */
+     native render layer) shows through.
+
+     Everything below is plain HTML/CSS. The values come from C++ via the
+     declarative binder — no JavaScript glue. You write data-m-* attributes,
+     C++ pushes named state (see src/main.cpp: w.set("view.x", ...)), and the
+     binder keeps the DOM in sync. Richer patterns (lists, conditionals,
+     formatting) live in the `clicker` and `shooter` templates and ADR 0007. */
   html, body {
     margin: 0;
     height: 100%;
     overflow: hidden;
-    background: transparent;          /* ← lets the C++ render layer show */
+    background: transparent;          /* lets the C++ render layer show */
     pointer-events: none;             /* clicks fall through to the game */
     font-family: "Noto Sans JP", "Hiragino Sans", "Yu Gothic", system-ui, sans-serif;
     color: #fff;
   }
-  /* Discreet corner watermark — replace with your real HUD. */
+  .hud {
+    position: absolute;
+    top: 16px;
+    left: 16px;
+    padding: 10px 14px;
+    background: rgba(10, 12, 20, 0.55);
+    border-radius: 8px;
+    font-size: 18px;
+    line-height: 1.5;
+    font-variant-numeric: tabular-nums;
+  }
+  .moving {
+    color: #74d8f0;
+    font-size: 15px;
+  }
   .hint {
     position: absolute;
-    left: 12px;
-    bottom: 10px;
-    font-size: 12px;
-    opacity: 0.55;
+    left: 16px;
+    bottom: 14px;
+    font-size: 15px;
+    opacity: 0.7;
     text-shadow: 0 1px 4px rgba(0, 0, 0, 0.7);
   }
 </style>
 </head>
 <body>
-  <div class="hint">{{.ProjectName}} · edit assets/scene.html for your HUD</div>
+  <!-- data-m-tpl interpolates pushed values; data-m-show toggles on truthiness.
+       Both are driven entirely from C++ — there is no <script> of your own. -->
+  <div class="hud">
+    <div data-m-tpl="位置  X {view.x}   Y {view.y}">位置  X 640   Y 360</div>
+    <div class="moving" data-m-show="view.moving">— 移動中 —</div>
+  </div>
 
-  <!-- This default scene is pure CSS — no JS bridge required.
-       To subscribe to C++ state from JS, see examples/hello_game in the
-       engine repo: it shows how to wire a StateStore / onStateChange bridge
-       with `mitiru_runtime/mitiru_cef_state.js`. -->
+  <div class="hint">矢印キーで移動 · ESC で終了 · この HUD は JavaScript ゼロ (data-m-*)</div>
+
+  <!-- The binder runtime. `mitiru build` copies mitiru_runtime/* next to this
+       file automatically — you do not commit or edit these. -->
+  <script src="mitiru_runtime/mitiru_cef_state.js"></script>
+  <script src="mitiru_runtime/mitiru_bind.js"></script>
 </body>
 </html>

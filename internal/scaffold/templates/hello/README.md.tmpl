@@ -1,6 +1,6 @@
 # {{.ProjectName}}
 
-A MitiruEngine project (v0.3.0+, game-as-DLL).
+A MitiruEngine project (game-as-DLL, ADR 0005).
 
 ## 動かしかた
 
@@ -21,10 +21,19 @@ mitiru watch
 ## 構成
 
 - `src/main.cpp` — ゲームコード (C++、DLL としてビルドされる)
-- `assets/scene.html` — UI (HTML/CSS/JS、CEF オーバーレイ)
-- `mitiru.toml` — プロジェクト設定 (ウィンドウサイズなど)
+- `assets/scene.html` — UI (HTML/CSS のみ。JavaScript は書かない)
+- `mitiru.toml` — プロジェクト設定 (ウィンドウサイズ・使用エンジン版など)
 
 `CMakeLists.txt` を編集する必要はありません。`mitiru` CLI が裏で生成します。
+
+## UI は JavaScript ゼロ
+
+`assets/scene.html` は素の HTML/CSS。C++ から `StateWriter` で名前付きの値を push し、
+HTML 側は `data-m-*` 属性を書くだけで表示が同期します (宣言的バインダ、ADR 0007)。
+JS グルー (`onStateChange` の購読や DOM 操作) は一切書きません。
+
+- `w.set("view.x", ...)` (C++) ↔ `data-m-tpl="X {view.x}"` (HTML)
+- より複雑な例 (リスト・条件・整形) は `clicker` / `shooter` テンプレート参照
 
 ## どう動くのか
 
