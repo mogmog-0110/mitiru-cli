@@ -3,6 +3,7 @@ package commands
 import (
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 
 	"github.com/spf13/cobra"
@@ -13,6 +14,7 @@ var (
 	replayPlayFile   string
 	replayTestFile   string
 	replayExpectFile string
+	replayGame       bool
 )
 
 func newReplayCommand() *cobra.Command {
@@ -38,6 +40,8 @@ Provide exactly one of:
 	cmd.Flags().StringVar(&replayPlayFile, "replay", "", "play back <file>")
 	cmd.Flags().StringVar(&replayTestFile, "test", "", "headless regression test against <file>")
 	cmd.Flags().StringVar(&replayExpectFile, "expect", "", "expected final-state JSON for --test comparison")
+	cmd.Flags().BoolVar(&replayGame, "game", false,
+		"replay THIS project's game (build + headless host) instead of the standalone demo subsystem")
 	return cmd
 }
 
@@ -66,6 +70,9 @@ func runReplay() error {
 
 	if replayExpectFile != "" && !test {
 		return fmt.Errorf("replay: --expect requires --test")
+	}
+	if replayGame && !test {
+		return fmt.Errorf("replay: --game supports only --test; to record a game session use `mitiru run --record <file>`")
 	}
 
 	if record {
@@ -96,6 +103,12 @@ func runReplay() error {
 		return fmt.Errorf("replay: %s: %w", abs, err)
 	}
 
+	// --game: replay THIS project's DLL through the host (a real game), not the
+	// standalone demo subsystem. Builds the project, then runs the host headless.
+	if replayGame {
+		return runReplayGameTest(abs)
+	}
+
 	subsysArgs := []string{"--test", abs}
 	if replayExpectFile != "" {
 		absExpect, err := filepath.Abs(replayExpectFile)
@@ -109,4 +122,40 @@ func runReplay() error {
 	}
 
 	return launchSubsystem("replay", subsysArgs...)
+}
+
+// runReplayGameTest builds the current project and replays the recorded session
+// through the project's host DLL headlessly (`mitiru_host <dll> --replay-test`),
+// asserting the final pushed view.* state against --expect when given. The
+// host's exit code is propagated so CI sees the regression result.
+func runReplayGameTest(absFile string) error {
+	result, err := runBuild()
+	if err != nil {
+		return err
+	}
+	art := result.Artifacts
+
+	hostArgs := []string{art.DllRel, "--replay-test", absFile}
+	if replayExpectFile != "" {
+		absExpect, err := filepath.Abs(replayExpectFile)
+		if err != nil {
+			return fmt.Errorf("replay: resolve expect %q: %w", replayExpectFile, err)
+		}
+		if _, err := os.Stat(absExpect); err != nil {
+			return fmt.Errorf("replay: expect %s: %w", absExpect, err)
+		}
+		hostArgs = append(hostArgs, "--expect", absExpect)
+	}
+
+	cmd := exec.Command(art.HostExePath, hostArgs...)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	cmd.Dir = art.DeployDir
+	if err := cmd.Run(); err != nil {
+		if exitErr, ok := err.(*exec.ExitError); ok {
+			os.Exit(exitErr.ExitCode()) // faithful regression-gate exit code
+		}
+		return fmt.Errorf("replay --game: %w", err)
+	}
+	return nil
 }

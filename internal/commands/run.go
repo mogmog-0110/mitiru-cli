@@ -12,7 +12,10 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var runWithInspect bool
+var (
+	runWithInspect bool
+	runRecordFile  string
+)
 
 func newRunCommand() *cobra.Command {
 	cmd := &cobra.Command{
@@ -36,6 +39,8 @@ alongside the game and shuts it down when the game exits.`,
 		"explicit CMake generator (e.g. \"Visual Studio 17 2022\", \"NMake Makefiles\"); default is Ninja")
 	cmd.Flags().BoolVar(&runWithInspect, "inspect", false,
 		"also launch the sub-window inspector for this game (axis 5)")
+	cmd.Flags().StringVar(&runRecordFile, "record", "",
+		"record this session's input to <file>.mtrr for `mitiru replay --test --game`")
 	return cmd
 }
 
@@ -48,7 +53,17 @@ func runRun() error {
 	art := result.Artifacts
 	fmt.Printf("\nRunning %s %s\n", filepath.Base(art.HostExePath), art.DllRel)
 
-	cmd := exec.Command(art.HostExePath, art.DllRel)
+	hostArgs := []string{art.DllRel}
+	if runRecordFile != "" {
+		abs, err := filepath.Abs(runRecordFile)
+		if err != nil {
+			return fmt.Errorf("run: resolve --record %q: %w", runRecordFile, err)
+		}
+		hostArgs = append(hostArgs, "--record", abs)
+		fmt.Printf("Recording input → %s\n", abs)
+	}
+
+	cmd := exec.Command(art.HostExePath, hostArgs...)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	cmd.Stdin = os.Stdin
