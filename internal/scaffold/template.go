@@ -27,6 +27,11 @@ type Data struct {
 	// UpperIdent is the UPPER_SNAKE_CASE form of ProjectName, used as the
 	// prefix for `#define <UPPER>_DLL_EXPORT` and similar macro guards.
 	UpperIdent string
+
+	// EngineVersion is the engine release the scaffolded project pins in its
+	// mitiru.toml (e.g. "0.5.0"). Sourced from defaultEngineVersion so a new
+	// project never lands on an engine older than the templates require.
+	EngineVersion string
 }
 
 // Expand walks templates/<template>/ and writes every file (rendering *.tmpl

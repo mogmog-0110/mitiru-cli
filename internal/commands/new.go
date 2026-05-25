@@ -65,9 +65,10 @@ func runNew(name string) error {
 	}
 
 	data := scaffold.Data{
-		ProjectName:  name,
-		ProjectIdent: toLowerSnake(name),
-		UpperIdent:   toUpperSnake(name),
+		ProjectName:   name,
+		ProjectIdent:  toLowerSnake(name),
+		UpperIdent:    toUpperSnake(name),
+		EngineVersion: defaultEngineVersion,
 	}
 
 	if err := scaffold.Expand(newTemplateName, dstDir, data); err != nil {
