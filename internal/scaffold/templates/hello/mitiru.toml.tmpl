@@ -15,5 +15,11 @@ vsync = true
 # Set start_url here to override.
 skip_default_font = true
 
+[font]
+# native draw 用フォントアトラス: none|latin|kana|japanese
+# 既定 none = フォント skip（起動高速。HTML/CEF UI の日本語はそのまま出る）。
+# native の drawTextInRect 等で日本語を描くなら "japanese" にする。
+atlas = "none"
+
 [build]
 backend = "auto"

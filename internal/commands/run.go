@@ -6,8 +6,10 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"time"
 
+	"github.com/mogmog-0110/mitiru-cli/internal/config"
 	"github.com/mogmog-0110/mitiru-cli/internal/engine"
 	"github.com/spf13/cobra"
 )
@@ -61,6 +63,16 @@ func runRun() error {
 		}
 		hostArgs = append(hostArgs, "--record", abs)
 		fmt.Printf("Recording input → %s\n", abs)
+	}
+
+	// mitiru.toml [font] atlas を native draw フォントとして host に渡す
+	// (none/空 = フォント skip。japanese で native 日本語が描ける)。
+	if mp, _, ferr := config.FindManifest("."); ferr == nil {
+		if pc, lerr := config.Load(mp); lerr == nil {
+			if atlas := strings.TrimSpace(pc.Font.Atlas); atlas != "" && atlas != "none" {
+				hostArgs = append(hostArgs, "--font", atlas)
+			}
+		}
 	}
 
 	cmd := exec.Command(art.HostExePath, hostArgs...)

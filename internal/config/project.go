@@ -20,6 +20,7 @@ type ProjectConfig struct {
 	Window  WindowSection  `toml:"window"`
 	CEF     CEFSection     `toml:"cef"`
 	Build   BuildSection   `toml:"build"`
+	Font    FontSection    `toml:"font"`
 }
 
 type ProjectSection struct {
@@ -42,6 +43,13 @@ type CEFSection struct {
 
 type BuildSection struct {
 	Backend string `toml:"backend"`
+}
+
+// FontSection は native draw 用フォントアトラスの範囲を指定する。
+// atlas: "" or "none"=フォント skip(起動高速) / "latin"=ASCII / "kana"=かな /
+// "japanese"=かな+常用漢字。mitiru_host に --font として渡る。
+type FontSection struct {
+	Atlas string `toml:"atlas"`
 }
 
 // FindManifest は startDir から上方向に mitiru.toml を探す。manifest の
