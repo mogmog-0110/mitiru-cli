@@ -12,7 +12,7 @@ const (
 	// pins in its mitiru.toml. Bump this on every engine release so new
 	// projects build against an engine that has the features the templates
 	// rely on (e.g. the zero-JS declarative binder, ADR 0007).
-	defaultEngineVersion = "0.5.0"
+	defaultEngineVersion = "0.5.2"
 )
 
 func NewRootCommand() *cobra.Command {
