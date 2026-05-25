@@ -19,6 +19,28 @@ var (
 	runRecordFile  string
 )
 
+// tomlHostArgs は cwd の mitiru.toml の [window] サイズと [font] atlas を
+// mitiru_host の CLI 引数 (--size WxH / --font <mode>) に変換する。toml が
+// 単一の真実になるよう run / watch の両方から使う。manifest が無ければ空。
+func tomlHostArgs() []string {
+	var extra []string
+	mp, _, err := config.FindManifest(".")
+	if err != nil {
+		return extra
+	}
+	pc, err := config.Load(mp)
+	if err != nil {
+		return extra
+	}
+	if pc.Window.Width > 0 && pc.Window.Height > 0 {
+		extra = append(extra, "--size", fmt.Sprintf("%dx%d", pc.Window.Width, pc.Window.Height))
+	}
+	if atlas := strings.TrimSpace(pc.Font.Atlas); atlas != "" && atlas != "none" {
+		extra = append(extra, "--font", atlas)
+	}
+	return extra
+}
+
 func newRunCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "run",
@@ -65,15 +87,8 @@ func runRun() error {
 		fmt.Printf("Recording input → %s\n", abs)
 	}
 
-	// mitiru.toml [font] atlas を native draw フォントとして host に渡す
-	// (none/空 = フォント skip。japanese で native 日本語が描ける)。
-	if mp, _, ferr := config.FindManifest("."); ferr == nil {
-		if pc, lerr := config.Load(mp); lerr == nil {
-			if atlas := strings.TrimSpace(pc.Font.Atlas); atlas != "" && atlas != "none" {
-				hostArgs = append(hostArgs, "--font", atlas)
-			}
-		}
-	}
+	// mitiru.toml の [window] サイズ / [font] atlas を host へ渡す。
+	hostArgs = append(hostArgs, tomlHostArgs()...)
 
 	cmd := exec.Command(art.HostExePath, hostArgs...)
 	cmd.Stdout = os.Stdout

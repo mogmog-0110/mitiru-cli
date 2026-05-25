@@ -209,7 +209,9 @@ func (s *gameState) firstBuildAndLaunch() error {
 	fmt.Printf("\nLaunching %s %s --watch\n",
 		filepath.Base(art.HostExePath), art.DllRel)
 
-	cmd := exec.Command(art.HostExePath, art.DllRel, "--watch")
+	// mitiru.toml の [window] サイズ / [font] atlas も host へ渡す (run と同じ)。
+	watchArgs := append([]string{art.DllRel, "--watch"}, tomlHostArgs()...)
+	cmd := exec.Command(art.HostExePath, watchArgs...)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	cmd.Stdin = os.Stdin
