@@ -51,6 +51,18 @@ func appendUserPath(opts Options) error {
 	}
 	next += dir
 
+	// The user PATH stored under HKCU\Environment is practically capped near
+	// ~2KB by the legacy environment-block format; pushing past it silently
+	// truncates PATH and breaks unrelated tools. Refuse rather than corrupt.
+	// (spec: docs/INSTALLER.md, failure mode step 4)
+	const maxUserPathLen = 2000
+	if len(next) > maxUserPathLen {
+		return fmt.Errorf(
+			"HKCU\\Environment\\Path が長すぎます (%d 文字, 上限 ~%d) — "+
+				"PATH を整理してから再実行するか、--skip-pathenv で進めて手動で %s を PATH に通してください",
+			len(next), maxUserPathLen, dir)
+	}
+
 	// Use EXPAND_SZ to preserve any %SystemRoot% style expansions present in
 	// the original PATH. If the original was REG_SZ we'd downgrade compared
 	// to OS behaviour — REG_EXPAND_SZ is the universal-safe form.
