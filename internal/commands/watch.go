@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"os/signal"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -135,8 +136,18 @@ func runWatch() error {
 		})
 	}
 
+	// Ctrl-C / ゲーム窓クローズで watch セッション全体を畳む。
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, os.Interrupt)
+
 	for {
 		select {
+		case <-state.exited:
+			fmt.Println("\nmitiru watch: ゲーム窓が閉じられた — 監視を停止します。")
+			return nil
+		case <-sigCh:
+			fmt.Println("\nmitiru watch: 停止します (Ctrl-C)。")
+			return nil
 		case ev, ok := <-watcher.Events:
 			if !ok { return nil }
 			// 新規作成された subdirectory も watch する。
@@ -174,12 +185,17 @@ func shouldTrigger(path string, op fsnotify.Op) bool {
 // gameState は現在実行中のゲーム (と任意の inspector child) を保持する。
 // 各 rebuild は新 process を spawn する前に旧 process を kill する。
 type gameState struct {
-	mu     sync.Mutex
-	game   *exec.Cmd
-	insp   *exec.Cmd
+	mu       sync.Mutex
+	game     *exec.Cmd
+	insp     *exec.Cmd
+	exited   chan struct{} // host(ゲーム) process が終了したら close される
+	exitOnce sync.Once
 }
 
-func newGameState() *gameState { return &gameState{} }
+func newGameState() *gameState { return &gameState{exited: make(chan struct{})} }
+
+// markExited は host の終了を一度だけ通知する。
+func (s *gameState) markExited() { s.exitOnce.Do(func() { close(s.exited) }) }
 
 func (s *gameState) stop() {
 	s.mu.Lock()
@@ -223,6 +239,12 @@ func (s *gameState) firstBuildAndLaunch() error {
 	s.mu.Lock()
 	s.game = cmd
 	s.mu.Unlock()
+
+	// host(ゲーム窓) が終了したら watch セッション全体を畳めるよう監視する。
+	go func() {
+		_ = cmd.Wait()
+		s.markExited()
+	}()
 
 	if runWithInspect {
 		insp, err := startInspectorChild(cmd.Process.Pid)
