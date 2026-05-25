@@ -40,8 +40,15 @@ Manage MitiruEngine game projects without touching CMakeLists.txt:
   mitiru version         print version`,
 		SilenceUsage:  true,
 		SilenceErrors: true,
+		// 引数なしの `mitiru` は対話ランチャー (menu) を開く。コマンド名を覚えて
+		// 手打ちしなくて済むように。非 TTY/パイプ時は EOF で即終了する。
+		Args: cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return runMenu()
+		},
 	}
 
+	root.AddCommand(newMenuCommand())
 	root.AddCommand(newNewCommand())
 	root.AddCommand(newBuildCommand())
 	root.AddCommand(newRunCommand())
