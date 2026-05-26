@@ -6,6 +6,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"time"
 
@@ -19,24 +20,44 @@ var (
 	runRecordFile  string
 )
 
-// tomlHostArgs は cwd の mitiru.toml の [window] サイズと [font] atlas を
-// mitiru_host の CLI 引数 (--size WxH / --font <mode>) に変換する。toml が
-// 単一の真実になるよう run / watch の両方から使う。manifest が無ければ空。
+// tomlHostArgs は cwd の mitiru.toml の [window] / [font] / [lofi] を
+// mitiru_host の CLI 引数に変換する。toml が単一の真実になるよう run / watch の
+// 両方から使う。manifest が無ければ空。
 func tomlHostArgs() []string {
-	var extra []string
 	mp, _, err := config.FindManifest(".")
 	if err != nil {
-		return extra
+		return nil
 	}
 	pc, err := config.Load(mp)
 	if err != nil {
-		return extra
+		return nil
 	}
+	return hostArgsFromConfig(pc)
+}
+
+// hostArgsFromConfig は読み込み済み manifest を host 引数に変換する純関数
+// ([window]→--size / [font]→--font / [lofi]→--lofi 系)。テスト容易化のため分離。
+func hostArgsFromConfig(pc *config.ProjectConfig) []string {
+	var extra []string
 	if pc.Window.Width > 0 && pc.Window.Height > 0 {
 		extra = append(extra, "--size", fmt.Sprintf("%dx%d", pc.Window.Width, pc.Window.Height))
 	}
 	if atlas := strings.TrimSpace(pc.Font.Atlas); atlas != "" && atlas != "none" {
 		extra = append(extra, "--font", atlas)
+	}
+	// [lofi]: enabled がマスタースイッチ。低解像+量子化+ディザ (#10 の host フラグへ)。
+	if pc.Lofi.Enabled {
+		extra = append(extra, "--lofi")
+		if pc.Lofi.Width > 0 && pc.Lofi.Height > 0 {
+			extra = append(extra, "--lofi-size", fmt.Sprintf("%dx%d", pc.Lofi.Width, pc.Lofi.Height))
+		}
+		if bits := strings.TrimSpace(pc.Lofi.Bits); bits != "" {
+			extra = append(extra, "--lofi-bits", bits)
+		}
+		if pc.Lofi.Dither != nil {
+			extra = append(extra, "--lofi-dither",
+				strconv.FormatFloat(*pc.Lofi.Dither, 'g', -1, 64))
+		}
 	}
 	return extra
 }

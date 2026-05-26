@@ -21,6 +21,7 @@ type ProjectConfig struct {
 	CEF     CEFSection     `toml:"cef"`
 	Build   BuildSection   `toml:"build"`
 	Font    FontSection    `toml:"font"`
+	Lofi    LofiSection    `toml:"lofi"`
 }
 
 type ProjectSection struct {
@@ -50,6 +51,18 @@ type BuildSection struct {
 // "japanese"=かな+常用漢字。mitiru_host に --font として渡る。
 type FontSection struct {
 	Atlas string `toml:"atlas"`
+}
+
+// LofiSection はローファイ・ポストFX (低解像 + パレット量子化 + Bayer ディザ) を
+// プロジェクト固定設定にする。mitiru_host の --lofi 系フラグに変換される (DX12)。
+// enabled がマスタースイッチ。bits は "R,G,B" (例 "5,6,5"=RGB565 / "3,3,2"=256色相当)。
+// dither はポインタで「未指定」と「明示 0」を区別する。
+type LofiSection struct {
+	Enabled bool     `toml:"enabled"`
+	Width   int      `toml:"width"`
+	Height  int      `toml:"height"`
+	Bits    string   `toml:"bits"`
+	Dither  *float64 `toml:"dither"`
 }
 
 // FindManifest は startDir から上方向に mitiru.toml を探す。manifest の

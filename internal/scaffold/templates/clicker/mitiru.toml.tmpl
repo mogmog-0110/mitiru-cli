@@ -23,3 +23,13 @@ atlas = "none"
 
 [build]
 backend = "auto"
+
+[lofi]
+# ローファイ・ポストFX (DX12): 低解像描画 + パレット量子化 + 4×4 Bayer ディザ。
+# DirectX5 / 256色・16bit 期の網点質感を再現する。既定 OFF。
+# enabled = true       # マスタースイッチ
+# width = 320          # 内部解像度（例 320x240 / 640x480）
+# height = 240
+# bits = "5,6,5"       # 量子化ビット数 R,G,B（"5,6,5"=RGB565 / "3,3,2"=256色相当）
+# dither = 1.0         # ディザ強度（0=無し）
+enabled = false
