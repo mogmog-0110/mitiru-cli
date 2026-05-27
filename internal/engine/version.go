@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // Semver は単純な X.Y.Z 三つ組。MitiruEngine の tag は常にこの形 (pre-release /
@@ -74,11 +75,15 @@ type ghTag struct {
 // push するが Release を作るとは限らず、`releases/latest` API は最新 tag を取りこぼす
 // ことがある (ADR 0010 の失敗モード #1)。X.Y.Z 形でない tag は無視する。
 func LatestVersion(progress io.Writer) (Semver, error) {
-	if progress == nil {
-		progress = io.Discard
-	}
+	return LatestVersionTimeout(httpTimeout)
+}
+
+// LatestVersionTimeout は LatestVersion を任意の network timeout で実行する。
+// build 末尾の更新通知のように「速く諦める」用途向け (オフラインで build を
+// 待たせない)。
+func LatestVersionTimeout(timeout time.Duration) (Semver, error) {
 	url := "https://api.github.com/repos/" + publicRepo + "/tags?per_page=100"
-	client := &http.Client{Timeout: httpTimeout}
+	client := &http.Client{Timeout: timeout}
 	req, err := http.NewRequest(http.MethodGet, url, nil)
 	if err != nil {
 		return Semver{}, err

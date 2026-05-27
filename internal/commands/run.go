@@ -144,6 +144,9 @@ func runRun() error {
 		}
 		return fmt.Errorf("run %s: %w", filepath.Base(art.HostExePath), waitErr)
 	}
+
+	// ゲーム終了後に受動的な更新通知を出す (コマンド末尾、一行 footer)。
+	maybeNotifyUpdates(result.Config.Project.Engine, os.Stdout)
 	return nil
 }
 

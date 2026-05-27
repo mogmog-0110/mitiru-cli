@@ -30,8 +30,13 @@ Examples:
   mitiru build              # Debug build (default)
   mitiru build --release    # Release build`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			_, err := runBuild()
-			return err
+			res, err := runBuild()
+			if err != nil {
+				return err
+			}
+			// 受動的な更新通知 (コマンド末尾。watch のリビルドループには出さない)。
+			maybeNotifyUpdates(res.Config.Project.Engine, os.Stdout)
+			return nil
 		},
 	}
 	cmd.Flags().BoolVar(&buildRelease, "release", false, "build with Release configuration")
