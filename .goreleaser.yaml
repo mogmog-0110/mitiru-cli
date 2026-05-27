@@ -1,0 +1,56 @@
+# goreleaser v2 設定 — mitiru CLI の release artefact を作る。
+#
+# プライマリは手元実行 (engine repo と同じく local-first の release 運用):
+#   export GITHUB_TOKEN=<contents:write の token>
+#   git tag v0.7.0 && git push origin v0.7.0
+#   goreleaser release --clean
+#
+# tag ごとに mitiru / installer の raw binary を各 OS/arch 向けに build し、
+# GitHub Release に asset として attach する。mitiru self-update は releases/latest
+# から mitiru_<os>_<arch>[.exe] を取得する (ADR 0010)。
+version: 2
+
+project_name: mitiru
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - id: mitiru
+    main: ./cmd/mitiru
+    binary: mitiru
+    env:
+      - CGO_ENABLED=0
+    goos: [windows, linux, darwin]
+    goarch: [amd64, arm64]
+    ldflags:
+      - -s -w
+      - -X github.com/mogmog-0110/mitiru-cli/internal/commands.cliVersion={{ .Version }}
+
+  # installer は Windows 専用 (winget / PATH / registry を触る)。
+  - id: installer
+    main: ./cmd/installer
+    binary: installer
+    env:
+      - CGO_ENABLED=0
+    goos: [windows]
+    goarch: [amd64]
+    ldflags:
+      - -s -w
+
+archives:
+  # raw binary を upload する (zip にしない)。self-update が解凍不要で取得できる。
+  - id: bins
+    ids: [mitiru, installer]
+    formats: [binary]
+    # 例: mitiru_windows_amd64.exe / mitiru_linux_amd64 / installer_windows_amd64.exe
+    name_template: "{{ .Binary }}_{{ .Os }}_{{ .Arch }}"
+
+checksum:
+  name_template: checksums.txt
+
+release:
+  github:
+    owner: mogmog-0110
+    name: mitiru-cli

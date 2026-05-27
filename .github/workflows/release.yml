@@ -1,0 +1,30 @@
+# OPTIONAL: tag push で goreleaser を回し mitiru.exe を Release に attach する。
+# プライマリは手元実行 (`goreleaser release --clean`、.goreleaser.yaml 冒頭参照)。
+# CI を使わない運用なら、このファイルは削除しても良い。
+name: release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  goreleaser:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - uses: goreleaser/goreleaser-action@v6
+        with:
+          version: '~> v2'
+          args: release --clean
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
