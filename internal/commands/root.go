@@ -12,7 +12,7 @@ const (
 	// pin する engine release。engine release ごとにこれを bump し、新規プロジェクトが
 	// template の依存する機能 (例 zero-JS declarative binder、ADR 0007) を持つ engine
 	// に対して build されるようにする。
-	defaultEngineVersion = "0.6.0"
+	defaultEngineVersion = "0.7.0"
 )
 
 func NewRootCommand() *cobra.Command {
