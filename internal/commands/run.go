@@ -17,6 +17,7 @@ import (
 
 var (
 	runWithInspect bool
+	runWithConsole bool
 	runRecordFile  string
 )
 
@@ -84,6 +85,8 @@ alongside the game and shuts it down when the game exits.`,
 		"explicit CMake generator (e.g. \"Visual Studio 17 2022\", \"NMake Makefiles\"); default is Ninja")
 	cmd.Flags().BoolVar(&runWithInspect, "inspect", false,
 		"also launch the sub-window inspector for this game (axis 5)")
+	cmd.Flags().BoolVar(&runWithConsole, "console", false,
+		"open the runtime control panel (pause/step/scale/screenshot) in your default browser (ADR 0011)")
 	cmd.Flags().StringVar(&runRecordFile, "record", "",
 		"record this session's input to <file>.mtrr for `mitiru replay --test --game`")
 	return cmd
@@ -110,6 +113,11 @@ func runRun() error {
 
 	// mitiru.toml の [window] サイズ / [font] atlas を host へ渡す。
 	hostArgs = append(hostArgs, tomlHostArgs()...)
+
+	// --console: control panel を既定ブラウザで自動表示する。
+	if runWithConsole {
+		hostArgs = append(hostArgs, "--console")
+	}
 
 	cmd := exec.Command(art.HostExePath, hostArgs...)
 	cmd.Stdout = os.Stdout
