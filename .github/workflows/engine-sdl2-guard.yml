@@ -1,0 +1,125 @@
+# engine-sdl2-guard — SDL2 を有効にした consumer build (mitiru_host のリンク) を守る。
+#
+# 背景: 公開 engine の host は SDL2 を検出すると SDL_MAIN_HANDLED / SDL_syswm を
+# 要求する (CMakeLists の find_package(SDL2) → MITIRU_HAS_SDL2=1)。これを満たさない
+# と mitiru_host.exe がリンクで落ちる (#40/#42)。通常の Windows consumer build は
+# SDL2 dev libs が無く DX11 のみで通ってしまい、この経路を踏まない → 退行が素通り。
+#
+# この guard は SDL2 dev libs を入れた状態で空キャッシュから consumer build を実行し、
+# engine find_package(SDL2) を成立させて host を SDL2 経路でリンクさせる。`mitiru build`
+# は最後に mitiru_host.exe の存在を要求するので、リンク失敗はそのまま CI 失敗になる。
+# publish 前の dispatch + 週次 schedule で engine 側退行も拾う。
+name: engine-sdl2-guard
+
+on:
+  workflow_dispatch:
+    inputs:
+      engine_version:
+        description: 'engine version to test (X.Y.Z). 空なら scaffold default を使う。publish 直後の tag 検証に使う。'
+        required: false
+        default: ''
+  schedule:
+    # 週 1 (engine 側だけの退行を cli commit 無しでも拾う)。
+    - cron: '17 4 * * 1'
+  push:
+    branches: [main]
+    paths:
+      - 'internal/build/**'
+      - 'internal/engine/**'
+      - '.github/workflows/engine-sdl2-guard.yml'
+  pull_request:
+    paths:
+      - 'internal/build/**'
+      - 'internal/engine/**'
+      - '.github/workflows/engine-sdl2-guard.yml'
+
+concurrency:
+  group: sdl2-guard-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: pwsh
+
+env:
+  SDL2_VERSION: '2.30.9'
+
+jobs:
+  sdl2-host-link:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Build mitiru CLI
+        run: |
+          go build -o mitiru.exe ./cmd/mitiru
+          "$PWD" | Out-File -FilePath $env:GITHUB_PATH -Append -Encoding utf8
+
+      - name: Install SDL2 dev libs (VC) + SDL2/ subdir
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $ver = $env:SDL2_VERSION
+          $root = Join-Path $env:RUNNER_TEMP "SDL2-$ver"
+          $zip  = Join-Path $env:RUNNER_TEMP 'sdl2-vc.zip'
+          $url  = "https://github.com/libsdl-org/SDL/releases/download/release-$ver/SDL2-devel-$ver-VC.zip"
+          Invoke-WebRequest -Uri $url -OutFile $zip
+          Expand-Archive -Path $zip -DestinationPath $env:RUNNER_TEMP -Force
+          # VC dev zip の include は flat (include/SDL.h)。engine は <SDL2/SDL.h> を
+          # include するので SDL2/ サブディレクトリ junction を作って規約に合わせる。
+          $inc = Join-Path $root 'include'
+          if (-not (Test-Path (Join-Path $inc 'SDL2'))) {
+            cmd /c mklink /J "$inc\SDL2" "$inc" | Out-Null
+          }
+          if (-not (Test-Path (Join-Path $inc 'SDL2\SDL.h'))) {
+            throw "SDL2/SDL.h junction setup failed under $inc"
+          }
+          # find_package(SDL2 CONFIG) が拾えるよう env で渡す (cli の cmake が継承)。
+          "SDL2_DIR=$root\cmake"      | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          "CMAKE_PREFIX_PATH=$root"   | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+
+      - name: Scaffold a consumer project (clean engine cache)
+        run: |
+          $ErrorActionPreference = 'Stop'
+          # 空キャッシュを強制 — publish 済み engine source を fresh で取得させる。
+          $cache = Join-Path $env:RUNNER_TEMP 'mitiru-cache'
+          if (Test-Path $cache) { Remove-Item -Recurse -Force $cache }
+          "MITIRU_CACHE_DIR=$cache" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+
+          mitiru new guard_game
+          # dispatch で明示版が指定されたら mitiru.toml の pin を上書き (publish 直後の
+          # tag をその場で検証する用途)。空なら scaffold default (= 公開済み最新) のまま。
+          $v = "${{ github.event.inputs.engine_version }}"
+          if ($v) {
+            $toml = 'guard_game/mitiru.toml'
+            (Get-Content $toml) -replace '^engine\s*=.*$', "engine = `"$v`"" | Set-Content $toml
+            Write-Host "pinned engine = $v"
+          }
+
+      - name: Build host with SDL2 enabled (the guard)
+        run: |
+          $ErrorActionPreference = 'Stop'
+          Push-Location guard_game
+          mitiru build 2>&1 | Tee-Object -FilePath "$env:RUNNER_TEMP\build.log"
+          $code = $LASTEXITCODE
+          Pop-Location
+          if ($code -ne 0) { throw "mitiru build failed (exit $code) — SDL2 host link regression?" }
+
+          # false-green 防止: SDL2 が実際に検出され、SDL2 経路でリンクしたことを確認。
+          # これが無いと SDL2 未検出 (DX11 のみ) で通った時に guard が無意味になる。
+          $log = Get-Content "$env:RUNNER_TEMP\build.log" -Raw
+          if ($log -notmatch 'SDL2 found') {
+            throw "SDL2 was NOT detected during configure — guard did not exercise the SDL2 path. Check SDL2_DIR/CMAKE_PREFIX_PATH."
+          }
+
+          # host exe が出来た = リンク成功 (#40/#42 の経路が通った)。
+          $hostExe = Get-ChildItem -Recurse -Filter mitiru_host.exe -Path guard_game/build |
+                     Select-Object -First 1
+          if (-not $hostExe) { throw "mitiru_host.exe not produced — link likely failed." }
+          Write-Host "OK: SDL2 detected and mitiru_host.exe linked at $($hostExe.FullName)"
