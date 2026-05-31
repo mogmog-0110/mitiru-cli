@@ -5,7 +5,6 @@ package engine
 import (
 	"archive/tar"
 	"compress/gzip"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -136,40 +135,18 @@ func resolveTag(version string, progress io.Writer) (string, error) {
 	return v, nil
 }
 
-type ghRelease struct {
-	TagName string `json:"tag_name"`
-}
-
+// fetchLatestTag は public repo の最新版を "vX.Y.Z" tag 形式で返す。
+//
+// GitHub *Releases* ではなく *tags* を見る (LatestVersion と同根の理由): release
+// snapshot pipeline は tag を push するが GitHub Release を作るとは限らず、
+// `releases/latest` API は tag だけの最新版 (例 v0.7.4) を取りこぼす。tags を
+// semver 比較して最大を採るので Release 未作成でも最新版を解決できる。
 func fetchLatestTag() (string, error) {
-	url := "https://api.github.com/repos/" + publicRepo + "/releases/latest"
-	client := &http.Client{Timeout: httpTimeout}
-	req, err := http.NewRequest(http.MethodGet, url, nil)
+	v, err := LatestVersionTimeout(httpTimeout)
 	if err != nil {
 		return "", err
 	}
-	req.Header.Set("Accept", "application/vnd.github+json")
-	req.Header.Set("User-Agent", "mitiru-cli")
-
-	resp, err := client.Do(req)
-	if err != nil {
-		return "", err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<14))
-		return "", fmt.Errorf("github releases API returned %s: %s",
-			resp.Status, strings.TrimSpace(string(body)))
-	}
-
-	var rel ghRelease
-	if err := json.NewDecoder(resp.Body).Decode(&rel); err != nil {
-		return "", fmt.Errorf("decode releases response: %w", err)
-	}
-	if rel.TagName == "" {
-		return "", errors.New("github releases API returned no tag_name")
-	}
-	return rel.TagName, nil
+	return "v" + v.String(), nil
 }
 
 func downloadAndExtract(tag, destDir string, progress io.Writer) error {
