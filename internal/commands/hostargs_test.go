@@ -33,6 +33,31 @@ func TestHostArgs_FontNoneOmitted(t *testing.T) {
 	}
 }
 
+func TestHostArgs_CefDefaultOmitsNoCef(t *testing.T) {
+	pc := &config.ProjectConfig{} // CEF.Enabled 未指定 (nil) → 既定 ON → --no-cef を渡さない
+	if strings.Contains(argsStr(pc), "--no-cef") {
+		t.Errorf("unspecified [cef] must default to CEF on (no --no-cef): %q", argsStr(pc))
+	}
+}
+
+func TestHostArgs_CefDisabledEmitsNoCef(t *testing.T) {
+	off := false
+	pc := &config.ProjectConfig{}
+	pc.CEF.Enabled = &off
+	if !strings.Contains(argsStr(pc), "--no-cef") {
+		t.Errorf("[cef] enabled=false must emit --no-cef: %q", argsStr(pc))
+	}
+}
+
+func TestHostArgs_CefEnabledExplicitOmitsNoCef(t *testing.T) {
+	on := true
+	pc := &config.ProjectConfig{}
+	pc.CEF.Enabled = &on
+	if strings.Contains(argsStr(pc), "--no-cef") {
+		t.Errorf("[cef] enabled=true must not emit --no-cef: %q", argsStr(pc))
+	}
+}
+
 func TestHostArgs_LofiDisabledEmitsNothing(t *testing.T) {
 	pc := &config.ProjectConfig{}
 	pc.Lofi.Enabled = false

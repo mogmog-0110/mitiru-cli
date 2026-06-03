@@ -46,6 +46,11 @@ func hostArgsFromConfig(pc *config.ProjectConfig) []string {
 	if atlas := strings.TrimSpace(pc.Font.Atlas); atlas != "" && atlas != "none" {
 		extra = append(extra, "--font", atlas)
 	}
+	// [cef] enabled = false: 完全ネイティブ描画の game で Chromium を起動しない。
+	// 未指定 (nil) は既定 ON なので何も渡さない。
+	if pc.CEF.Enabled != nil && !*pc.CEF.Enabled {
+		extra = append(extra, "--no-cef")
+	}
 	// [lofi]: enabled がマスタースイッチ。低解像+量子化+ディザ (#10 の host フラグへ)。
 	if pc.Lofi.Enabled {
 		extra = append(extra, "--lofi")

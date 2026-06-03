@@ -40,6 +40,11 @@ type WindowSection struct {
 type CEFSection struct {
 	StartURL        string `toml:"start_url"`
 	SkipDefaultFont bool   `toml:"skip_default_font"`
+	// Enabled は CEF (Chromium) を起動するか。未指定 (nil) は既定 ON。
+	// 完全ネイティブ描画の game (HTML UI 不使用) で false にすると mitiru_host に
+	// --no-cef を渡し、Chromium コールドブート + GPU/renderer 常駐を回避できる。
+	// ポインタで「未指定」と「明示 false」を区別する。
+	Enabled *bool `toml:"enabled"`
 }
 
 type BuildSection struct {
