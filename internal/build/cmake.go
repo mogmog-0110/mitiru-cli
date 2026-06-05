@@ -105,6 +105,24 @@ if(WIN32)
 endif()
 mitiru_add_cef_game(mitiru_host)
 
+# ── Tool windows (独立ウィンドウ: inspector / perf / scene_tree / replay / mixer) ──
+# host と同じディレクトリに出力する。InspectorLauncher::spawnTool は実行中 exe と
+# 同階層の mitiru_<tool>.exe を探すので、これで CLI の --inspect も、ゲームコードからの
+# mitiru::debug::openTool(Tool::X) も解決できる。CEF 非依存 (Screen ネイティブ描画)。
+foreach(_tool perf inspector scene_tree replay mixer)
+    set(_tool_src "${MITIRU_ENGINE_ROOT}/examples/mitiru_${_tool}/main.cpp")
+    if(EXISTS "${_tool_src}")
+        add_executable(mitiru_${_tool} "${_tool_src}")
+        target_link_libraries(mitiru_${_tool} PRIVATE Mitiru::mitiru)
+        if(MSVC)
+            target_compile_options(mitiru_${_tool} PRIVATE /bigobj)
+        endif()
+        set_target_properties(mitiru_${_tool} PROPERTIES
+            RUNTIME_OUTPUT_DIRECTORY "$<TARGET_FILE_DIR:mitiru_host>")
+        add_dependencies({{.TargetName}} mitiru_${_tool})
+    endif()
+endforeach()
+
 # ── Deploy the game DLL into <host_dir>/<TargetName>/ ─────────────
 # Putting the DLL next to its assets keeps the host's cwd anchor stable
 # (cwd = mitiru_host dir → relative path "<TargetName>/assets/scene.html").
