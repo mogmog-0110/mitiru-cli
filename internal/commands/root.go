@@ -11,7 +11,7 @@ const (
 	// pin する engine release。engine release ごとにこれを bump し、新規プロジェクトが
 	// template の依存する機能 (例 zero-JS declarative binder、ADR 0007) を持つ engine
 	// に対して build されるようにする。
-	defaultEngineVersion = "0.7.4"
+	defaultEngineVersion = "0.8.0"
 )
 
 // cliVersion は mitiru CLI 自身の版。goreleaser が release 時に ldflags
