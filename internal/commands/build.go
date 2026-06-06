@@ -14,6 +14,9 @@ var (
 	buildRelease    bool
 	buildConfigName string
 	buildGenerator  string
+	// dist が configure に注入する追加分 (run/build/watch では空のまま)。
+	buildExtraDefines []string
+	buildOutDir       string
 )
 
 func newBuildCommand() *cobra.Command {
@@ -79,13 +82,15 @@ func runBuild() (*buildResult, error) {
 
 	cfgName := resolveBuildConfig()
 	opts := build.Options{
-		ProjectRoot: projectRoot,
-		ProjectName: cfg.Project.Name,
-		EngineRoot:  engineRoot,
-		Config:      cfgName,
-		Generator:   buildGenerator,
-		Stdout:      os.Stdout,
-		Stderr:      os.Stderr,
+		ProjectRoot:  projectRoot,
+		ProjectName:  cfg.Project.Name,
+		EngineRoot:   engineRoot,
+		Config:       cfgName,
+		Generator:    buildGenerator,
+		ExtraDefines: buildExtraDefines, // dist が GUI/no-cef フラグを注入 (通常は空)
+		OutDir:       buildOutDir,       // dist は別 out dir (通常は空 = build/out)
+		Stdout:       os.Stdout,
+		Stderr:       os.Stderr,
 	}
 
 	artifacts, err := build.Run(opts)

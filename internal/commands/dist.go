@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/mogmog-0110/mitiru-cli/internal/config"
 	"github.com/spf13/cobra"
 )
 
@@ -17,6 +18,7 @@ var (
 	distOut  string
 	distZip  bool
 	distExe  bool
+	distBat  bool
 	distPack bool
 )
 
@@ -47,6 +49,8 @@ func isDistDropTopLevel(base string) bool {
 		return true
 	case strings.HasSuffix(low, ".ninja_log"), low == ".ninja_deps":
 		return true // build log
+	case base == "mitiru_start.exe":
+		return true // ランチャ stub は data/ ではなくトップに置く (別途コピー)
 	case ext == ".exe" && !distShipExe[base]:
 		return true // host / CEF helper 以外の exe は配布しない
 	default:
@@ -62,17 +66,18 @@ func newDistCommand() *cobra.Command {
 bundle — the host, the engine runtime, your game DLL and assets, plus a
 double-clickable launcher .bat.
 
-If [cef] enabled=false in mitiru.toml, the Chromium (CEF) runtime is left
-out, producing a much smaller native-only bundle.
+The top level holds a double-clickable <name>.exe launcher (a tiny GUI stub
+that shows NO console window) plus README.txt; all runtime (host, DLLs, CEF,
+your game, assets) lives in data/. Move/copy the whole folder as one unit.
 
-A double-clickable launcher .bat is always written. With --exe, a <name>.exe
-launcher is added as well (handy for Steam and other stores that expect an
-.exe entry point).
+Use --bat to also emit a console-visible <name>.bat (useful for reading logs
+while debugging). --exe additionally drops a Steam-style data/<name>.exe.
 
 Examples:
-  mitiru dist                 # → dist/<name>/  (with <name>.bat)
-  mitiru dist --exe           # also add <name>.exe launcher
+  mitiru dist                 # → dist/<name>/  (no-console <name>.exe)
+  mitiru dist --bat           # also add a console-visible <name>.bat
   mitiru dist --zip           # also produce dist/<name>.zip
+  mitiru dist --pack          # hide assets in a single assets.mtpak
   mitiru dist --out build/ship`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runDist()
@@ -81,7 +86,9 @@ Examples:
 	cmd.Flags().StringVar(&distOut, "out", "dist", "output directory for the bundle")
 	cmd.Flags().BoolVar(&distZip, "zip", false, "also produce a .zip next to the bundle")
 	cmd.Flags().BoolVar(&distExe, "exe", false,
-		"also create <name>.exe launcher (double-click / Steam friendly)")
+		"also copy <name>.exe (mitiru_host) into data/ as a Steam entry point")
+	cmd.Flags().BoolVar(&distBat, "bat", false,
+		"also write a console-visible <name>.bat launcher (handy for log/debug)")
 	cmd.Flags().BoolVar(&distPack, "pack", false,
 		"embed assets/ into a single assets.mtpak (hide HTML/CSS/images/audio from the folder)")
 	cmd.Flags().StringVar(&buildGenerator, "generator", "",
@@ -90,7 +97,27 @@ Examples:
 }
 
 func runDist() error {
-	buildRelease = true // 配布は常に Release。
+	// 配布物の性質を build 前に知るため manifest を先読みする (cef.enabled で no-cef ビルド)。
+	cwd, _ := os.Getwd()
+	mp, projectRoot, ferr := config.FindManifest(cwd)
+	if ferr != nil {
+		return ferr
+	}
+	pc, lerr := config.Load(mp)
+	if lerr != nil {
+		return lerr
+	}
+	noCef := pc.CEF.Enabled != nil && !*pc.CEF.Enabled
+
+	// dist 専用ビルド: コンソール窓を出さない GUI host にする。dev の build/out を
+	// 汚さないよう別 out dir (configure-time オプションの thrash 回避)。
+	// 注: native の libcef 排除 (MITIRU_DISABLE_CEF) は module/inspector 層が cef:: 型に
+	// 無条件依存しており、その no-cef ビルドは別途 decouple refactor が要るため未対応。
+	buildRelease = true
+	buildOutDir = filepath.Join(projectRoot, "build", "dist-out")
+	buildExtraDefines = []string{"MITIRU_HOST_GUI=ON"}
+	defer func() { buildOutDir = ""; buildExtraDefines = nil }() // 後続コマンドへ漏らさない
+
 	result, err := runBuild()
 	if err != nil {
 		return err
@@ -109,7 +136,6 @@ func runDist() error {
 		return fmt.Errorf("dist: mkdir %s: %w", bundleRoot, err)
 	}
 
-	noCef := cfg.CEF.Enabled != nil && !*cfg.CEF.Enabled
 	gameDir := strings.SplitN(filepath.ToSlash(art.DllRel), "/", 2)[0]
 
 	// ランタイム一式 (host + 全 DLL + CEF + ゲーム) は data/ サブフォルダに隔離し、
@@ -125,14 +151,40 @@ func runDist() error {
 	}
 
 	hostArgs := hostArgsFromConfig(cfg)
-	batName := name + ".bat"
-	if err := writeLauncher(filepath.Join(bundleRoot, batName), art.DllRel, hostArgs); err != nil {
-		return err
+
+	// 既定ランチャ: トップ階層の <name>.exe = GUI stub (mitiru_start)。コンソール窓を
+	// 一切出さずに data\mitiru_host.exe を起動する。stub は data\launch.mtargs から
+	// host への argv を読む (cwd=data 相対)。
+	launchArgs := filepath.ToSlash(art.DllRel)
+	if len(hostArgs) > 0 {
+		launchArgs += " " + strings.Join(hostArgs, " ")
 	}
-	n++
+	stubSrc := filepath.Join(art.DeployDir, "mitiru_start.exe")
+	stubUsed := false
+	if _, statErr := os.Stat(stubSrc); statErr == nil {
+		if err := copyFile(stubSrc, filepath.Join(bundleRoot, name+".exe")); err != nil {
+			return fmt.Errorf("dist: copy launcher stub: %w", err)
+		}
+		if err := os.WriteFile(filepath.Join(dataDir, "launch.mtargs"),
+			[]byte(launchArgs+"\n"), 0o644); err != nil {
+			return fmt.Errorf("dist: write launch.mtargs: %w", err)
+		}
+		stubUsed = true
+		n += 2
+	}
+
+	// stub が無い (古い engine / 非 Windows) ときは .bat にフォールバック。
+	batName := name + ".bat"
+	writeBat := distBat || !stubUsed
+	if writeBat {
+		if err := writeLauncher(filepath.Join(bundleRoot, batName), art.DllRel, hostArgs); err != nil {
+			return err
+		}
+		n++
+	}
 
 	if distExe {
-		// exe ランチャーは DLL の隣 (data/) に置く。Steam 等は data/<name>.exe を指す。
+		// Steam 等の .exe 起点向けに、host を data/<name>.exe としても置く (sidecar mtargs)。
 		if err := writeExeLauncher(dataDir, name, art.DllRel, hostArgs); err != nil {
 			return err
 		}
@@ -166,9 +218,15 @@ func runDist() error {
 		fmt.Printf("Zipped: %s\n", zipPath)
 	}
 
+	// 起動方法を決める (README / 最終メッセージ共通)。
+	primary := batName
+	if stubUsed {
+		primary = name + ".exe"
+	}
+
 	// トップに README を置き、構成を 1 行で説明する (中身は data/)。
 	readme := name + " — MitiruEngine game\r\n\r\n" +
-		batName + " をダブルクリックで起動。\r\n" +
+		primary + " をダブルクリックで起動。\r\n" +
 		"data/ にランタイム一式が入っています (移動・削除しないでください)。\r\n"
 	if err := os.WriteFile(filepath.Join(bundleRoot, "README.txt"), []byte(readme), 0o644); err != nil {
 		return err
@@ -179,12 +237,15 @@ func runDist() error {
 	if noCef {
 		mode = "native 描画 (起動時 --no-cef・CEF runtime は同梱)"
 	}
-	launch := batName
-	if distExe {
-		launch = batName + " / data\\" + name + ".exe"
+	launch := primary
+	if stubUsed {
+		launch = primary + " (コンソール窓なし)"
+		if writeBat {
+			launch += " / " + batName
+		}
 	}
 	fmt.Printf("\nDist OK: %s\n  %d files / %s\n  トップは %s + README + data/ のみ\n  起動: %s\n",
-		bundleRoot, n, mode, batName, launch)
+		bundleRoot, n, mode, primary, launch)
 	return nil
 }
 

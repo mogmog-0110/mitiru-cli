@@ -37,6 +37,14 @@ type Options struct {
 	// "Visual Studio 17 2022")。空なら検出した vcvars toolchain の default を使う。
 	Generator string
 
+	// ExtraDefines は configure に追加で渡す CMake cache 変数 ("NAME=VALUE" 形式)。
+	// 例: dist が "MITIRU_HOST_GUI=ON" / "MITIRU_DISABLE_CEF=ON" を渡す。
+	ExtraDefines []string
+
+	// OutDir は build 出力 dir の上書き (空なら build/out)。dist は dev build を
+	// 汚さない別 dir を渡す (configure-time オプションの thrash 回避)。
+	OutDir string
+
 	// Stdout は progress と cmake の出力を受け取る。
 	Stdout io.Writer
 
@@ -51,6 +59,9 @@ type templateData struct {
 	ProjectRoot string
 	MainCppAbs  string
 	HostMainAbs string
+	// 配布用 GUI ランチャ stub のソース (examples/mitiru_start/main.cpp)。
+	// 無い古い engine では空文字 → テンプレートが target を生成しない。
+	StartMainAbs string
 }
 
 // CMake template — project ごとに 2 つの target を生成する:
@@ -100,11 +111,34 @@ target_link_libraries(mitiru_host PRIVATE Mitiru::mitiru)
 if(MSVC)
     target_compile_options(mitiru_host PRIVATE /bigobj)
 endif()
+# dev はコンソール subsystem (argv/stdout/ログが見える)。配布 (mitiru dist) は
+# -DMITIRU_HOST_GUI=ON で GUI subsystem にしてコンソール窓を出さない。entry は
+# main() のまま (/ENTRY:mainCRTStartup) なので argv 処理は不変。
 if(WIN32)
-    set_target_properties(mitiru_host PROPERTIES WIN32_EXECUTABLE OFF)
+    if(MITIRU_HOST_GUI)
+        set_target_properties(mitiru_host PROPERTIES WIN32_EXECUTABLE ON)
+        target_link_options(mitiru_host PRIVATE /SUBSYSTEM:WINDOWS /ENTRY:mainCRTStartup)
+    else()
+        set_target_properties(mitiru_host PROPERTIES WIN32_EXECUTABLE OFF)
+    endif()
 endif()
 mitiru_add_cef_game(mitiru_host)
 
+# ── Distribution launcher stub (top-level no-console exe) ──────────
+# mitiru dist がトップ階層に <game>.exe としてコピーする極小 GUI exe。CEF / engine
+# 非依存で data\mitiru_host.exe を起動するだけ。古い engine では StartMainAbs が
+# 空 → このブロックは生成されない。
+{{if .StartMainAbs}}if(WIN32)
+    add_executable(mitiru_start WIN32 "{{.StartMainAbs}}")
+    target_link_options(mitiru_start PRIVATE /SUBSYSTEM:WINDOWS)
+    if(MSVC)
+        target_compile_options(mitiru_start PRIVATE /utf-8)
+    endif()
+    set_target_properties(mitiru_start PROPERTIES
+        RUNTIME_OUTPUT_DIRECTORY "$<TARGET_FILE_DIR:mitiru_host>")
+    add_dependencies({{.TargetName}} mitiru_start)
+endif()
+{{end}}
 # ── Tool windows (独立ウィンドウ: inspector / perf / scene_tree / replay / mixer) ──
 # host と同じディレクトリに出力する。InspectorLauncher::spawnTool は実行中 exe と
 # 同階層の mitiru_<tool>.exe を探すので、これで CLI の --inspect も、ゲームコードからの
@@ -171,6 +205,9 @@ func BuildDirs(projectRoot string) (cmakeSrcDir, cmakeOutDir string) {
 // cmake に渡すべき source / output directory を返す。
 func Configure(opts Options) (cmakeSrcDir, cmakeOutDir string, err error) {
 	cmakeSrcDir, cmakeOutDir = BuildDirs(opts.ProjectRoot)
+	if opts.OutDir != "" {
+		cmakeOutDir = opts.OutDir // dist は別 out dir で dev build を汚さない
+	}
 
 	if err := os.MkdirAll(cmakeSrcDir, 0o755); err != nil {
 		return "", "", fmt.Errorf("create build cmake dir: %w", err)
@@ -194,13 +231,21 @@ func Configure(opts Options) (cmakeSrcDir, cmakeOutDir string, err error) {
 			hostMain)
 	}
 
+	// 配布用ランチャ stub (任意)。古い engine では不在 → 空文字でテンプレートが skip。
+	startMainAbs := ""
+	startMain := filepath.Join(opts.EngineRoot, "examples", "mitiru_start", "main.cpp")
+	if _, statErr := os.Stat(startMain); statErr == nil {
+		startMainAbs = toCMakePath(startMain)
+	}
+
 	data := templateData{
-		ProjectName: opts.ProjectName,
-		TargetName:  sanitiseTargetName(opts.ProjectName),
-		EngineRoot:  toCMakePath(opts.EngineRoot),
-		ProjectRoot: toCMakePath(opts.ProjectRoot),
-		MainCppAbs:  toCMakePath(mainCpp),
-		HostMainAbs: toCMakePath(hostMain),
+		ProjectName:  opts.ProjectName,
+		TargetName:   sanitiseTargetName(opts.ProjectName),
+		EngineRoot:   toCMakePath(opts.EngineRoot),
+		ProjectRoot:  toCMakePath(opts.ProjectRoot),
+		MainCppAbs:   toCMakePath(mainCpp),
+		HostMainAbs:  toCMakePath(hostMain),
+		StartMainAbs: startMainAbs,
 	}
 
 	tmpl, err := template.New("CMakeLists").
@@ -364,9 +409,15 @@ func runCMakeConfigure(vcvars, generator, srcDir, outDir string, opts Options) e
 		archAndType = "-DCMAKE_BUILD_TYPE=" + opts.Config
 	}
 
+	// dist 等が渡す追加 cache 変数 (例 MITIRU_HOST_GUI=ON / MITIRU_DISABLE_CEF=ON)。
+	var defs string
+	for _, d := range opts.ExtraDefines {
+		defs += " -D" + d
+	}
+
 	script := fmt.Sprintf(
-		"%scmake -S \"%s\" -B \"%s\" -G \"%s\" %s\r\n",
-		vcvarsPrelude(vcvars), srcDir, outDir, generator, archAndType)
+		"%scmake -S \"%s\" -B \"%s\" -G \"%s\" %s%s\r\n",
+		vcvarsPrelude(vcvars), srcDir, outDir, generator, archAndType, defs)
 
 	// CMake の configure 出力は成功時には純粋な diagnostic noise —
 	// "Jolt not found"、"Tracy not found" のような feature detection 行は
