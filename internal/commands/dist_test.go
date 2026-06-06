@@ -63,53 +63,41 @@ func TestCopyDeployFiltersCefAndJunk(t *testing.T) {
 	write("mitiru_host.exe")
 	write("libcef.dll")
 	write("d3dcompiler_47.dll")
+	write("SDL2.dll") // vcpkg SDL2: host が import 依存。KEEP 必須
 	write(filepath.Join("locales", "ja.pak"))
 	write(filepath.Join("my_game", "my_game.dll"))
 	write(filepath.Join("my_game", "assets", "scene.html"))
-	write("mitiru_host.pdb")     // junk
-	write("CMakeCache.txt")      // build 産物 (allowlist 外)
-	write("build.ninja")         // build 産物
-	write("mitiru_inspector.exe") // 他ツール exe (配布不要)
+	write("mitiru_host.pdb")                                // junk
+	write("CMakeCache.txt")                                 // build 産物 (allowlist 外)
+	write("build.ninja")                                    // build 産物
+	write("mitiru_inspector.exe")                           // 他ツール exe (配布不要)
 	write(filepath.Join("mitiru-engine", "CMakeLists.txt")) // engine source dir
 
-	// noCef=true → CEF と locales と build 産物が除外される。
-	if _, err := copyDeploy(src, dst, "my_game", true); err != nil {
+	if _, err := copyDeploy(src, dst, "my_game"); err != nil {
 		t.Fatal(err)
 	}
 	exists := func(rel string) bool {
 		_, err := os.Stat(filepath.Join(dst, rel))
 		return err == nil
 	}
+	// host + CEF runtime + locales + game dir は残る (CEF は --no-cef でも host が要る)。
 	for _, keep := range []string{
-		"mitiru_host.exe", "d3dcompiler_47.dll",
+		"mitiru_host.exe", "libcef.dll", "d3dcompiler_47.dll", "SDL2.dll",
+		filepath.Join("locales", "ja.pak"),
 		filepath.Join("my_game", "my_game.dll"),
 		filepath.Join("my_game", "assets", "scene.html"),
 	} {
 		if !exists(keep) {
-			t.Errorf("noCef: %s should be kept", keep)
+			t.Errorf("%s should be kept", keep)
 		}
 	}
+	// junk / build 産物 / 他ツール / engine source は持ち込まない。
 	for _, drop := range []string{
-		"libcef.dll", filepath.Join("locales", "ja.pak"), "mitiru_host.pdb",
-		"CMakeCache.txt", "build.ninja", "mitiru_inspector.exe",
+		"mitiru_host.pdb", "CMakeCache.txt", "build.ninja", "mitiru_inspector.exe",
 		filepath.Join("mitiru-engine", "CMakeLists.txt"),
 	} {
 		if exists(drop) {
-			t.Errorf("noCef: %s should be dropped", drop)
-		}
-	}
-
-	// noCef=false → CEF は残るが build 産物は除外。
-	dst2 := t.TempDir()
-	if _, err := copyDeploy(src, dst2, "my_game", false); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := os.Stat(filepath.Join(dst2, "libcef.dll")); err != nil {
-		t.Errorf("cef build: libcef.dll should be kept")
-	}
-	for _, drop := range []string{"mitiru_host.pdb", "CMakeCache.txt", "mitiru_inspector.exe"} {
-		if _, err := os.Stat(filepath.Join(dst2, drop)); err == nil {
-			t.Errorf("cef build: %s should be dropped", drop)
+			t.Errorf("%s should be dropped", drop)
 		}
 	}
 }

@@ -20,33 +20,39 @@ var (
 	distPack bool
 )
 
-// runtimeAllow は配布物の top-level に入れてよいファイル (allowlist)。DeployDir は
-// cmake 出力 dir なので CMakeCache.txt / build.ninja / engine source / 他ツール exe
-// 等が同居する。それらを持ち込まないよう、host + CEF runtime + DX のみを通す
-// (build_windows_zip.py の RUNTIME_FILES と同集合)。
-var runtimeAllow = map[string]bool{
+// distShipExe は top-level で配布してよい exe (host + CEF helper のみ)。他のツール exe
+// (mitiru_inspector / mitiru_perf / mitiru_mixer / mitiru_replay / mitiru_scene_tree 等)
+// は配布物に含めない。
+var distShipExe = map[string]bool{
 	"mitiru_host.exe": true, "MitiruCefHelper.exe": true,
-	"libcef.dll": true, "chrome_elf.dll": true,
-	"d3dcompiler_47.dll": true, "dxcompiler.dll": true, "dxil.dll": true,
-	"libEGL.dll": true, "libGLESv2.dll": true,
-	"vk_swiftshader.dll": true, "vulkan-1.dll": true, "vk_swiftshader_icd.json": true,
-	"chrome_100_percent.pak": true, "chrome_200_percent.pak": true, "resources.pak": true,
-	"icudtl.dat": true, "snapshot_blob.bin": true, "v8_context_snapshot.bin": true,
-}
-
-// cefOnlyFiles は CEF (Chromium) 専用ファイル。mitiru.toml で [cef] enabled=false に
-// した native ビルドでは、これらを外して ~30MB に収める (host + DX は残す)。
-var cefOnlyFiles = map[string]bool{
-	"libcef.dll": true, "chrome_elf.dll": true,
-	"libEGL.dll": true, "libGLESv2.dll": true,
-	"vk_swiftshader.dll": true, "vulkan-1.dll": true, "vk_swiftshader_icd.json": true,
-	"chrome_100_percent.pak": true, "chrome_200_percent.pak": true, "resources.pak": true,
-	"icudtl.dat": true, "snapshot_blob.bin": true, "v8_context_snapshot.bin": true,
-	"MitiruCefHelper.exe": true,
 }
 
 // distJunkExt は配布物に含めない build linker 中間物。
 var distJunkExt = map[string]bool{".ilk": true, ".pdb": true, ".exp": true, ".lib": true}
+
+// isDistDropTopLevel は top-level ファイル (rel に "/" なし) を配布から外すか判定する。
+// DeployDir は cmake 出力 dir なので CMakeCache.txt / build.ninja / *.cmake / 他ツール exe /
+// build log 等が同居する。drop ルールに当たらないものは全て KEEP — 特に host が実際に
+// import 依存する全 *.dll (vcpkg SDL2.dll 等) と CEF data (*.pak/*.dat/*.bin/*.json) を
+// allowlist で取りこぼさないため、deny 方式に倒す。
+func isDistDropTopLevel(base string) bool {
+	low := strings.ToLower(base)
+	ext := strings.ToLower(filepath.Ext(base))
+	switch {
+	case distJunkExt[ext]: // .ilk/.pdb/.exp/.lib
+		return true
+	case base == "CMakeCache.txt", base == "build.ninja", base == "cmake_install.cmake":
+		return true
+	case ext == ".cmake": // *.cmake (cmake 生成物)
+		return true
+	case strings.HasSuffix(low, ".ninja_log"), low == ".ninja_deps":
+		return true // build log
+	case ext == ".exe" && !distShipExe[base]:
+		return true // host / CEF helper 以外の exe は配布しない
+	default:
+		return false
+	}
+}
 
 func newDistCommand() *cobra.Command {
 	cmd := &cobra.Command{
@@ -105,7 +111,7 @@ func runDist() error {
 
 	noCef := cfg.CEF.Enabled != nil && !*cfg.CEF.Enabled
 	gameDir := strings.SplitN(filepath.ToSlash(art.DllRel), "/", 2)[0]
-	n, err := copyDeploy(art.DeployDir, bundleRoot, gameDir, noCef)
+	n, err := copyDeploy(art.DeployDir, bundleRoot, gameDir)
 	if err != nil {
 		return err
 	}
@@ -153,7 +159,7 @@ func runDist() error {
 
 	mode := "HTML UI (CEF) 同梱"
 	if noCef {
-		mode = "ネイティブ (CEF なし)"
+		mode = "native 描画 (起動時 --no-cef・CEF runtime は同梱)"
 	}
 	launch := batName
 	if distExe {
@@ -202,10 +208,14 @@ func distBundleName(name string) string {
 }
 
 // copyDeploy は DeployDir から配布に必要なものだけを bundle へコピーする。
-// allowlist 方式: ゲーム dir (gameDir) は丸ごと、top-level は runtimeAllow のみ、
-// locales/ は CEF 時のみ。それ以外 (CMakeCache 等の build 産物) は持ち込まない。
-// native (noCef) 時は CEF/Chromium ファイルを除外する。コピー数を返す。
-func copyDeploy(src, dst, gameDir string, noCef bool) (int, error) {
+// ゲーム dir (gameDir) と locales/ は丸ごと、top-level は deny 方式 (isDistDropTopLevel
+// に当たらないものは全て KEEP) で全 runtime dll / CEF data を取りこぼさない。
+//
+// 注: CEF runtime (libcef.dll 等) は `[cef] enabled=false` でも**落とさない**。
+// mitiru build は既定で CEF 付きビルドのため host が libcef.dll を import 依存しており、
+// 無いと起動できない (0xC0000135)。真の native-small (libcef 不要) は engine 側を
+// MITIRU_NO_CEF でビルドする必要があり、それは別途 (build パイプライン側) の課題。
+func copyDeploy(src, dst, gameDir string) (int, error) {
 	count := 0
 	err := filepath.Walk(src, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
@@ -226,14 +236,8 @@ func copyDeploy(src, dst, gameDir string, noCef bool) (int, error) {
 			if strings.HasPrefix(base, "cef_cache_") || base == "CMakeFiles" || base == "__pycache__" {
 				return filepath.SkipDir
 			}
-			// top-level dir は gameDir と (CEF 時の) locales だけ降りる。
-			if !strings.Contains(rel, "/") {
-				if rel == gameDir {
-					return nil
-				}
-				if rel == "locales" && !noCef {
-					return nil
-				}
+			// top-level dir は gameDir と locales だけ降りる。
+			if !strings.Contains(rel, "/") && rel != gameDir && rel != "locales" {
 				return filepath.SkipDir
 			}
 			return nil
@@ -243,14 +247,10 @@ func copyDeploy(src, dst, gameDir string, noCef bool) (int, error) {
 			return nil
 		}
 		switch {
-		case first == gameDir:
-			// ゲーム dir 配下 (dll + assets + runtime) は全部入れる。
-		case first == "locales":
-			if noCef {
-				return nil
-			}
-		case !strings.Contains(rel, "/"): // top-level ファイル
-			if !runtimeAllow[base] || (noCef && cefOnlyFiles[base]) {
+		case first == gameDir, first == "locales":
+			// ゲーム dir 配下 / locales は入れる。
+		case !strings.Contains(rel, "/"): // top-level ファイル: drop ルールに当たるものだけ除外
+			if isDistDropTopLevel(base) {
 				return nil
 			}
 		default:
