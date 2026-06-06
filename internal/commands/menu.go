@@ -96,6 +96,7 @@ func menuEntriesForContext() (entries []menuEntry, header string) {
 			{"watch    hot-reload dev loop (rebuild on save)", []string{"watch"}, ""},
 			{"debug    debug build & run", []string{"debug"}, ""},
 			{"build    build only", []string{"build"}, ""},
+			{"dist     package for release (配布フォルダ生成; --pack で秘匿/--exe で exe 化)", []string{"dist"}, ""},
 			{"ui       preview HTML/CSS UI in browser", []string{"ui"}, ""},
 			{"lint     check data-m-* bindings", []string{"lint"}, ""},
 			{"clean    remove build/", []string{"clean"}, ""},
