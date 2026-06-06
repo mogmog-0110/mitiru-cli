@@ -130,6 +130,7 @@ mitiru_add_cef_game(mitiru_host)
 # 空 → このブロックは生成されない。
 {{if .StartMainAbs}}if(WIN32)
     add_executable(mitiru_start WIN32 "{{.StartMainAbs}}")
+    target_compile_features(mitiru_start PRIVATE cxx_std_20)
     target_link_options(mitiru_start PRIVATE /SUBSYSTEM:WINDOWS)
     if(MSVC)
         target_compile_options(mitiru_start PRIVATE /utf-8)
