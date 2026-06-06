@@ -164,7 +164,22 @@ func locateInspectorExe() (string, error) {
 			return "", fmt.Errorf("inspect: %w", err)
 		}
 	}
-	return findOrBuildEngineExe(engineRoot, "mitiru_inspector", "mitiru_inspector.exe")
+	return findOrBuildEngineExe(engineRoot, "mitiru_tool_cef", "mitiru_tool_cef.exe")
+}
+
+// pageFor は inspect の inspectable 名を tool_cef の --page 名に対応づける。
+// 全ツール窓は mitiru_tool_cef の HTML ページに統一済み (ToolRegistry の kToolTable と同じ)。
+func pageFor(inspectable string) string {
+	switch inspectable {
+	case "", "gameplay", "state":
+		return "inspect"
+	case "input":
+		return "input"
+	case "timetravel":
+		return "timetravel"
+	default:
+		return inspectable // 未知名はそのまま page として渡す (assets/<name>.html)
+	}
 }
 
 func runInspect(pid int, filePath, inspectable string) error {
@@ -178,7 +193,7 @@ func runInspect(pid int, filePath, inspectable string) error {
 		return err
 	}
 
-	args := []string{}
+	args := []string{"--page", pageFor(inspectable)}
 	if filePath != "" {
 		absFile, err := filepath.Abs(filePath)
 		if err != nil {
@@ -187,9 +202,6 @@ func runInspect(pid int, filePath, inspectable string) error {
 		args = append(args, "--file", absFile)
 	} else {
 		args = append(args, strconv.Itoa(pid))
-	}
-	if inspectable != "" {
-		args = append(args, "--inspectable", inspectable)
 	}
 
 	fmt.Printf("Running %s %v\n", exePath, args)
@@ -396,7 +408,7 @@ func runInspectAll(pid int) error {
 
 	launched := 0
 	for _, name := range allInspectables {
-		args := []string{strconv.Itoa(pid), "--inspectable", name}
+		args := []string{"--page", pageFor(name), strconv.Itoa(pid)}
 		cmd := exec.Command(exePath, args...)
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr

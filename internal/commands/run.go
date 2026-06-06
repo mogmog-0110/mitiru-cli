@@ -166,10 +166,9 @@ func runRun() error {
 	return nil
 }
 
-// startInspectorChild は engine の pre-built な mitiru_inspector.exe を探し、
-// 起動直後のゲームの pid を指す child process として launch する。
-// launch 前にゲームの snapshot file を短時間 poll し、inspector が即座に
-// "waiting for producer..." を報告しないようにする。
+// startInspectorChild は汎用 CEF ツールホスト mitiru_tool_cef.exe を `--page inspect`
+// で起動し、動作中ゲームの pid を指す child process にする (全ツール窓は tool_cef に統一)。
+// launch 前にゲームの snapshot file を短時間 poll し、即「waiting」表示を避ける。
 func startInspectorChild(gamePid int) (*exec.Cmd, error) {
 	if runtime.GOOS != "windows" {
 		return nil, fmt.Errorf("--inspect is Windows-only for now")
@@ -180,8 +179,8 @@ func startInspectorChild(gamePid int) (*exec.Cmd, error) {
 	}
 	exePath := ""
 	for _, c := range []string{
-		filepath.Join(engineRoot, "build", "examples", "mitiru_inspector", "mitiru_inspector.exe"),
-		filepath.Join(engineRoot, "build", "examples", "mitiru_inspector", "Debug", "mitiru_inspector.exe"),
+		filepath.Join(engineRoot, "build", "examples", "mitiru_tool_cef", "mitiru_tool_cef.exe"),
+		filepath.Join(engineRoot, "build", "examples", "mitiru_tool_cef", "Debug", "mitiru_tool_cef.exe"),
 	} {
 		if _, err := os.Stat(c); err == nil {
 			exePath = c
@@ -189,10 +188,10 @@ func startInspectorChild(gamePid int) (*exec.Cmd, error) {
 		}
 	}
 	if exePath == "" {
-		return nil, fmt.Errorf("mitiru_inspector.exe not found — run `cmake --build <engine>/build --target mitiru_inspector` once")
+		return nil, fmt.Errorf("mitiru_tool_cef.exe not found — run `cmake --build <engine>/build --target mitiru_tool_cef` once")
 	}
 
-	// producer が最初の snapshot file を書くのを短時間待つ。
+	// producer が最初の snapshot file を書くのを短時間待つ (ファイル名は IPC 規約上 inspector_)。
 	snap := filepath.Join(os.TempDir(),
 		fmt.Sprintf("mitiru_inspector_%d.json", gamePid))
 	deadline := time.Now().Add(2 * time.Second)
@@ -203,7 +202,7 @@ func startInspectorChild(gamePid int) (*exec.Cmd, error) {
 		time.Sleep(80 * time.Millisecond)
 	}
 
-	c := exec.Command(exePath, fmt.Sprintf("%d", gamePid))
+	c := exec.Command(exePath, "--page", "inspect", fmt.Sprintf("%d", gamePid))
 	c.Stdout = os.Stdout
 	c.Stderr = os.Stderr
 	c.Dir = filepath.Dir(exePath)
