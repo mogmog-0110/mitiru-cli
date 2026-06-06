@@ -31,10 +31,11 @@ type ProjectSection struct {
 }
 
 type WindowSection struct {
-	Title  string `toml:"title"`
-	Width  int    `toml:"width"`
-	Height int    `toml:"height"`
-	Vsync  bool   `toml:"vsync"`
+	Title     string `toml:"title"`
+	Width     int    `toml:"width"`
+	Height    int    `toml:"height"`
+	Vsync     bool   `toml:"vsync"`
+	FixedSize bool   `toml:"fixed_size"` // true なら host へ --fixed-size を渡す (#50)
 }
 
 type CEFSection struct {

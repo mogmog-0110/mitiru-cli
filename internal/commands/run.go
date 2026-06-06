@@ -43,6 +43,9 @@ func hostArgsFromConfig(pc *config.ProjectConfig) []string {
 	if pc.Window.Width > 0 && pc.Window.Height > 0 {
 		extra = append(extra, "--size", fmt.Sprintf("%dx%d", pc.Window.Width, pc.Window.Height))
 	}
+	if pc.Window.FixedSize {
+		extra = append(extra, "--fixed-size") // #50: ユーザのリサイズを禁止 (#44 の host フラグ)
+	}
 	if atlas := strings.TrimSpace(pc.Font.Atlas); atlas != "" && atlas != "none" {
 		extra = append(extra, "--font", atlas)
 	}

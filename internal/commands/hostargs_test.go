@@ -25,6 +25,24 @@ func TestHostArgs_WindowAndFont(t *testing.T) {
 	}
 }
 
+func TestHostArgs_FixedSize(t *testing.T) {
+	// #50: [window] fixed_size = true → host へ --fixed-size を渡す。
+	pc := &config.ProjectConfig{}
+	pc.Window.Width, pc.Window.Height = 640, 480
+	pc.Window.FixedSize = true
+	got := argsStr(pc)
+	if !strings.Contains(got, "--fixed-size") {
+		t.Errorf("missing --fixed-size: %q", got)
+	}
+
+	// 既定 (false) では渡さない。
+	pc2 := &config.ProjectConfig{}
+	pc2.Window.Width, pc2.Window.Height = 640, 480
+	if strings.Contains(argsStr(pc2), "--fixed-size") {
+		t.Errorf("--fixed-size should be absent when fixed_size=false")
+	}
+}
+
 func TestHostArgs_FontNoneOmitted(t *testing.T) {
 	pc := &config.ProjectConfig{}
 	pc.Font.Atlas = "none"
