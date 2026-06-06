@@ -33,10 +33,17 @@ mitiru run
 | `mitiru new <name>` | テンプレートから新しいプロジェクトを作る (`./<name>/`) |
 | `mitiru build` | `mitiru.toml` を読んでビルド (Debug がデフォルト) |
 | `mitiru run` | ビルドして実行 (stdin/stdout/exitcode を forward) |
+| `mitiru watch` | ビルドして起動し、`src/` 保存で hot reload (state 保持) |
+| `mitiru dist` | 配布フォルダを生成 (`data/` にランタイム隔離 + ランチャー)。`--exe` で exe ランチャー、`--pack` でアセット埋め込み秘匿、`--zip` で zip |
 | `mitiru debug` | Debug でビルドしてエンジン debug helper (`MITIRU_DEBUG=1`/`MITIRU_INSPECTOR=1`) 付きで実行 |
+| `mitiru inspect [pid]` | 走ってる game を別 OS window のツール窓で観察 (`--inspectable input\|timetravel`、`--all`) |
+| `mitiru replay <file>` | 記録済み入力を決定論的に再生 |
+| `mitiru renderer` / `audio` / `input` / `scene` | 各 subsystem を単独起動 |
+| `mitiru ui` / `lint` | HTML/CSS UI をブラウザ preview / `data-m-*` バインディング検査 |
 | `mitiru clean` | `build/` を削除。`--all` でグローバルキャッシュ (`~/.mitiru/cache/`) もまとめて削除 |
 | `mitiru doctor` | 前提ツール (Go / CMake / コンパイラ) のチェック |
 | `mitiru version` | バージョン表示 |
+| `mitiru`（引数なし） | 対話メニュー（番号でコマンド選択） |
 
 `mitiru build` / `mitiru run` には `--release` か `--config <Debug|Release|RelWithDebInfo>` を渡せます。
 `mitiru debug` は常に `--config Debug` を強制します。
