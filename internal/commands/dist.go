@@ -111,7 +111,15 @@ func runDist() error {
 
 	noCef := cfg.CEF.Enabled != nil && !*cfg.CEF.Enabled
 	gameDir := strings.SplitN(filepath.ToSlash(art.DllRel), "/", 2)[0]
-	n, err := copyDeploy(art.DeployDir, bundleRoot, gameDir)
+
+	// ランタイム一式 (host + 全 DLL + CEF + ゲーム) は data/ サブフォルダに隔離し、
+	// トップ階層はランチャーだけにする (DLL の散らかりを隠す)。host は自分の exe dir
+	// (= data/) を cwd に固定するので、data/ 内で全パスが完結する。
+	dataDir := filepath.Join(bundleRoot, "data")
+	if err := os.MkdirAll(dataDir, 0o755); err != nil {
+		return fmt.Errorf("dist: mkdir data: %w", err)
+	}
+	n, err := copyDeploy(art.DeployDir, dataDir, gameDir)
 	if err != nil {
 		return err
 	}
@@ -124,7 +132,8 @@ func runDist() error {
 	n++
 
 	if distExe {
-		if err := writeExeLauncher(bundleRoot, name, art.DllRel, hostArgs); err != nil {
+		// exe ランチャーは DLL の隣 (data/) に置く。Steam 等は data/<name>.exe を指す。
+		if err := writeExeLauncher(dataDir, name, art.DllRel, hostArgs); err != nil {
 			return err
 		}
 		n++
@@ -133,9 +142,9 @@ func runDist() error {
 	if distPack {
 		// <gameDir>/assets/ を <gameDir>/assets.mtpak に畳んで、バラ置きを除去する。
 		// キーは host / native loader / CEF が要求する cwd 相対パス "<gameDir>/assets/..."。
-		assetsDir := filepath.Join(bundleRoot, gameDir, "assets")
+		assetsDir := filepath.Join(dataDir, gameDir, "assets")
 		if _, statErr := os.Stat(assetsDir); statErr == nil {
-			packOut := filepath.Join(bundleRoot, gameDir, "assets.mtpak")
+			packOut := filepath.Join(dataDir, gameDir, "assets.mtpak")
 			cnt, perr := packAssets(assetsDir, packOut, gameDir+"/assets")
 			if perr != nil {
 				return fmt.Errorf("dist --pack: %w", perr)
@@ -157,16 +166,25 @@ func runDist() error {
 		fmt.Printf("Zipped: %s\n", zipPath)
 	}
 
+	// トップに README を置き、構成を 1 行で説明する (中身は data/)。
+	readme := name + " — MitiruEngine game\r\n\r\n" +
+		batName + " をダブルクリックで起動。\r\n" +
+		"data/ にランタイム一式が入っています (移動・削除しないでください)。\r\n"
+	if err := os.WriteFile(filepath.Join(bundleRoot, "README.txt"), []byte(readme), 0o644); err != nil {
+		return err
+	}
+	n++
+
 	mode := "HTML UI (CEF) 同梱"
 	if noCef {
 		mode = "native 描画 (起動時 --no-cef・CEF runtime は同梱)"
 	}
 	launch := batName
 	if distExe {
-		launch = name + ".exe / " + batName
+		launch = batName + " / data\\" + name + ".exe"
 	}
-	fmt.Printf("\nDist OK: %s\n  %d files / %s\n  起動: %s をダブルクリック\n",
-		bundleRoot, n, mode, launch)
+	fmt.Printf("\nDist OK: %s\n  %d files / %s\n  トップは %s + README + data/ のみ\n  起動: %s\n",
+		bundleRoot, n, mode, batName, launch)
 	return nil
 }
 
@@ -293,8 +311,10 @@ func writeLauncher(path, dllRel string, hostArgs []string) error {
 	}
 	body := "@echo off\r\n" +
 		"rem MitiruEngine game launcher\r\n" +
-		"cd /d \"%~dp0\"\r\n" +
-		"mitiru_host.exe " + args + "\r\n"
+		"cd /d \"%~dp0data\"\r\n" + // ランタイムは data/ に隔離されている
+		"mitiru_host.exe " + args + "\r\n" +
+		"if errorlevel 1 pause\r\n" + // 起動失敗時はエラーを読めるよう留める (一瞬で消えない)
+		""
 	return os.WriteFile(path, []byte(body), 0o644)
 }
 

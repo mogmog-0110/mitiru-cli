@@ -42,8 +42,11 @@ func TestWriteLauncher(t *testing.T) {
 	if !strings.Contains(s, "mitiru_host.exe g") || !strings.Contains(s, "g.dll --no-cef --size 800x600") {
 		t.Errorf("launcher missing expected command line:\n%s", s)
 	}
-	if !strings.Contains(s, `cd /d "%~dp0"`) {
-		t.Errorf("launcher should cd to its own dir:\n%s", s)
+	if !strings.Contains(s, `cd /d "%~dp0data"`) {
+		t.Errorf("launcher should cd into the data/ runtime dir:\n%s", s)
+	}
+	if !strings.Contains(s, "if errorlevel 1 pause") {
+		t.Errorf("launcher should pause on error so the console doesn't just flash:\n%s", s)
 	}
 }
 
