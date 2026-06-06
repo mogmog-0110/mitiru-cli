@@ -111,11 +111,14 @@ func runDist() error {
 
 	// dist 専用ビルド: コンソール窓を出さない GUI host にする。dev の build/out を
 	// 汚さないよう別 out dir (configure-time オプションの thrash 回避)。
-	// 注: native の libcef 排除 (MITIRU_DISABLE_CEF) は module/inspector 層が cef:: 型に
-	// 無条件依存しており、その no-cef ビルドは別途 decouple refactor が要るため未対応。
 	buildRelease = true
 	buildOutDir = filepath.Join(projectRoot, "build", "dist-out")
 	buildExtraDefines = []string{"MITIRU_HOST_GUI=ON"}
+	if noCef {
+		// native ([cef] enabled=false) は Chromium を一切 link / 同梱しない。
+		// host は NullCefContext path でビルドされ libcef.dll を要求しない。
+		buildExtraDefines = append(buildExtraDefines, "MITIRU_DISABLE_CEF=ON")
+	}
 	defer func() { buildOutDir = ""; buildExtraDefines = nil }() // 後続コマンドへ漏らさない
 
 	result, err := runBuild()
@@ -235,7 +238,7 @@ func runDist() error {
 
 	mode := "HTML UI (CEF) 同梱"
 	if noCef {
-		mode = "native 描画 (起動時 --no-cef・CEF runtime は同梱)"
+		mode = "native 描画 (Chromium 非同梱)"
 	}
 	launch := primary
 	if stubUsed {
