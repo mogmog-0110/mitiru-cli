@@ -293,10 +293,9 @@ func distBundleName(name string) string {
 // ゲーム dir (gameDir) と locales/ は丸ごと、top-level は deny 方式 (isDistDropTopLevel
 // に当たらないものは全て KEEP) で全 runtime dll / CEF data を取りこぼさない。
 //
-// 注: CEF runtime (libcef.dll 等) は `[cef] enabled=false` でも**落とさない**。
-// mitiru build は既定で CEF 付きビルドのため host が libcef.dll を import 依存しており、
-// 無いと起動できない (0xC0000135)。真の native-small (libcef 不要) は engine 側を
-// MITIRU_NO_CEF でビルドする必要があり、それは別途 (build パイプライン側) の課題。
+// 注: `[cef] enabled=false` の場合、dist は MITIRU_DISABLE_CEF=ON で host を再ビルド
+// する (runDist 冒頭) ため deploy dir に CEF runtime がそもそも現れない。ここの deny
+// 方式は「ビルド出力に在るものは要る」前提でよく、CEF の有無をここで判定しない。
 func copyDeploy(src, dst, gameDir string) (int, error) {
 	count := 0
 	err := filepath.Walk(src, func(path string, info os.FileInfo, err error) error {
