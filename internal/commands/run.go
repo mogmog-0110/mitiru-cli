@@ -16,7 +16,8 @@ import (
 )
 
 var (
-	runWithInspect bool
+	runInspectArg  string // --inspect の生値 ("" = 窓なし、単独指定は NoOptDefVal "inspect")
+	runInspectPage string // resolveInspectPage 済みの tool page 名 ("" = 窓なし)
 	runWithConsole bool
 	runRecordFile  string
 )
@@ -80,9 +81,21 @@ the resulting executable with the project root as its working directory.
 
 Standard output, standard error, and exit code are forwarded.
 
-With --inspect, also opens the engine's sub-window inspector (axis 5)
-alongside the game and shuts it down when the game exits.`,
+With --inspect, also opens a tool window (axis 5) alongside the game and
+shuts it down when the game exits. Bare --inspect opens the gameplay
+inspector; a window name selects another tool:
+
+  mitiru run --inspect             # gameplay inspector
+  mitiru run --inspect perf        # performance window
+  mitiru run --inspect timetravel  # time-travel scrubber
+                                   # (perf, inspector, timetravel, mixer,
+                                   #  scene, replay, input)`,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			page, err := resolveInspectPage(runInspectArg, args)
+			if err != nil {
+				return err
+			}
+			runInspectPage = page
 			return runRun()
 		},
 	}
@@ -91,8 +104,9 @@ alongside the game and shuts it down when the game exits.`,
 		"explicit CMake configuration (Debug|Release|RelWithDebInfo); overrides --release")
 	cmd.Flags().StringVar(&buildGenerator, "generator", "",
 		"explicit CMake generator (e.g. \"Visual Studio 17 2022\", \"NMake Makefiles\"); default is Ninja")
-	cmd.Flags().BoolVar(&runWithInspect, "inspect", false,
-		"also launch the sub-window inspector for this game (axis 5)")
+	cmd.Flags().StringVar(&runInspectArg, "inspect", "",
+		"also open a tool window: perf|inspector|timetravel|mixer|scene|replay|input (bare --inspect = gameplay inspector)")
+	cmd.Flags().Lookup("inspect").NoOptDefVal = "inspect"
 	cmd.Flags().BoolVar(&runWithConsole, "console", false,
 		"open the runtime control panel (pause/step/scale/screenshot) in your default browser (ADR 0011)")
 	cmd.Flags().StringVar(&runRecordFile, "record", "",
@@ -137,8 +151,8 @@ func runRun() error {
 	}
 
 	var inspectorCmd *exec.Cmd
-	if runWithInspect {
-		ic, err := startInspectorChild(cmd.Process.Pid)
+	if runInspectPage != "" {
+		ic, err := startInspectorChild(cmd.Process.Pid, runInspectPage)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "warning: --inspect failed: %v\n", err)
 		} else {
@@ -166,10 +180,10 @@ func runRun() error {
 	return nil
 }
 
-// startInspectorChild は汎用 CEF ツールホスト mitiru_tool_cef.exe を `--page inspect`
+// startInspectorChild は汎用 CEF ツールホスト mitiru_tool_cef.exe を `--page <page>`
 // で起動し、動作中ゲームの pid を指す child process にする (全ツール窓は tool_cef に統一)。
 // launch 前にゲームの snapshot file を短時間 poll し、即「waiting」表示を避ける。
-func startInspectorChild(gamePid int) (*exec.Cmd, error) {
+func startInspectorChild(gamePid int, page string) (*exec.Cmd, error) {
 	if runtime.GOOS != "windows" {
 		return nil, fmt.Errorf("--inspect is Windows-only for now")
 	}
@@ -202,7 +216,7 @@ func startInspectorChild(gamePid int) (*exec.Cmd, error) {
 		time.Sleep(80 * time.Millisecond)
 	}
 
-	c := exec.Command(exePath, "--page", "inspect", fmt.Sprintf("%d", gamePid))
+	c := exec.Command(exePath, "--page", page, fmt.Sprintf("%d", gamePid))
 	c.Stdout = os.Stdout
 	c.Stderr = os.Stderr
 	c.Dir = filepath.Dir(exePath)

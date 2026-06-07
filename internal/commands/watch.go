@@ -39,9 +39,15 @@ Press Ctrl-C to stop watching (also closes the game window). Saves
 during a rebuild are coalesced so a burst of writes only triggers one
 build.
 
-With --inspect, also launches the sub-window inspector once alongside
-the game.`,
+With --inspect, also launches a tool window once alongside the game
+(bare --inspect = gameplay inspector; or a name: perf, inspector,
+timetravel, mixer, scene, replay, input).`,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			page, err := resolveInspectPage(runInspectArg, args)
+			if err != nil {
+				return err
+			}
+			runInspectPage = page
 			return runWatch()
 		},
 	}
@@ -50,8 +56,9 @@ the game.`,
 		"explicit CMake configuration (Debug|Release|RelWithDebInfo)")
 	cmd.Flags().StringVar(&buildGenerator, "generator", "",
 		"explicit CMake generator (default is Ninja)")
-	cmd.Flags().BoolVar(&runWithInspect, "inspect", false,
-		"also launch the sub-window inspector alongside the game")
+	cmd.Flags().StringVar(&runInspectArg, "inspect", "",
+		"also open a tool window: perf|inspector|timetravel|mixer|scene|replay|input (bare --inspect = gameplay inspector)")
+	cmd.Flags().Lookup("inspect").NoOptDefVal = "inspect"
 	return cmd
 }
 
@@ -246,8 +253,8 @@ func (s *gameState) firstBuildAndLaunch() error {
 		s.markExited()
 	}()
 
-	if runWithInspect {
-		insp, err := startInspectorChild(cmd.Process.Pid)
+	if runInspectPage != "" {
+		insp, err := startInspectorChild(cmd.Process.Pid, runInspectPage)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "watch: --inspect failed: %v\n", err)
 		} else {

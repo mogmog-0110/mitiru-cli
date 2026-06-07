@@ -82,7 +82,7 @@ func runNew(name string) error {
 	fmt.Println("  mitiru run                 build + run (first build compiles the")
 	fmt.Println("                             engine: ~5-10 min; seconds after that)")
 	fmt.Println("  mitiru watch               auto-rebuild + hot-reload on src/ change")
-	fmt.Println("  mitiru run --inspect       also open the sub-window inspector")
+	fmt.Println("  mitiru run --inspect       also open a tool window (--inspect perf, mixer, ...)")
 	fmt.Println("")
 	fmt.Println("Stuck? Run 'mitiru doctor' to verify your toolchain.")
 	return nil
