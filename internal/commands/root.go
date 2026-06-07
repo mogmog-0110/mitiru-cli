@@ -11,13 +11,13 @@ const (
 	// pin する engine release。engine release ごとにこれを bump し、新規プロジェクトが
 	// template の依存する機能 (例 zero-JS declarative binder、ADR 0007) を持つ engine
 	// に対して build されるようにする。
-	defaultEngineVersion = "0.8.1"
+	defaultEngineVersion = "0.8.2"
 )
 
 // cliVersion は mitiru CLI 自身の版。goreleaser が release 時に ldflags
 // (-X .../commands.cliVersion=<tag>) で上書きする。手元 build では既定値のまま。
 // self-update がこの値と最新 release を比較する (ADR 0010)。
-var cliVersion = "0.8.0"
+var cliVersion = "0.9.0"
 
 func NewRootCommand() *cobra.Command {
 	// 前回の self-update が残した <exe>.old を best-effort で掃除する (ADR 0010 #8)。
