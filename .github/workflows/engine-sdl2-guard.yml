@@ -113,8 +113,14 @@ jobs:
 
           # false-green 防止: SDL2 が実際に検出され、SDL2 経路でリンクしたことを確認。
           # これが無いと SDL2 未検出 (DX11 のみ) で通った時に guard が無意味になる。
-          $log = Get-Content "$env:RUNNER_TEMP\build.log" -Raw
-          if ($log -notmatch 'SDL2 found') {
+          # 注: mitiru build は configure 出力を quiet するためログ grep は不可
+          # (初版の 'SDL2 found' grep は常に失敗していた)。build.ninja に
+          # MITIRU_HAS_SDL2=1 define が乗っていることが SDL2 経路でコンパイル
+          # された直接証拠 (engine CMakeLists の target_compile_definitions)。
+          $ninja = Get-ChildItem -Recurse -Filter build.ninja -Path guard_game/build
+          if (-not $ninja) { throw "build.ninja not found under guard_game/build — generator changed?" }
+          $hit = $ninja | Select-String -Pattern 'MITIRU_HAS_SDL2=1' -List | Select-Object -First 1
+          if (-not $hit) {
             throw "SDL2 was NOT detected during configure — guard did not exercise the SDL2 path. Check SDL2_DIR/CMAKE_PREFIX_PATH."
           }
 
