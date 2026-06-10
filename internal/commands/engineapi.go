@@ -21,6 +21,8 @@ const (
 	apiTimescale = "/api/runtime/timescale"
 	apiQuit     = "/api/runtime/quit"
 	apiScene    = "/api/scene/tree"
+	apiFrame    = "/api/ai/frame"
+	apiAudio    = "/api/ai/audio"
 )
 
 // apiGet は baseURL に対して GET リクエストを送り、レスポンスボディを返す。

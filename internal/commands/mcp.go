@@ -151,6 +151,16 @@ var mcpTools = []mcpTool{
 		InputSchema: json.RawMessage(`{"type":"object","properties":{}}`),
 	},
 	{
+		Name:        "frame",
+		Description: "現フレームの draw list (何をどこに描いたか + テキスト内容) を返す (GET /api/ai/frame)。screenshot=true で縮小 PNG も含む",
+		InputSchema: json.RawMessage(`{"type":"object","properties":{"screenshot":{"type":"boolean"},"width":{"type":"integer"}}}`),
+	},
+	{
+		Name:        "audio_log",
+		Description: "最近の音イベント (再生/停止/BGM/pitch) を返す (GET /api/ai/audio)",
+		InputSchema: json.RawMessage(`{"type":"object","properties":{"max":{"type":"integer"}}}`),
+	},
+	{
 		Name:        "verify",
 		Description: "ローカルプロジェクトをビルド・起動して verify を実行し、JSON 結果を返す",
 		InputSchema: json.RawMessage(`{"type":"object","properties":{"frames":{"type":"integer"},"golden":{"type":"string"}}}`),
@@ -197,6 +207,10 @@ func dispatchTool(name string, argsRaw json.RawMessage, baseURL string) (interfa
 		return timescaleTool(baseURL, argsRaw)
 	case "scene_tree":
 		return simpleGetTool(baseURL, apiScene)
+	case "frame":
+		return frameTool(baseURL, argsRaw)
+	case "audio_log":
+		return audioLogTool(baseURL, argsRaw)
 	case "verify":
 		return verifyTool(argsRaw)
 	default:
@@ -228,6 +242,40 @@ func simplePostTool(baseURL, path string) (interface{}, error) {
 		text = "ok"
 	}
 	return []interface{}{mcpTextContent{Type: "text", Text: text}}, nil
+}
+
+// frameTool は /api/ai/frame を叩く。既定は draw list のみ (screenshot 省略 = 軽量)。
+func frameTool(baseURL string, argsRaw json.RawMessage) (interface{}, error) {
+	var args struct {
+		Screenshot bool `json:"screenshot"`
+		Width      int  `json:"width"`
+	}
+	if len(argsRaw) > 0 {
+		_ = json.Unmarshal(argsRaw, &args)
+	}
+	path := apiFrame + "?screenshot=0"
+	if args.Screenshot {
+		path = apiFrame
+		if args.Width > 0 {
+			path = fmt.Sprintf("%s?width=%d", apiFrame, args.Width)
+		}
+	}
+	return simpleGetTool(baseURL, path)
+}
+
+// audioLogTool は /api/ai/audio を叩く。
+func audioLogTool(baseURL string, argsRaw json.RawMessage) (interface{}, error) {
+	var args struct {
+		Max int `json:"max"`
+	}
+	if len(argsRaw) > 0 {
+		_ = json.Unmarshal(argsRaw, &args)
+	}
+	path := apiAudio
+	if args.Max > 0 {
+		path = fmt.Sprintf("%s?max=%d", apiAudio, args.Max)
+	}
+	return simpleGetTool(baseURL, path)
 }
 
 func screenshotTool(baseURL string, argsRaw json.RawMessage) (interface{}, error) {
