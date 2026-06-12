@@ -3,6 +3,7 @@ package commands
 import (
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -64,6 +65,7 @@ type verifyResult struct {
 	Replay     *verifyReplayResult `json:"replay,omitempty"`
 	Screenshot *verifyShotResult   `json:"screenshot,omitempty"`
 	Verdict    string              `json:"verdict"` // "pass" | "fail" | "build_error"
+	Reason     string              `json:"reason,omitempty"` // 失敗段階の人間語説明
 }
 
 type verifyReplayResult struct {
@@ -86,6 +88,8 @@ func runVerify() error {
 		result.Build = "error"
 		result.BuildErr = err.Error()
 		result.Verdict = "build_error"
+		result.Reason = "build failed (see buildErr)"
+		fmt.Fprintln(os.Stderr, "mitiru verify: FAIL — build failed: "+err.Error())
 		return writeVerifyResult(result, 2)
 	}
 	result.Build = "ok"
@@ -97,8 +101,7 @@ func runVerify() error {
 		// リトライ 1 回。
 		port, err = pickFreePort()
 		if err != nil {
-			result.Verdict = "fail"
-			return writeVerifyResultErr(result, fmt.Errorf("verify: port: %w", err))
+			return failVerify(result, fmt.Sprintf("could not allocate a free TCP port: %v", err))
 		}
 	}
 	baseURL := fmt.Sprintf("http://127.0.0.1:%d", port)
@@ -108,8 +111,7 @@ func runVerify() error {
 	if verifyReplayFile != "" {
 		absReplay, err := filepath.Abs(verifyReplayFile)
 		if err != nil {
-			result.Verdict = "fail"
-			return writeVerifyResultErr(result, fmt.Errorf("verify: resolve replay: %w", err))
+			return failVerify(result, fmt.Sprintf("could not resolve replay file %s: %v", verifyReplayFile, err))
 		}
 		hostArgs = append(hostArgs, "--replay", absReplay)
 	}
@@ -124,22 +126,29 @@ func runVerify() error {
 	)
 
 	if err := hostCmd.Start(); err != nil {
-		result.Verdict = "fail"
-		return writeVerifyResultErr(result, fmt.Errorf("verify: start host: %w", err))
+		return failVerify(result, fmt.Sprintf("could not start host process %s: %v", art.HostExePath, err))
 	}
+
+	// host の終了は 1 箇所で監視する (cmd.Wait は 1 回しか呼べない)。
+	// 即死検出 (readiness 中) と graceful 終了待ちの両方がこの channel を使う。
+	hostExit := make(chan error, 1)
+	go func() { hostExit <- hostCmd.Wait() }()
 
 	// プロセスを終了させるための defer (quit エンドポイントが失敗した場合の保険)。
 	defer func() {
 		if hostCmd.Process != nil {
-			_, _ = hostCmd.Process.Wait()
+			_ = hostCmd.Process.Kill()
+			select {
+			case <-hostExit:
+			case <-time.After(3 * time.Second):
+			}
 		}
 	}()
 
-	// 3. 準備完了まで待機 (30 秒タイムアウト)。
-	if err := waitReady(baseURL, 30*time.Second); err != nil {
+	// 3. 準備完了まで待機 (30 秒タイムアウト)。host 即死もここで検出する。
+	if err := waitReadyOrHostExit(baseURL, 30*time.Second, hostExit, hostCmd); err != nil {
 		_ = hostCmd.Process.Kill()
-		result.Verdict = "fail"
-		return writeVerifyResultErr(result, fmt.Errorf("verify: readiness: %w", err))
+		return failVerify(result, err.Error())
 	}
 
 	// 4. フレーム分待機 (16ms/frame)。
@@ -152,29 +161,26 @@ func runVerify() error {
 	shotBody, status, err := apiGet(baseURL, apiShot)
 	if err != nil || status != 200 {
 		_ = hostCmd.Process.Kill()
-		result.Verdict = "fail"
 		detail := ""
 		if err != nil {
 			detail = err.Error()
 		} else {
 			detail = fmt.Sprintf("HTTP %d", status)
 		}
-		return writeVerifyResultErr(result, fmt.Errorf("verify: screenshot: %s", detail))
+		return failVerify(result, fmt.Sprintf("screenshot fetch failed (GET %s): %s", apiShot, detail))
 	}
 
 	// スクリーンショットを一時ファイルに保存。
 	shotFile, err := os.CreateTemp("", "mitiru_verify_*.png")
 	if err != nil {
 		_ = hostCmd.Process.Kill()
-		result.Verdict = "fail"
-		return writeVerifyResultErr(result, fmt.Errorf("verify: save screenshot: %w", err))
+		return failVerify(result, fmt.Sprintf("screenshot save failed: %v", err))
 	}
 	shotPath := shotFile.Name()
 	if _, err := shotFile.Write(shotBody); err != nil {
 		shotFile.Close()
 		_ = hostCmd.Process.Kill()
-		result.Verdict = "fail"
-		return writeVerifyResultErr(result, fmt.Errorf("verify: write screenshot: %w", err))
+		return failVerify(result, fmt.Sprintf("screenshot write failed: %v", err))
 	}
 	shotFile.Close()
 
@@ -189,24 +195,25 @@ func runVerify() error {
 		if err != nil {
 			// 比較できない場合も fail 扱い。
 			_ = hostCmd.Process.Kill()
-			result.Verdict = "fail"
-			return writeVerifyResultErr(result, fmt.Errorf("verify: golden compare: %w", err))
+			return failVerify(result, fmt.Sprintf("golden compare failed (%s): %v", verifyGolden, err))
 		}
 		shotRes.GoldenDiffPct = pct
 		if pct < verifyGoldenThreshold {
 			verdict = "fail"
+			result.Reason = fmt.Sprintf(
+				"golden mismatch: %.1f%% match < threshold %.1f%% (golden=%s)",
+				pct*100, verifyGoldenThreshold*100, verifyGolden)
+			fmt.Fprintln(os.Stderr, "mitiru verify: FAIL — "+result.Reason)
 		}
 	}
 
 	// 7. エンジンを行儀よく終了させる。
 	_, _, _ = apiPost(baseURL, apiQuit, nil, "")
-	done := make(chan error, 1)
-	go func() { done <- hostCmd.Wait() }()
 	select {
-	case <-done:
+	case <-hostExit:
 	case <-time.After(5 * time.Second):
 		_ = hostCmd.Process.Kill()
-		<-done
+		<-hostExit
 	}
 
 	result.Verdict = verdict
@@ -267,12 +274,51 @@ func writeVerifyResult(r *verifyResult, exitCode int) error {
 	return nil
 }
 
-// writeVerifyResultErr は result を出力したうえで err を返す。
-// exit code は result.Verdict から決める。
-func writeVerifyResultErr(r *verifyResult, err error) error {
-	if r.Verdict == "" {
-		r.Verdict = "fail"
+// failVerify は失敗理由を verdict JSON の reason と stderr の両方に記録する。
+// JSON だけだと人間が見落とすため、stderr にも同内容を 1 行で出す。
+func failVerify(r *verifyResult, reason string) error {
+	r.Verdict = "fail"
+	r.Reason = reason
+	fmt.Fprintln(os.Stderr, "mitiru verify: FAIL — "+reason)
+	return writeVerifyResult(r, 1)
+}
+
+// waitReadyOrHostExit は GET /api/ai/state の readiness poll をしつつ、
+// host プロセスの即死 (起動直後の終了) を検出して原因付き error を返す。
+func waitReadyOrHostExit(baseURL string, timeout time.Duration, hostExit <-chan error, hostCmd *exec.Cmd) error {
+	deadline := time.Now().Add(timeout)
+	client := &http.Client{Timeout: 2 * time.Second}
+	for time.Now().Before(deadline) {
+		select {
+		case <-hostExit:
+			code := -1
+			if hostCmd.ProcessState != nil {
+				code = hostCmd.ProcessState.ExitCode()
+			}
+			return fmt.Errorf("%s", hostExitReason(code))
+		default:
+		}
+		resp, err := client.Get(baseURL + apiState)
+		if err == nil && resp.StatusCode == http.StatusOK {
+			resp.Body.Close()
+			return nil
+		}
+		if resp != nil {
+			resp.Body.Close()
+		}
+		time.Sleep(500 * time.Millisecond)
 	}
-	_ = writeVerifyResult(r, exitCodeForVerdict(r.Verdict))
-	return err
+	return fmt.Errorf(
+		"engine API did not respond within %s (host alive but MITIRU_AI server not up)", timeout)
+}
+
+// hostExitReason は host 即死時の exit code を人間語に変換する。
+// 0xC0000135 (STATUS_DLL_NOT_FOUND) は頻出トラップなのでヒント付きで特別扱い。
+// Windows の NTSTATUS は環境により負の int32 で返るため uint32 経由で正規化する。
+func hostExitReason(code int) string {
+	if uint32(code) == 0xC0000135 {
+		return "host exited immediately (exit code 0xC0000135 = DLL not found — " +
+			"SDL2.dll/libcef.dll が host の隣にあるか確認)"
+	}
+	return fmt.Sprintf("host exited immediately (exit code 0x%08X)", uint32(code))
 }

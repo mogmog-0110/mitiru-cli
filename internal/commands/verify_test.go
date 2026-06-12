@@ -2,10 +2,13 @@ package commands
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -171,6 +174,92 @@ func TestExitCodeForVerdict(t *testing.T) {
 		if got != c.wantCode {
 			t.Errorf("exitCodeForVerdict(%q) = %d, want %d", c.verdict, got, c.wantCode)
 		}
+	}
+}
+
+func TestHostExitReason_DllNotFound(t *testing.T) {
+	// 0xC0000135 は正の int でも負の int32 でも DLL ヒント付きになること。
+	for _, code := range []int{int(uint32(0xC0000135)), int(int32(-1073741515))} {
+		got := hostExitReason(code)
+		if !strings.Contains(got, "0xC0000135") || !strings.Contains(got, "SDL2.dll") {
+			t.Errorf("hostExitReason(%d) = %q, want DLL-not-found hint", code, got)
+		}
+	}
+}
+
+func TestHostExitReason_Generic(t *testing.T) {
+	got := hostExitReason(7)
+	if !strings.Contains(got, "host exited immediately") || !strings.Contains(got, "0x00000007") {
+		t.Errorf("hostExitReason(7) = %q", got)
+	}
+}
+
+func TestWaitReadyOrHostExit_HostDied(t *testing.T) {
+	// 起動直後に exit 7 で死ぬ host を模す。
+	cmd := exitCmd(t, 7)
+	hostExit := make(chan error, 1)
+	if err := cmd.Start(); err != nil {
+		t.Fatalf("start: %v", err)
+	}
+	go func() { hostExit <- cmd.Wait() }()
+
+	// host 死亡が channel に届くのを待つ (poll loop は即 select で拾う)。
+	err := waitReadyOrHostExit("http://127.0.0.1:1", 10*time.Second, hostExit, cmd)
+	if err == nil {
+		t.Fatal("expected host-died error")
+	}
+	if !strings.Contains(err.Error(), "host exited immediately") {
+		t.Errorf("error = %q, want host-exit reason", err)
+	}
+	if !strings.Contains(err.Error(), "0x00000007") {
+		t.Errorf("error = %q, want exit code 0x00000007", err)
+	}
+}
+
+func TestWaitReadyOrHostExit_Timeout(t *testing.T) {
+	// host は生きている (channel 空) が API が上がらない → timeout 文言。
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusServiceUnavailable)
+	}))
+	defer srv.Close()
+
+	hostExit := make(chan error, 1)
+	err := waitReadyOrHostExit(srv.URL, 300*time.Millisecond, hostExit, exitCmd(t, 0))
+	if err == nil {
+		t.Fatal("expected timeout error")
+	}
+	if !strings.Contains(err.Error(), "engine API did not respond within") {
+		t.Errorf("error = %q, want readiness-timeout reason", err)
+	}
+}
+
+// exitCmd は指定 exit code で即終了するクロスプラットフォームなコマンドを返す。
+func exitCmd(t *testing.T, code int) *exec.Cmd {
+	t.Helper()
+	if runtime.GOOS == "windows" {
+		return exec.Command("cmd", "/c", fmt.Sprintf("exit %d", code))
+	}
+	return exec.Command("sh", "-c", fmt.Sprintf("exit %d", code))
+}
+
+func TestVerifyResultJSON_Reason(t *testing.T) {
+	r := &verifyResult{Build: "ok", Verdict: "fail", Reason: "host exited immediately"}
+	b, err := json.Marshal(r)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	if !strings.Contains(string(b), `"reason":"host exited immediately"`) {
+		t.Errorf("JSON missing reason field: %s", b)
+	}
+
+	// 成功時は reason を省略する (omitempty)。
+	ok := &verifyResult{Build: "ok", Verdict: "pass"}
+	b, err = json.Marshal(ok)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	if strings.Contains(string(b), `"reason"`) {
+		t.Errorf("pass verdict should omit reason: %s", b)
 	}
 }
 

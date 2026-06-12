@@ -124,6 +124,17 @@ if(WIN32)
 endif()
 mitiru_add_cef_game(mitiru_host)
 
+# SDL2 backend 有効時は SDL2.dll を host の隣へ deploy する (DS4 等 DirectInput パッド対応)。
+# SDL2::SDL2 は shared imported target なので TARGET_FILE = SDL2.dll。これが無いと
+# host は起動直後に STATUS_DLL_NOT_FOUND (0xC0000135) で無言死する。
+if(WIN32 AND TARGET SDL2::SDL2)
+    add_custom_command(TARGET mitiru_host POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "$<TARGET_FILE:SDL2::SDL2>"
+            "$<TARGET_FILE_DIR:mitiru_host>/SDL2.dll"
+        COMMENT "mitiru-cli: deploying SDL2.dll (DirectInput gamepad support)")
+endif()
+
 # ── Distribution launcher stub (top-level no-console exe) ──────────
 # mitiru dist がトップ階層に <game>.exe としてコピーする極小 GUI exe。CEF / engine
 # 非依存で data\mitiru_host.exe を起動するだけ。古い engine では StartMainAbs が
