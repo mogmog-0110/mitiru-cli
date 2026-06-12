@@ -272,6 +272,8 @@ func (s *gameState) firstBuildAndLaunch() error {
 	cmd.Stderr = os.Stderr
 	cmd.Stdin = os.Stdin
 	cmd.Dir = art.DeployDir
+	// Debug CRT 解決のため VS toolchain PATH を前置 (R-01、run と同じ)。
+	cmd.Env = build.HostEnv()
 	if err := cmd.Start(); err != nil {
 		return fmt.Errorf("launch %s: %w", art.HostExePath, err)
 	}
@@ -281,8 +283,13 @@ func (s *gameState) firstBuildAndLaunch() error {
 	s.mu.Unlock()
 
 	// host(ゲーム窓) が終了したら watch セッション全体を畳めるよう監視する。
+	// 異常終了時は exit code を 16 進デコードして原因ヒントを出す (R-02)。
 	go func() {
-		_ = cmd.Wait()
+		err := cmd.Wait()
+		if exitErr, ok := err.(*exec.ExitError); ok {
+			fmt.Fprintf(os.Stderr, "\nmitiru watch: host exited with %s\n",
+				hostExitHint(exitErr.ExitCode()))
+		}
 		s.markExited()
 	}()
 

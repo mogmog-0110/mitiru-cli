@@ -402,6 +402,19 @@ func Run(opts Options) (*Artifacts, error) {
 			targetName, dllPath, err)
 	}
 
+	// assets/ を deploy 先へ常時同期する (R-04)。CMake 側の copy は DLL 再リンク
+	// 時しか走らないため、HTML/CSS だけの編集もここで確実に反映させる。
+	copied, syncErr := SyncAssets(
+		filepath.Join(opts.ProjectRoot, "assets"),
+		filepath.Join(deployDir, targetName, "assets"))
+	if syncErr != nil {
+		return nil, syncErr
+	}
+	if copied > 0 {
+		fmt.Fprintf(opts.Stdout, "Synced %d asset file(s) into %s\n",
+			copied, filepath.Join(targetName, "assets"))
+	}
+
 	return &Artifacts{
 		DeployDir:   deployDir,
 		HostExePath: hostExe,

@@ -154,6 +154,9 @@ func runRun() error {
 	cmd.Stderr = os.Stderr
 	cmd.Stdin = os.Stdin
 	cmd.Dir = art.DeployDir
+	// Debug ビルドの host は Debug CRT (msvcp140d 等) に依存し素の shell の PATH
+	// では解決できない → ビルドに使う VS toolchain の PATH を前置する (R-01)。
+	cmd.Env = build.HostEnv()
 	if err := cmd.Start(); err != nil {
 		return fmt.Errorf("run %s %s: %w", art.HostExePath, art.DllRel, err)
 	}
@@ -178,7 +181,9 @@ func runRun() error {
 
 	if waitErr != nil {
 		if exitErr, ok := waitErr.(*exec.ExitError); ok {
-			return fmt.Errorf("%s exited with status %d", filepath.Base(art.HostExePath), exitErr.ExitCode())
+			// 異常終了コードは 16 進デコード + 既知コードのヒント付きで出す (R-02)。
+			return fmt.Errorf("%s exited with status %d = %s",
+				filepath.Base(art.HostExePath), exitErr.ExitCode(), hostExitHint(exitErr.ExitCode()))
 		}
 		return fmt.Errorf("run %s: %w", filepath.Base(art.HostExePath), waitErr)
 	}

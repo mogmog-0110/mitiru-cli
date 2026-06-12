@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/mogmog-0110/mitiru-cli/internal/build"
 	"github.com/spf13/cobra"
 )
 
@@ -120,7 +121,8 @@ func runVerify() error {
 	hostCmd.Stdout = os.Stderr // ホストの出力は stderr に流す (stdout は JSON 専用)
 	hostCmd.Stderr = os.Stderr
 	hostCmd.Dir = art.DeployDir
-	hostCmd.Env = append(os.Environ(),
+	// VS toolchain PATH を前置して Debug CRT を解決させる (R-01、run と同じ)。
+	hostCmd.Env = append(build.HostEnv(),
 		"MITIRU_AI=1",
 		fmt.Sprintf("MITIRU_AI_PORT=%d", port),
 	)
@@ -310,15 +312,4 @@ func waitReadyOrHostExit(baseURL string, timeout time.Duration, hostExit <-chan 
 	}
 	return fmt.Errorf(
 		"engine API did not respond within %s (host alive but MITIRU_AI server not up)", timeout)
-}
-
-// hostExitReason は host 即死時の exit code を人間語に変換する。
-// 0xC0000135 (STATUS_DLL_NOT_FOUND) は頻出トラップなのでヒント付きで特別扱い。
-// Windows の NTSTATUS は環境により負の int32 で返るため uint32 経由で正規化する。
-func hostExitReason(code int) string {
-	if uint32(code) == 0xC0000135 {
-		return "host exited immediately (exit code 0xC0000135 = DLL not found — " +
-			"SDL2.dll/libcef.dll が host の隣にあるか確認)"
-	}
-	return fmt.Sprintf("host exited immediately (exit code 0x%08X)", uint32(code))
 }

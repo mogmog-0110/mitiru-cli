@@ -9,6 +9,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/mogmog-0110/mitiru-cli/internal/build"
 	"github.com/mogmog-0110/mitiru-cli/internal/config"
 )
 
@@ -92,6 +93,7 @@ func runDoctor() error {
 	if err == nil {
 		_, projectRoot, manifestErr := config.FindManifest(cwd)
 		if manifestErr == nil {
+			printRuntimeChecks(projectRoot)
 			findings := runDeterminismLint(projectRoot)
 			printDeterminismReport(findings)
 		}
@@ -99,6 +101,65 @@ func runDoctor() error {
 	}
 
 	return nil
+}
+
+// printRuntimeChecks は build 済み host の起動前提を診断する (R-02)。
+// host の隣に SDL2.dll / libcef.dll が居るか、Debug CRT が VS toolchain PATH で
+// 解決できるかを表示する。host 未ビルドなら黙って skip。warn のみで fail させない。
+func printRuntimeChecks(projectRoot string) {
+	outDir := filepath.Join(projectRoot, "build", "out")
+	hostExe := ""
+	for _, c := range []string{
+		filepath.Join(outDir, "mitiru_host.exe"),
+		filepath.Join(outDir, "Debug", "mitiru_host.exe"),
+		filepath.Join(outDir, "Release", "mitiru_host.exe"),
+	} {
+		if _, err := os.Stat(c); err == nil {
+			hostExe = c
+			break
+		}
+	}
+	if hostExe == "" {
+		return // まだ build していない project では診断対象なし
+	}
+
+	fmt.Println()
+	fmt.Printf("Runtime checks (%s):\n", hostExe)
+	hostDir := filepath.Dir(hostExe)
+	for _, dll := range []string{"SDL2.dll", "libcef.dll"} {
+		mark := "OK"
+		if _, err := os.Stat(filepath.Join(hostDir, dll)); err != nil {
+			mark = "MISSING"
+		}
+		fmt.Printf("  [%-7s] %s next to mitiru_host.exe\n", mark, dll)
+		if mark == "MISSING" {
+			fmt.Println("            hint: re-run `mitiru build` (deploys runtime DLLs next to the host)")
+		}
+	}
+
+	// Debug CRT: 隣に手動配置済みか、VS toolchain PATH で解決できれば OK。
+	// (`mitiru run` / `watch` / `verify` は起動時にこの PATH を自動前置する。)
+	crtOK := false
+	hint := ""
+	if _, err := os.Stat(filepath.Join(hostDir, "ucrtbased.dll")); err == nil {
+		crtOK = true
+	} else if vsPath, vsErr := build.VsToolchainPath(); vsErr == nil {
+		crtOK = build.FindInPathList(vsPath, "ucrtbased.dll") &&
+			build.FindInPathList(vsPath, "msvcp140d.dll")
+		if !crtOK {
+			hint = "Debug CRT not found in the VS toolchain PATH; repair the Visual Studio C++ workload"
+		}
+	} else {
+		hint = "vcvars64.bat not found: " + vsErr.Error()
+	}
+	mark := "OK"
+	if !crtOK {
+		mark = "MISSING"
+	}
+	fmt.Printf("  [%-7s] Debug CRT (msvcp140d/ucrtbased) resolvable for Debug-built hosts\n", mark)
+	if hint != "" {
+		fmt.Printf("            hint: %s\n", hint)
+	}
 }
 
 // hasCMake は利用可能な cmake.exe に到達できるか報告する。CMake は
