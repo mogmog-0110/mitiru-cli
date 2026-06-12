@@ -4,21 +4,19 @@
 <meta charset="utf-8">
 <title>{{.ProjectName}}</title>
 <style>
-  /* The HUD is a TRANSPARENT overlay composited on top of your C++ drawing.
-     Keep the background transparent so whatever you draw in on_draw() (the
-     native render layer) shows through.
+  /* HUD は C++ 描画の上に重なる透明オーバーレイ。背景を透明にしておくと
+     draw() で描いたもの (ネイティブ描画層) が透けて見える。
 
-     Everything below is plain HTML/CSS. The values come from C++ via the
-     declarative binder — no JavaScript glue. You write data-m-* attributes,
-     C++ pushes named state (see src/main.cpp: w.set("view.x", ...)), and the
-     binder keeps the DOM in sync. Richer patterns (lists, conditionals,
-     formatting) live in the `clicker` and `shooter` templates and ADR 0007. */
+     ここは素の HTML/CSS だけ — JavaScript は書かない。C++ が hud.set で
+     名前付きの値を push し (src/main.cpp の hud.set("hud.x", ...))、
+     data-m-* 属性の宣言的バインダが DOM を同期する。リスト・条件分岐・
+     書式などの応用は `clicker` / `shooter` テンプレートと ADR 0007 に。 */
   html, body {
     margin: 0;
     height: 100%;
     overflow: hidden;
-    background: transparent;          /* lets the C++ render layer show */
-    pointer-events: none;             /* clicks fall through to the game */
+    background: transparent;          /* C++ 描画層を透かす */
+    pointer-events: none;             /* クリックはゲームへ素通し */
     font-family: "Noto Sans JP", "Hiragino Sans", "Yu Gothic", system-ui, sans-serif;
     color: #fff;
   }
@@ -33,10 +31,6 @@
     line-height: 1.5;
     font-variant-numeric: tabular-nums;
   }
-  .moving {
-    color: #74d8f0;
-    font-size: 15px;
-  }
   .hint {
     position: absolute;
     left: 16px;
@@ -48,17 +42,16 @@
 </style>
 </head>
 <body>
-  <!-- data-m-tpl interpolates pushed values; data-m-show toggles on truthiness.
-       Both are driven entirely from C++ — there is no <script> of your own. -->
+  <!-- data-m-text は C++ の hud.set("hud.x", ...) の値をそのまま表示する。
+       すべて C++ 側から駆動される — 自分で書く <script> は無い。 -->
   <div class="hud">
-    <div data-m-tpl="位置  X {view.x}   Y {view.y}">位置  X 640   Y 360</div>
-    <div class="moving" data-m-show="view.moving">— 移動中 —</div>
+    位置  X <span data-m-text="hud.x">640</span>   Y <span data-m-text="hud.y">360</span>
   </div>
 
-  <div class="hint">矢印キーで移動 · ESC で終了 · この HUD は JavaScript ゼロ (data-m-*)</div>
+  <div class="hint">矢印 / WASD / 左スティックで移動 · ESC で終了 · この HUD は JavaScript ゼロ (data-m-*)</div>
 
-  <!-- The binder runtime. `mitiru build` copies mitiru_runtime/* next to this
-       file automatically — you do not commit or edit these. -->
+  <!-- バインダ本体。`mitiru build` が mitiru_runtime/* をこのファイルの隣へ
+       自動コピーする — commit も編集も不要。 -->
   <script src="mitiru_runtime/mitiru_cef_state.js"></script>
   <script src="mitiru_runtime/mitiru_bind.js"></script>
 </body>

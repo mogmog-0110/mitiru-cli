@@ -1,127 +1,31 @@
-// {{.ProjectName}} — game-as-DLL entry point (ADR 0005)
-//
-// Everything persistent lives in GameMemory. The host owns the pointer, so
-// state survives DLL hot-reloads when you launch with `mitiru watch` (or
-// directly with `mitiru_host --watch <dll>`).
-//
-// Communication is C-only signal flow (ADR 0005):
-//   host → DLL: InputSnapshot   keys / mouse / CEF action events
-//   DLL → host: FrameIntents    state pushes / quit / screenshot / palette
-//
-// The HUD in assets/scene.html is plain HTML/CSS. You drive it WITHOUT writing
-// any JavaScript: push named values here with StateWriter, and the declarative
-// binder (data-m-* attributes) renders them. That is the engine's whole point —
-// HTML/CSS + C++, zero hand-written JS glue (ADR 0007).
-//
-// The host calls mitiru_module_load() once on launch and once again on every
-// reload. *memory is preserved across reloads — only the function pointers
-// (and code) change.
+// {{.ProjectName}} — ゲームは「状態の struct + update + draw」だけ。
+// 状態 (メンバ変数) は flat POD なら、ホットリロード・巻き戻し・リプレイが
+// 何もしなくても全部乗る (mitiru watch で kSpeed を書き換えて保存してみて)。
 
-#include <mitiru/bridge/StateWriter.hpp>
-#include <mitiru/core/Screen.hpp>
-#include <mitiru/module/ModuleApi.hpp>
+#include <mitiru/module/Game.hpp>
+using namespace mitiru;
 
-namespace {{.ProjectIdent}}
+struct {{.ProjectIdent}}Game
 {
+    float x = 640.0f;
+    float y = 360.0f;
 
-namespace vk
-{
-constexpr int Escape = 0x1B;
-constexpr int Left   = 0x25;
-constexpr int Up     = 0x26;
-constexpr int Right  = 0x27;
-constexpr int Down   = 0x28;
-}  // namespace vk
-
-struct GameMemory
-{
-    float t       = 0.0f;
-    float playerX = 640.0f;
-    float playerY = 360.0f;
-};
-
-void on_init(void* /*memory*/) {}
-
-void on_update(void* memory, float dt,
-               const mitiru::module::InputSnapshot* input,
-               mitiru::module::FrameIntents* intents)
-{
-    if (memory == nullptr || input == nullptr || intents == nullptr) { return; }
-    auto& mem = *static_cast<GameMemory*>(memory);
-
-    mem.t += dt;
-
-    if (input->keysJustPressed[vk::Escape]) { intents->requestStop = 1; }
-
-    // ★ EDIT ME — change this and save while `mitiru watch` is running:
-    //   the player speed updates live without restarting (DLL hot-reload).
-    //   Try 320 → 800 and watch it move faster instantly.
-    constexpr float kSpeed = 320.0f;
-    const bool left  = input->keysDown[vk::Left]  != 0;
-    const bool right = input->keysDown[vk::Right] != 0;
-    const bool up    = input->keysDown[vk::Up]    != 0;
-    const bool down  = input->keysDown[vk::Down]  != 0;
-    if (left)  { mem.playerX -= kSpeed * dt; }
-    if (right) { mem.playerX += kSpeed * dt; }
-    if (up)    { mem.playerY -= kSpeed * dt; }
-    if (down)  { mem.playerY += kSpeed * dt; }
-
-    // Push state to the HTML HUD — no JavaScript needed. assets/scene.html
-    // binds these names with data-m-* attributes (view.x, view.y, view.moving).
-    mitiru::bridge::StateWriter w(intents);
-    w.set("view.x", static_cast<int>(mem.playerX));
-    w.set("view.y", static_cast<int>(mem.playerY));
-    w.set("view.moving", left || right || up || down);
-}
-
-void on_draw(void* memory, mitiru::Screen* screen)
-{
-    if (memory == nullptr || screen == nullptr) { return; }
-    auto& mem = *static_cast<GameMemory*>(memory);
-
-    screen->clear(sgc::Colorf{0.06f, 0.07f, 0.12f, 1.0f});
-
-    constexpr float kSize = 32.0f;
-    screen->drawRect(
-        sgc::Rectf{mem.playerX - kSize * 0.5f,
-                   mem.playerY - kSize * 0.5f,
-                   kSize, kSize},
-        sgc::Colorf{0.45f, 0.85f, 0.95f, 1.0f});
-}
-
-void on_shutdown(void* /*memory*/) {}
-
-}  // namespace {{.ProjectIdent}}
-
-extern "C"
-{
-
-#if defined(_WIN32)
-#define {{.UpperIdent}}_DLL_EXPORT __declspec(dllexport)
-#else
-#define {{.UpperIdent}}_DLL_EXPORT __attribute__((visibility("default")))
-#endif
-
-{{.UpperIdent}}_DLL_EXPORT
-void mitiru_module_load(mitiru::module::ModuleApi* api, void** memory)
-{
-    if (api == nullptr || memory == nullptr) { return; }
-
-    // First-time load: allocate persistent state. On hot reload the host
-    // hands us back the same pointer so gameplay survives the code swap.
-    if (*memory == nullptr)
+    void update(Input in, Hud hud, float dt)
     {
-        *memory = new {{.ProjectIdent}}::GameMemory{};
+        constexpr float kSpeed = 320.0f;   // ★ watch 中にここを変えて保存
+        Stick m = in.move();               // 矢印 + WASD + 十字キー + 左スティック統合
+        x += m.x * kSpeed * dt;
+        y += m.y * kSpeed * dt;
+        if (in.cancelPressed()) { hud.quit(); }
+        hud.set("hud.x", (int)x);          // assets/scene.html の data-m-text="hud.x" へ
+        hud.set("hud.y", (int)y);
     }
 
-    api->version     = mitiru::module::kCurrentApiVersion;
-    api->on_init     = &{{.ProjectIdent}}::on_init;
-    api->on_update   = &{{.ProjectIdent}}::on_update;
-    api->on_draw     = &{{.ProjectIdent}}::on_draw;
-    api->on_shutdown = &{{.ProjectIdent}}::on_shutdown;
-}
+    void draw(Screen& s)
+    {
+        s.fillScreen(hex(0x14182A));
+        s.fillCircle(x, y, 24.0f, color::Cyan);
+    }
+};
 
-{{.UpperIdent}}_DLL_EXPORT
-void mitiru_module_unload(void* /*memory*/) {}
-
-}  // extern "C"
+MITIRU_GAME({{.ProjectIdent}}Game)

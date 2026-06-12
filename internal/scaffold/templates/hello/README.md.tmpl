@@ -28,17 +28,17 @@ mitiru watch
 
 ## UI は JavaScript ゼロ
 
-`assets/scene.html` は素の HTML/CSS。C++ から `StateWriter` で名前付きの値を push し、
+`assets/scene.html` は素の HTML/CSS。C++ から `hud.set` で名前付きの値を push し、
 HTML 側は `data-m-*` 属性を書くだけで表示が同期します (宣言的バインダ、ADR 0007)。
 JS グルー (`onStateChange` の購読や DOM 操作) は一切書きません。
 
-- `w.set("view.x", ...)` (C++) ↔ `data-m-tpl="X {view.x}"` (HTML)
-- より複雑な例 (リスト・条件・整形) は `clicker` / `shooter` テンプレート参照
+- `hud.set("hud.x", ...)` (C++) ↔ `data-m-text="hud.x"` (HTML)
+- より複雑な例 (リスト・条件・整形) は `shooter` テンプレート参照
 
 ## どう動くのか
 
 - `src/main.cpp` は `<project>.dll` としてビルドされ、エンジン本体ではなく `mitiru_host.exe` にロードされる (ADR 0005)
-- gameplay state は `GameMemory` 構造体に集約。ホットリロード時もポインタが保持されるので、状態をなくさずコードだけ差し替えできる
+- gameplay state はゲーム struct のメンバ変数に集約 (flat POD)。ホットリロード時もホストがポインタを保持するので、状態をなくさずコードだけ差し替えできる。巻き戻し・リプレイも同じ仕組みに乗る
 - DLL ↔ ホスト間は C-only signal flow (InputSnapshot / FrameIntents) しか通らない
 
 ## ライセンス

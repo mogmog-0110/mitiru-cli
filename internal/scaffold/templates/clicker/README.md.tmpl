@@ -1,8 +1,8 @@
 # {{.ProjectName}}
 
-MitiruEngine プロジェクト — クッキークリッカー風テンプレート (v0.4.0+, game-as-DLL)。
+MitiruEngine プロジェクト — クリッカーテンプレート (game-as-DLL)。
 
-クリックでポイントを稼ぎ、施設を買って自動化するループを体験できる最小構成のクリッカーゲームです。
+クリックでカウンタを増やす最小構成。マウス入力 (`in.mousePressed()`) と HUD 連携 (`hud.set` → `data-m-text`) の出発点です。
 
 ## 動かしかた
 
@@ -27,14 +27,14 @@ mitiru watch
 ## どう動くのか
 
 - `src/main.cpp` は `<project>.dll` としてビルドされ、`mitiru_host.exe` にロードされる (ADR 0005)
-- gameplay state は `GameMemory` 構造体に集約。ホットリロード時もポインタが保持される
+- gameplay state はゲーム struct のメンバ変数に集約 (flat POD)。ホットリロード時もホストがポインタを保持する
 - DLL ↔ ホスト間は C-only signal flow (InputSnapshot / FrameIntents) しか通らない
-- HTML のボタンは `data-m-action` でアクション名を dispatch → C++ が `actionEvents` で受ける
+- C++ の `hud.set("hud.count", ...)` を HTML の `data-m-text="hud.count"` が表示する (JS ゼロ)
 
 ## カスタマイズのヒント
 
-- `Building` 配列を増やせば施設を追加できる
-- `kClickRevealAt` / `revealAt` を調整して解放タイミングを変える
+- カウンタを `float` の所持金に変えて自動生成 (`+= rate * dt`) を足すと放置ゲームになる
+- HTML のボタン (`data-m-action="buy"`) → C++ の `in.action("buy")` でショップが作れる
 - `scene.html` の CSS を変えて見た目を変更 (C++ を触らずに可能)
 
 ## ライセンス

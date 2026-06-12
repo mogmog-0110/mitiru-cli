@@ -1,189 +1,25 @@
-// {{.ProjectName}} — クッキークリッカー風の放置ゲーム。
-// ロジックは C++ (このファイル)、見た目とボタンは HTML/CSS (assets/scene.html)。
-//
-// ループ: 押す → ポイントを稼ぐ → 強化や施設を買う → 自動でもっと稼ぐ。
-// 信号 (ADR 0005):
-//   HTML のボタン → dispatch('tap'/'buyClick'/'buy0'..) → C++ が actionEvents で受ける
-//   C++ の状態    → push("view.*") → HTML が表示する
+// {{.ProjectName}} — クリックで数を稼ぐ最小ゲーム。
+// ロジックは C++ (このファイル)、表示は HTML/CSS (assets/scene.html)。JS は書かない。
 
-#include <cmath>
-#include <cstdio>
-#include <cstring>
-#include <string>
+#include <mitiru/module/Game.hpp>
+using namespace mitiru;
 
-#include <mitiru/core/Screen.hpp>
-#include <mitiru/module/ModuleApi.hpp>
-
-namespace {{.ProjectIdent}}
+struct {{.ProjectIdent}}Game
 {
+    int count = 0;
 
-namespace vk { constexpr int Escape = 0x1B; constexpr int R = 0x52; }
+    void update(Input in, Hud hud, float /*dt*/)
+    {
+        if (in.mousePressed()) { ++count; }   // 左クリックした瞬間だけ
+        if (in.cancelPressed()) { hud.quit(); }
+        hud.set("hud.count", count);          // assets/scene.html の data-m-text="hud.count" へ
+    }
 
-// 生産施設の定義。owned 個あると 1 個あたり output ポイント/秒を生む。
-// 買うたびに cost が ×1.15 で上がっていく (クッキークリッカーと同じ複利)。
-// revealAt: 累計獲得がこの値を超えると初めてショップに姿を現す (順次解放)。
-struct Building
-{
-    const char* key;       // dispatch 名 ("buy0" 等) と対応
-    const char* label;     // 表示名
-    double      baseCost;
-    double      output;    // 1 個あたり ポイント/秒
-    double      revealAt;  // 解放しきい値 (累計獲得)
-    int         owned;
+    void draw(Screen& s)
+    {
+        s.fillScreen(hex(0x14182A));
+        s.fillCircle(640.0f, 360.0f, 24.0f + (float)count, color::Yellow);   // 押すほど育つ
+    }
 };
 
-constexpr int kNumBuildings = 3;
-
-// クリック強化が姿を現す累計しきい値。各施設は baseCost の約半分で出る設定。
-constexpr double kClickRevealAt = 8.0;
-
-struct GameMemory
-{
-    double points     = 0.0;
-    double lifetime   = 0.0;   // 累計獲得 (使っても減らない)。解放判定に使う
-    int    clickLevel = 0;     // クリック強化レベル。1 クリックの獲得 = 1 + clickLevel
-    Building buildings[kNumBuildings] = {
-        {"buy0", "ボット",   25.0,   1.0,    13.0, 0},
-        {"buy1", "工場",     200.0,  8.0,   100.0, 0},
-        {"buy2", "発電所",   2500.0, 50.0, 1250.0, 0},
-    };
-    int  tick = 0;
-};
-
-// ── 計算 ────────────────────────────────────────────────────────────────
-static double perClick(const GameMemory& m)   { return 1.0 + m.clickLevel; }
-static double clickCost(const GameMemory& m)   { return 15.0 * std::pow(1.5, m.clickLevel); }
-static double bldgCost(const Building& b)       { return b.baseCost * std::pow(1.15, b.owned); }
-static double perSec(const GameMemory& m)
-{
-    double s = 0.0;
-    for (int i = 0; i < kNumBuildings; ++i) { s += m.buildings[i].output * m.buildings[i].owned; }
-    return s;
-}
-
-// ── 状態 push ヘルパー (C++ → HTML) ────────────────────────────────────────
-static void pushStr(mitiru::module::FrameIntents* it, const char* key, const std::string& v)
-{
-    const int cap = (int)(sizeof(it->statePushes) / sizeof(it->statePushes[0]));
-    if (it->statePushCount >= cap) { return; }
-    auto& s = it->statePushes[it->statePushCount++];
-    std::memset(&s, 0, sizeof(s));
-    std::strncpy(s.key, key, sizeof(s.key) - 1);
-    s.kind = 4; std::strncpy(s.strVal, v.c_str(), sizeof(s.strVal) - 1);
-}
-static std::string num(double v)   // 数値を文字列に (整数部のみ、表記は HTML 側で K/M 化)
-{
-    char buf[32]; std::snprintf(buf, sizeof(buf), "%.0f", v); return buf;
-}
-static const char* boolStr(bool b) { return b ? "true" : "false"; }   // JSON の真偽値
-
-// ── 購入処理 ────────────────────────────────────────────────────────────
-static void buy(GameMemory& m, const char* action)
-{
-    if (std::strcmp(action, "buyClick") == 0)
-    {
-        const double c = clickCost(m);
-        if (m.points >= c) { m.points -= c; ++m.clickLevel; }
-        return;
-    }
-    for (int i = 0; i < kNumBuildings; ++i)
-    {
-        if (std::strcmp(action, m.buildings[i].key) == 0)
-        {
-            const double c = bldgCost(m.buildings[i]);
-            if (m.points >= c) { m.points -= c; ++m.buildings[i].owned; }
-            return;
-        }
-    }
-}
-
-// ── モジュールコールバック ───────────────────────────────────────────────────
-void on_init(void* /*memory*/) {}
-
-void on_update(void* memory, float dt,
-               const mitiru::module::InputSnapshot* input,
-               mitiru::module::FrameIntents* intents)
-{
-    if (memory == nullptr || input == nullptr || intents == nullptr) { return; }
-    auto& mem = *static_cast<GameMemory*>(memory);
-
-    ++mem.tick;
-    if (input->keysJustPressed[vk::Escape]) { intents->requestStop = 1; }
-    if (input->keysJustPressed[vk::R]) { mem = GameMemory{}; }   // リセット
-
-    // 毎秒の自動生成 (放置でも増える)。獲得は points と lifetime の両方に積む。
-    const double inc = perSec(mem) * dt;
-    mem.points += inc; mem.lifetime += inc;
-
-    // HTML のボタンが送ってきたアクションを処理する。
-    for (int i = 0; i < input->actionEventCount; ++i)
-    {
-        const char* name = input->actionEvents[i].name;
-        if (std::strcmp(name, "tap") == 0)
-        {
-            const double pc = perClick(mem);
-            mem.points += pc; mem.lifetime += pc;
-        }
-        else { buy(mem, name); }   // 購入は points のみ減る (lifetime は不変)
-    }
-
-    // points は毎フレーム動くので、6 フレームごと (約 10Hz) に push して表示を更新。
-    if (mem.tick % 6 == 0)
-    {
-        pushStr(intents, "view.points",   num(mem.points));
-        pushStr(intents, "view.persec",   num(perSec(mem)));
-        pushStr(intents, "view.perclick", num(perClick(mem)));
-
-        // view.shop = JSON。各行の cost / owned / afford(買えるか) / seen(解放済みか)。
-        std::string shop = "{\"click\":{\"cost\":" + num(clickCost(mem))
-                         + ",\"afford\":" + boolStr(mem.points >= clickCost(mem))
-                         + ",\"seen\":"   + boolStr(mem.lifetime >= kClickRevealAt) + "}";
-        for (int i = 0; i < kNumBuildings; ++i)
-        {
-            const Building& b = mem.buildings[i];
-            shop += ",\"b" + std::to_string(i) + "\":{\"owned\":" + std::to_string(b.owned)
-                  + ",\"cost\":"   + num(bldgCost(b))
-                  + ",\"afford\":" + boolStr(mem.points >= bldgCost(b))
-                  + ",\"seen\":"   + boolStr(mem.lifetime >= b.revealAt) + "}";
-        }
-        shop += "}";
-        pushStr(intents, "view.shop", shop);
-    }
-}
-
-void on_draw(void* memory, mitiru::Screen* screen)
-{
-    if (memory == nullptr || screen == nullptr) { return; }
-    screen->clear(sgc::Colorf{0.784f, 0.784f, 0.784f, 1.0f});  // Saturn 銀灰 (背景)
-}
-
-void on_shutdown(void* /*memory*/) {}
-
-}  // namespace {{.ProjectIdent}}
-
-extern "C"
-{
-
-#if defined(_WIN32)
-#define {{.UpperIdent}}_DLL_EXPORT __declspec(dllexport)
-#else
-#define {{.UpperIdent}}_DLL_EXPORT __attribute__((visibility("default")))
-#endif
-
-{{.UpperIdent}}_DLL_EXPORT
-void mitiru_module_load(mitiru::module::ModuleApi* api, void** memory)
-{
-    if (api == nullptr || memory == nullptr) { return; }
-    if (*memory == nullptr) { *memory = new {{.ProjectIdent}}::GameMemory{}; }
-
-    api->version     = mitiru::module::kCurrentApiVersion;
-    api->on_init     = &{{.ProjectIdent}}::on_init;
-    api->on_update   = &{{.ProjectIdent}}::on_update;
-    api->on_draw     = &{{.ProjectIdent}}::on_draw;
-    api->on_shutdown = &{{.ProjectIdent}}::on_shutdown;
-}
-
-{{.UpperIdent}}_DLL_EXPORT
-void mitiru_module_unload(void* /*memory*/) {}
-
-}  // extern "C"
+MITIRU_GAME({{.ProjectIdent}}Game)
