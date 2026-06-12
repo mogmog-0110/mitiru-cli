@@ -1,7 +1,9 @@
 package commands
 
 import (
+	"bytes"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -11,6 +13,8 @@ import (
 	"time"
 
 	"github.com/fsnotify/fsnotify"
+	"github.com/mogmog-0110/mitiru-cli/internal/build"
+	"github.com/mogmog-0110/mitiru-cli/internal/config"
 	"github.com/spf13/cobra"
 )
 
@@ -68,6 +72,13 @@ func runWatch() error {
 		return fmt.Errorf("watch: getwd: %w", err)
 	}
 
+	// エラーファイル protocol 用に project root を先に確定する (build 失敗時でも
+	// <root>/build/.mitiru_build_error.txt の置き場所が要る)。
+	_, projectRoot, err := config.FindManifest(cwd)
+	if err != nil {
+		return err
+	}
+
 	watcher, err := fsnotify.NewWatcher()
 	if err != nil {
 		return fmt.Errorf("watch: create fsnotify watcher: %w", err)
@@ -98,7 +109,7 @@ func runWatch() error {
 	fmt.Println("  ↳ assets/**             →  engine hot-reload (no rebuild)")
 	fmt.Println("  Ctrl-C to stop")
 
-	state := newGameState()
+	state := newGameState(projectRoot)
 	defer state.stop()
 
 	// 初回 build + host を --watch で launch する。以降の DLL swap は host が内部で
@@ -192,14 +203,33 @@ func shouldTrigger(path string, op fsnotify.Op) bool {
 // gameState は現在実行中のゲーム (と任意の inspector child) を保持する。
 // 各 rebuild は新 process を spawn する前に旧 process を kill する。
 type gameState struct {
-	mu       sync.Mutex
-	game     *exec.Cmd
-	insp     *exec.Cmd
-	exited   chan struct{} // host(ゲーム) process が終了したら close される
-	exitOnce sync.Once
+	mu          sync.Mutex
+	game        *exec.Cmd
+	insp        *exec.Cmd
+	exited      chan struct{} // host(ゲーム) process が終了したら close される
+	exitOnce    sync.Once
+	projectRoot string // エラーファイル (build/.mitiru_build_error.txt) の anchor
 }
 
-func newGameState() *gameState { return &gameState{exited: make(chan struct{})} }
+func newGameState(projectRoot string) *gameState {
+	return &gameState{exited: make(chan struct{}), projectRoot: projectRoot}
+}
+
+// buildCapturingErrors は build 出力を console + buffer に tee し、失敗時は
+// エラー行を抽出してエラーファイルへ書く / 成功時は削除する。host (engine) が
+// このファイルの存在をポーリングしてゲーム画面にエラー帯を出し入れする。
+func (s *gameState) buildCapturingErrors() (*buildResult, error) {
+	var buf bytes.Buffer
+	res, err := runBuildTo(io.MultiWriter(os.Stdout, &buf), io.MultiWriter(os.Stderr, &buf))
+	if err != nil {
+		if werr := build.WriteBuildErrorFile(s.projectRoot, buf.String()); werr != nil {
+			fmt.Fprintf(os.Stderr, "watch: %v\n", werr)
+		}
+		return res, err
+	}
+	build.ClearBuildErrorFile(s.projectRoot)
+	return res, nil
+}
 
 // markExited は host の終了を一度だけ通知する。
 func (s *gameState) markExited() { s.exitOnce.Do(func() { close(s.exited) }) }
@@ -223,7 +253,7 @@ func (s *gameState) stop() {
 // する。後続の rebuild は host 自身の DLL mtime polling に依存するため、host process
 // は `mitiru watch` の生存期間中ちょうど 1 回だけ launch される。
 func (s *gameState) firstBuildAndLaunch() error {
-	result, err := runBuild()
+	result, err := s.buildCapturingErrors()
 	if err != nil {
 		return err
 	}
@@ -234,6 +264,9 @@ func (s *gameState) firstBuildAndLaunch() error {
 
 	// mitiru.toml の [window] サイズ / [font] atlas も host へ渡す (run と同じ)。
 	watchArgs := append([]string{art.DllRel, "--watch"}, tomlHostArgs()...)
+	// リビルド失敗時のエラー帯: host にエラーファイルの場所を教える。engine が
+	// 存在をポーリングし、ファイルがある間だけゲーム画面上部に帯を描く。
+	watchArgs = append(watchArgs, "--error-file", build.BuildErrorFilePath(s.projectRoot))
 	cmd := exec.Command(art.HostExePath, watchArgs...)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
@@ -268,7 +301,8 @@ func (s *gameState) firstBuildAndLaunch() error {
 
 // rebuildOnly は build を再実行する。host (firstBuildAndLaunch で 1 回 launch 済み)
 // が DLL mtime を poll し in-place で reload する — gameplay state は swap を生き延びる。
+// 失敗時はエラーファイルが書かれ、ゲーム画面に帯が出る (成功で消える)。
 func (s *gameState) rebuildOnly() error {
-	_, err := runBuild()
+	_, err := s.buildCapturingErrors()
 	return err
 }

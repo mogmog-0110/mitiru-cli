@@ -2,6 +2,7 @@ package commands
 
 import (
 	"fmt"
+	"io"
 	"os"
 
 	"github.com/mogmog-0110/mitiru-cli/internal/build"
@@ -60,6 +61,13 @@ type buildResult struct {
 }
 
 func runBuild() (*buildResult, error) {
+	return runBuildTo(os.Stdout, os.Stderr)
+}
+
+// runBuildTo は build の進捗 / cmake 出力を任意の writer に流す。watch は
+// io.MultiWriter で console + buffer に tee し、失敗時に buffer からエラー行を
+// 抽出してエラーファイルへ書く (ビルドエラーのゲーム画面表示)。
+func runBuildTo(stdout, stderr io.Writer) (*buildResult, error) {
 	cwd, err := os.Getwd()
 	if err != nil {
 		return nil, fmt.Errorf("getwd: %w", err)
@@ -75,7 +83,7 @@ func runBuild() (*buildResult, error) {
 		return nil, err
 	}
 
-	engineRoot, err := engine.EnsureSource(cfg.EngineTag(), os.Stdout)
+	engineRoot, err := engine.EnsureSource(cfg.EngineTag(), stdout)
 	if err != nil {
 		return nil, fmt.Errorf("fetch engine source: %w", err)
 	}
@@ -89,8 +97,8 @@ func runBuild() (*buildResult, error) {
 		Generator:    buildGenerator,
 		ExtraDefines: buildExtraDefines, // dist が GUI/no-cef フラグを注入 (通常は空)
 		OutDir:       buildOutDir,       // dist は別 out dir (通常は空 = build/out)
-		Stdout:       os.Stdout,
-		Stderr:       os.Stderr,
+		Stdout:       stdout,
+		Stderr:       stderr,
 	}
 
 	artifacts, err := build.Run(opts)
@@ -98,7 +106,7 @@ func runBuild() (*buildResult, error) {
 		return nil, err
 	}
 
-	fmt.Printf("Build OK: %s\n", artifacts.DllPath)
+	fmt.Fprintf(stdout, "Build OK: %s\n", artifacts.DllPath)
 	return &buildResult{
 		ProjectRoot: projectRoot,
 		Config:      cfg,

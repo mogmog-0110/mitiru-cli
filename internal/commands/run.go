@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/mogmog-0110/mitiru-cli/internal/build"
 	"github.com/mogmog-0110/mitiru-cli/internal/config"
 	"github.com/mogmog-0110/mitiru-cli/internal/engine"
 	"github.com/spf13/cobra"
@@ -120,10 +121,17 @@ func runRun() error {
 		return err
 	}
 
+	// build 成功 → 過去の watch セッションが残した stale なエラーファイルを掃除する
+	// (残っていると起動直後のゲーム画面に古いエラー帯が出てしまう)。
+	build.ClearBuildErrorFile(result.ProjectRoot)
+
 	art := result.Artifacts
 	fmt.Printf("\nRunning %s %s\n", filepath.Base(art.HostExePath), art.DllRel)
 
 	hostArgs := []string{art.DllRel}
+	// 並走中の `mitiru watch` 等がエラーファイルを書いたら帯を出せるよう、
+	// run でも host に場所を渡しておく (ファイルが無い間は完全 no-op)。
+	hostArgs = append(hostArgs, "--error-file", build.BuildErrorFilePath(result.ProjectRoot))
 	if runRecordFile != "" {
 		abs, err := filepath.Abs(runRecordFile)
 		if err != nil {
