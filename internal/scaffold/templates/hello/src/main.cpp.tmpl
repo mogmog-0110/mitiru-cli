@@ -1,30 +1,57 @@
-// {{.ProjectName}} — ゲームは「状態の struct + update + draw」だけ。
-// 状態 (メンバ変数) は flat POD なら、ホットリロード・巻き戻し・リプレイが
-// 何もしなくても全部乗る (mitiru watch で kSpeed を書き換えて保存してみて)。
+// {{.ProjectName}} — MitiruEngine のショーケース。
+// ゲームは「状態の struct + update + draw」だけ。描画は C++、画面(HUD)は HTML/CSS。
+// mitiru watch 中に数値や色を書き換えて保存すると、止めずにその場で反映されます。
 
-#include <mitiru/module/Game.hpp>
+#include <mitiru.hpp>
+#include <algorithm>   // std::clamp
+#include <cmath>       // std::sin
 using namespace mitiru;
 
 struct {{.ProjectIdent}}Game
 {
-    float x = 640.0f;
-    float y = 360.0f;
+    float x = 640.0f, y = 380.0f;   // キャラの位置
+    int   taps = 0;                  // HTML ボタン / クリックの回数
+    float time = 0.0f;               // 経過秒（アニメ用）
 
     void update(Input in, Hud hud, float dt)
     {
-        constexpr float kSpeed = 320.0f;   // ★ watch 中にここを変えて保存
-        Stick m = in.move();               // 矢印 + WASD + 十字キー + 左スティック統合
-        x += m.x * kSpeed * dt;
-        y += m.y * kSpeed * dt;
-        if (in.cancelPressed()) { hud.quit(); }
-        hud.set("hud.x", (int)x);          // assets/scene.html の data-m-text="hud.x" へ
+        time += dt;
+
+        // 矢印 / WASD / 左スティックで動かす（in.move() が全部まとめて返す）
+        constexpr float kSpeed = 460.0f;   // ★ watch 中にここを変えて保存してみる
+        Stick m = in.move();
+        x = std::clamp(x + m.x * kSpeed * dt, 60.0f, 1220.0f);
+        y = std::clamp(y + m.y * kSpeed * dt, 90.0f, 660.0f);
+
+        // HTML のボタン (data-m-action="tap") か、左クリックで +1
+        if (in.action("tap") || in.mousePressed()) { ++taps; }
+        if (in.cancelPressed()) { hud.quit(); }   // ESC で終了
+
+        // HTML の HUD へ値を送る（assets/scene.html の data-m-text が受け取る）
+        hud.set("hud.x", (int)x);
         hud.set("hud.y", (int)y);
+        hud.set("hud.taps", taps);
     }
 
     void draw(Screen& s)
     {
-        s.fillScreen(hex(0x14182A));
-        s.fillCircle(x, y, 24.0f, color::Cyan);
+        // 背景：上→下のグラデーション
+        s.drawGradientRect({0, 0, 1280, 720}, hex(0x1B2140), hex(0x3A2150));
+
+        // 脈動する輪（経過時間で大きさが揺れる）
+        float pulse = 52.0f + 14.0f * (float)std::sin(time * 2.2);
+        s.fillCircle(x, y, pulse, hexa(0x46E6F024));
+
+        // キャラ（円 + 目で顔をつくる）
+        s.fillCircle(x, y, 40.0f, color::Cyan);
+        s.fillCircle(x - 13.0f, y - 6.0f, 7.0f, color::White);
+        s.fillCircle(x + 13.0f, y - 6.0f, 7.0f, color::White);
+        s.fillCircle(x - 13.0f, y - 6.0f, 3.5f, hex(0x14182A));
+        s.fillCircle(x + 13.0f, y - 6.0f, 3.5f, hex(0x14182A));
+
+        // タイトル文字（draw から直接描く）
+        s.text("MitiruEngine", 40.0f, 36.0f, color::White, 30);
+        s.text("C++ で描く ＋ HTML / CSS で UI", 40.0f, 76.0f, hex(0x9AA6C4), 18);
     }
 };
 

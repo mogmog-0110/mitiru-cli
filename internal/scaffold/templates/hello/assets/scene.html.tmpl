@@ -4,54 +4,54 @@
 <meta charset="utf-8">
 <title>{{.ProjectName}}</title>
 <style>
-  /* HUD は C++ 描画の上に重なる透明オーバーレイ。背景を透明にしておくと
-     draw() で描いたもの (ネイティブ描画層) が透けて見える。
-
-     ここは素の HTML/CSS だけ — JavaScript は書かない。C++ が hud.set で
-     名前付きの値を push し (src/main.cpp の hud.set("hud.x", ...))、
-     data-m-* 属性の宣言的バインダが DOM を同期する。リスト・条件分岐・
-     書式などの応用は `clicker` / `shooter` テンプレートと ADR 0007 に。 */
+  /* 画面(HUD)は HTML/CSS で書きます。C++ が hud.set した値を data-m-text で受け取り、
+     ボタンは data-m-action でクリックを C++ (in.action) へ送る。JavaScript は書きません。
+     背景を透明にすると、draw() で描いた C++ の絵が下に透けて見えます。 */
   html, body {
-    margin: 0;
-    height: 100%;
-    overflow: hidden;
+    margin: 0; height: 100%; overflow: hidden;
     background: transparent;          /* C++ 描画層を透かす */
-    pointer-events: none;             /* クリックはゲームへ素通し */
+    pointer-events: none;             /* クリックはゲームへ素通し（ボタンだけ拾う） */
+    user-select: none;
     font-family: "Noto Sans JP", "Hiragino Sans", "Yu Gothic", system-ui, sans-serif;
-    color: #fff;
+    color: #eaf0ff;
   }
-  .hud {
-    position: absolute;
-    top: 16px;
-    left: 16px;
-    padding: 10px 14px;
-    background: rgba(10, 12, 20, 0.55);
-    border-radius: 8px;
-    font-size: 18px;
-    line-height: 1.5;
-    font-variant-numeric: tabular-nums;
+  .panel {
+    position: absolute; top: 22px; right: 24px; min-width: 156px;
+    background: linear-gradient(135deg, rgba(34,42,78,.86), rgba(60,36,84,.86));
+    border: 1px solid rgba(255,255,255,.18);
+    border-radius: 14px; padding: 14px 18px;
+    box-shadow: 0 8px 26px rgba(0,0,0,.38);
   }
+  .row { display: flex; justify-content: space-between; gap: 18px;
+    font-size: 15px; line-height: 1.9; font-variant-numeric: tabular-nums; }
+  .row .k { color: #9aa6c4; }
+  .row .v { font-weight: 700; }
+  .btn {
+    pointer-events: auto;             /* ボタンはクリックを受け取る */
+    margin-top: 10px; width: 100%; cursor: pointer;
+    font: 700 15px inherit; color: #06222a;
+    background: #46e6f0; border: 0; border-radius: 9px; padding: 9px 0;
+    box-shadow: 0 3px 12px rgba(70,230,240,.35);
+  }
+  .btn:active { transform: translateY(1px); }
   .hint {
-    position: absolute;
-    left: 16px;
-    bottom: 14px;
-    font-size: 15px;
-    opacity: 0.7;
-    text-shadow: 0 1px 4px rgba(0, 0, 0, 0.7);
+    position: absolute; left: 20px; bottom: 16px; font-size: 14px;
+    color: #aab4d0; text-shadow: 0 1px 4px rgba(0,0,0,.6);
   }
 </style>
 </head>
 <body>
-  <!-- data-m-text は C++ の hud.set("hud.x", ...) の値をそのまま表示する。
-       すべて C++ 側から駆動される — 自分で書く <script> は無い。 -->
-  <div class="hud">
-    位置  X <span data-m-text="hud.x">640</span>   Y <span data-m-text="hud.y">360</span>
+  <!-- data-m-text は C++ の hud.set した値を表示。data-m-action はクリックを C++ へ送る。 -->
+  <div class="panel">
+    <div class="row"><span class="k">X</span><span class="v" data-m-text="hud.x">640</span></div>
+    <div class="row"><span class="k">Y</span><span class="v" data-m-text="hud.y">380</span></div>
+    <div class="row"><span class="k">TAPS</span><span class="v" data-m-text="hud.taps">0</span></div>
+    <button class="btn" data-m-action="tap">ふやす</button>
   </div>
 
-  <div class="hint">矢印 / WASD / 左スティックで移動 · ESC で終了 · この HUD は JavaScript ゼロ (data-m-*)</div>
+  <div class="hint">矢印 / WASD で移動 · クリックかボタンで TAPS +1 · ESC で終了 · この画面は HTML / CSS（JavaScript ゼロ）</div>
 
-  <!-- バインダ本体。`mitiru build` が mitiru_runtime/* をこのファイルの隣へ
-       自動コピーする — commit も編集も不要。 -->
+  <!-- バインダ本体。mitiru build が mitiru_runtime/* をこの隣へ自動コピーします。 -->
   <script src="mitiru_runtime/mitiru_cef_state.js"></script>
   <script src="mitiru_runtime/mitiru_bind.js"></script>
 </body>
