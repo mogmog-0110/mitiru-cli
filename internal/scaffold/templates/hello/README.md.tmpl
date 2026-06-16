@@ -20,8 +20,9 @@ mitiru watch
 
 ## 構成
 
-- `src/main.cpp` — ゲームコード (C++、DLL としてビルドされる)
-- `assets/scene.html` — UI (HTML/CSS のみ。JavaScript は書かない)
+- `src/main.cpp` — ゲームコード (C++、DLL としてビルドされる)。画像・図形・アニメ・マウス入力を draw で描く
+- `assets/scene.html` — 画面 UI (HTML/CSS のみ。タイトル・説明・ボタン/チェック/スライダー)
+- `assets/sprites/wave.png` — 画像スプライト (北斎「神奈川沖浪裏」、パブリックドメイン)。自分の絵に差し替え可
 - `mitiru.toml` — プロジェクト設定 (ウィンドウサイズ・使用エンジン版など)
 
 `CMakeLists.txt` を編集する必要はありません。`mitiru` CLI が裏で生成します。
@@ -32,8 +33,9 @@ mitiru watch
 HTML 側は `data-m-*` 属性を書くだけで表示が同期します (宣言的バインダ、ADR 0007)。
 JS グルー (`onStateChange` の購読や DOM 操作) は一切書きません。
 
-- `hud.set("hud.x", ...)` (C++) ↔ `data-m-text="hud.x"` (HTML)
-- より複雑な例 (リスト・条件・整形) は `shooter` テンプレート参照
+- `hud.set("view.count", ...)` (C++) ↔ `data-m-text="view.count"` (HTML)
+- ボタン/チェック/スライダーの値は `data-m-action` で C++ の `in.action(...)` に届く (HTML→C++→HTML の往復)
+- 属性の一覧と作例は [画面を作る](https://mogmog-0110.github.io/MitiruEngine/ui.html)
 
 ## どう動くのか
 

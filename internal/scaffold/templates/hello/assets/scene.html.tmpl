@@ -4,52 +4,80 @@
 <meta charset="utf-8">
 <title>{{.ProjectName}}</title>
 <style>
-  /* 画面(HUD)は HTML/CSS で書きます。C++ が hud.set した値を data-m-text で受け取り、
-     ボタンは data-m-action でクリックを C++ (in.action) へ送る。JavaScript は書きません。
-     背景を透明にすると、draw() で描いた C++ の絵が下に透けて見えます。 */
+  /* 画面(タイトル・説明・操作 UI)は HTML/CSS。C++ が hud.set した値を data-m-text で受け、
+     ボタン/チェック/スライダーは data-m-action でその値を C++ (in.action) へ送る。JS は書かない。
+     背景は透明 — 下に C++ の draw() の絵(画像・図形・円)が透ける。 */
   html, body {
     margin: 0; height: 100%; overflow: hidden;
-    background: transparent;          /* C++ 描画層を透かす */
-    pointer-events: none;             /* クリックはゲームへ素通し（ボタンだけ拾う） */
+    background: transparent;
+    pointer-events: none;             /* クリックはゲームへ素通し */
     user-select: none;
-    font-family: "Noto Sans JP", "Hiragino Sans", "Yu Gothic", system-ui, sans-serif;
-    color: #eaf0ff;
+    font-family: "Segoe UI", "Noto Sans JP", "Hiragino Sans", "Yu Gothic", system-ui, sans-serif;
+    color: #1c2433;
   }
+  input, button, label { pointer-events: auto; }   /* UI 部品だけクリックを拾う */
+
+  /* タイトルと説明 (画像の下) */
+  .title {
+    position: absolute; left: 44px; top: 408px;
+    font-size: 46px; font-weight: 800; letter-spacing: .01em;
+    background: linear-gradient(90deg, #2f6df0, #5b3ce0);
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+  }
+  .lead {
+    position: absolute; left: 46px; top: 474px; max-width: 520px;
+    font-size: 16px; line-height: 1.85; color: #44506a;
+  }
+  .lead b { color: #1c2433; }
+
+  /* 操作パネル (右下) */
   .panel {
-    position: absolute; top: 22px; right: 24px; min-width: 156px;
-    background: linear-gradient(135deg, rgba(34,42,78,.86), rgba(60,36,84,.86));
-    border: 1px solid rgba(255,255,255,.18);
-    border-radius: 14px; padding: 14px 18px;
-    box-shadow: 0 8px 26px rgba(0,0,0,.38);
+    position: absolute; right: 40px; bottom: 56px; width: 300px;
+    background: #ffffff; border: 1px solid #d7deea; border-radius: 14px;
+    padding: 16px 18px; box-shadow: 0 10px 30px rgba(40,60,100,.16);
   }
-  .row { display: flex; justify-content: space-between; gap: 18px;
-    font-size: 15px; line-height: 1.9; font-variant-numeric: tabular-nums; }
-  .row .k { color: #9aa6c4; }
-  .row .v { font-weight: 700; }
+  .panel .row { display: flex; align-items: center; gap: 12px; margin: 6px 0; }
   .btn {
-    pointer-events: auto;             /* ボタンはクリックを受け取る */
-    margin-top: 10px; width: 100%; cursor: pointer;
-    font: 700 15px inherit; color: #06222a;
-    background: #46e6f0; border: 0; border-radius: 9px; padding: 9px 0;
-    box-shadow: 0 3px 12px rgba(70,230,240,.35);
+    cursor: pointer; font: 700 15px inherit; color: #fff;
+    background: linear-gradient(180deg, #4a86ff, #2f6df0);
+    border: 0; border-radius: 9px; padding: 9px 16px;
+    box-shadow: 0 3px 10px rgba(47,109,240,.32);
   }
   .btn:active { transform: translateY(1px); }
+  .check { font-size: 15px; font-weight: 600; color: #344; cursor: pointer;
+           display: flex; align-items: center; gap: 6px; }
+  .check input { width: 17px; height: 17px; accent-color: #2f6df0; cursor: pointer; }
+  .slider { margin-top: 4px; }
+  .slider span.k { font-size: 14px; color: #6b7790; min-width: 44px; }
+  .slider input[type=range] { flex: 1; accent-color: #2f6df0; }
+  .slider span.v { font-variant-numeric: tabular-nums; font-weight: 700; min-width: 38px; text-align: right; }
+
   .hint {
-    position: absolute; left: 20px; bottom: 16px; font-size: 14px;
-    color: #aab4d0; text-shadow: 0 1px 4px rgba(0,0,0,.6);
+    position: absolute; left: 46px; bottom: 18px; font-size: 13px; color: #7a86a0;
   }
 </style>
 </head>
 <body>
-  <!-- data-m-text は C++ の hud.set した値を表示。data-m-action はクリックを C++ へ送る。 -->
+  <!-- C++ が draw() で描く絵の上に、この HTML/CSS が重なる -->
+  <div class="title">Hello, MitiruEngine!</div>
+  <p class="lead"><b>C++</b> で絵を描き、<b>HTML / CSS</b> で画面(UI)を作るフレームワークです。
+     左の浮世絵・図形・追従する赤い円は C++、右下のボタン・チェック・スライダーは HTML。
+     つなぎの JavaScript は 1 行も書いていません。</p>
+
+  <!-- 操作 UI: 値は HTML→C++→HTML と往復する -->
   <div class="panel">
-    <div class="row"><span class="k">X</span><span class="v" data-m-text="hud.x">640</span></div>
-    <div class="row"><span class="k">Y</span><span class="v" data-m-text="hud.y">380</span></div>
-    <div class="row"><span class="k">TAPS</span><span class="v" data-m-text="hud.taps">0</span></div>
-    <button class="btn" data-m-action="tap">ふやす</button>
+    <div class="row">
+      <button class="btn" data-m-action="count">count: <span data-m-text="view.count">0</span></button>
+      <label class="check"><input type="checkbox" data-m-action="lock"> Lock</label>
+    </div>
+    <div class="row slider">
+      <span class="k">speed</span>
+      <input type="range" min="0" max="600" value="240" data-m-action="speed">
+      <span class="v" data-m-text="view.speed">240</span>
+    </div>
   </div>
 
-  <div class="hint">矢印 / WASD で移動 · クリックかボタンで TAPS +1 · ESC で終了 · この画面は HTML / CSS（JavaScript ゼロ）</div>
+  <div class="hint">マウスで赤い円が追従 · Lock で回転停止 · スライダーで回転速度 · ESC で終了</div>
 
   <!-- バインダ本体。mitiru build が mitiru_runtime/* をこの隣へ自動コピーします。 -->
   <script src="mitiru_runtime/mitiru_cef_state.js"></script>

@@ -1,57 +1,98 @@
 // {{.ProjectName}} — MitiruEngine のショーケース。
-// ゲームは「状態の struct + update + draw」だけ。描画は C++、画面(HUD)は HTML/CSS。
+// 1 画面でいろいろ試せます: 画像スプライト・図形・アニメ・マウス入力、
+// そして HTML / CSS の UI (ボタン・チェック・スライダー)。
+//
+// ゲームは「状態の struct + update + draw」だけ。絵は C++ (draw)、画面 UI は
+// HTML / CSS (assets/scene.html)。値は HTML→C++→HTML と往復します。
 // mitiru watch 中に数値や色を書き換えて保存すると、止めずにその場で反映されます。
 
 #include <mitiru.hpp>
-#include <algorithm>   // std::clamp
-#include <cmath>       // std::sin
+#include <algorithm>   // std::min
+#include <cmath>       // std::sin, std::cos, std::atan2
+#include <cstdlib>     // std::atof
 using namespace mitiru;
+
+namespace {
+
+// 線 + 三角の頭で矢印を 1 本描く。
+void drawArrow(Screen& s, float x0, float y0, float x1, float y1, Color c, float th)
+{
+    s.line(x0, y0, x1, y1, c, th);
+    const float a  = std::atan2(y1 - y0, x1 - x0);
+    const float hl = 24.0f;   // 頭の長さ
+    const float hw = 0.42f;   // 頭の広がり(rad)
+    s.drawTriangle(
+        Vec2{x1, y1},
+        Vec2{x1 - std::cos(a - hw) * hl, y1 - std::sin(a - hw) * hl},
+        Vec2{x1 - std::cos(a + hw) * hl, y1 - std::sin(a + hw) * hl},
+        c);
+}
+
+}  // namespace
 
 struct {{.ProjectIdent}}Game
 {
-    float x = 640.0f, y = 380.0f;   // キャラの位置
-    int   taps = 0;                  // HTML ボタン / クリックの回数
-    float time = 0.0f;               // 経過秒（アニメ用）
+    float t      = 0.0f;     // 経過秒
+    int   count  = 0;        // count ボタンの回数
+    bool  locked = false;    // Lock チェックの状態
+    float speed  = 240.0f;   // speed スライダーの値 (0..600)
+    float orbit  = 0.0f;     // 周回点の角度
+    float curX   = 980.0f;   // マウス追従の赤い円(イージング後)
+    float curY   = 360.0f;
 
     void update(Input in, Hud hud, float dt)
     {
-        time += dt;
+        t += dt;
 
-        // 矢印 / WASD / 左スティックで動かす（in.move() が全部まとめて返す）
-        constexpr float kSpeed = 460.0f;   // ★ watch 中にここを変えて保存してみる
-        Stick m = in.move();
-        x = std::clamp(x + m.x * kSpeed * dt, 60.0f, 1220.0f);
-        y = std::clamp(y + m.y * kSpeed * dt, 90.0f, 660.0f);
-
-        // HTML のボタン (data-m-action="tap") か、左クリックで +1
-        if (in.action("tap") || in.mousePressed()) { ++taps; }
+        // ── HTML の UI から C++ へ (data-m-action → in.action) ──
+        if (in.action("count")) { ++count; }
+        if (in.action("lock"))  { const char* p = in.actionPayload("lock");  locked = (p && p[0] == 't'); } // true/false
+        if (in.action("speed")) { const char* p = in.actionPayload("speed"); if (p) { speed = (float)std::atof(p); } }
         if (in.cancelPressed()) { hud.quit(); }   // ESC で終了
 
-        // HTML の HUD へ値を送る（assets/scene.html の data-m-text が受け取る）
-        hud.set("hud.x", (int)x);
-        hud.set("hud.y", (int)y);
-        hud.set("hud.taps", taps);
+        // 周回点は Lock 中は止まり、speed で回転が速くなる
+        if (!locked) { orbit += speed * 0.012f * dt; }
+
+        // 赤い円はマウスへなめらかに追従する
+        const float ease = std::min(1.0f, dt * 7.0f);
+        curX += (in.mouseX() - curX) * ease;
+        curY += (in.mouseY() - curY) * ease;
+
+        // ── C++ から HTML へ (hud.set → data-m-text) ──
+        hud.set("view.count", count);
+        hud.set("view.speed", (int)speed);
+        hud.set("view.locked", locked);
     }
 
     void draw(Screen& s)
     {
-        // 背景：上→下のグラデーション
-        s.drawGradientRect({0, 0, 1280, 720}, hex(0x1B2140), hex(0x3A2150));
+        s.fillScreen(hex(0xEEF1F6));   // 明るい背景
 
-        // 脈動する輪（経過時間で大きさが揺れる）
-        float pulse = 52.0f + 14.0f * (float)std::sin(time * 2.2);
-        s.fillCircle(x, y, pulse, hexa(0x46E6F024));
+        // ① 画像スプライト: 北斎「神奈川沖浪裏」(パブリックドメイン)。
+        //    assets/sprites/wave.png を貼る。自分の絵に差し替えても OK。
+        constexpr float kImgW = 512.0f;                       // 描画幅
+        const float     kImgH = kImgW * 524.0f / 760.0f;      // wave.png の比 (760x524)
+        s.drawRect({34.0f, 34.0f, kImgW + 16.0f, kImgH + 16.0f}, color::White);   // 白マット
+        s.sprite("wave", 42.0f, 42.0f, kImgW / 760.0f);                           // 原寸 760px を縮小
+        s.drawRectFrame({34.0f, 34.0f, kImgW + 16.0f, kImgH + 16.0f}, hex(0xBFCAD9), 2.0f);
 
-        // キャラ（円 + 目で顔をつくる）
-        s.fillCircle(x, y, 40.0f, color::Cyan);
-        s.fillCircle(x - 13.0f, y - 6.0f, 7.0f, color::White);
-        s.fillCircle(x + 13.0f, y - 6.0f, 7.0f, color::White);
-        s.fillCircle(x - 13.0f, y - 6.0f, 3.5f, hex(0x14182A));
-        s.fillCircle(x + 13.0f, y - 6.0f, 3.5f, hex(0x14182A));
+        // ② 図形: 白い四角・青い角丸・緑の円
+        s.drawRect({600.0f, 40.0f, 100.0f, 100.0f}, color::White);
+        s.drawRectFrame({600.0f, 40.0f, 100.0f, 100.0f}, hex(0xBFCAD9), 2.0f);
+        s.drawRoundedRect({740.0f, 40.0f, 96.0f, 182.0f}, hex(0x1E73B0), 18.0f);
+        s.fillCircle(650.0f, 250.0f, 46.0f, hex(0x2E9E6B));
 
-        // タイトル文字（draw から直接描く）
-        s.text("MitiruEngine", 40.0f, 36.0f, color::White, 30);
-        s.text("C++ で描く ＋ HTML / CSS で UI", 40.0f, 76.0f, hex(0x9AA6C4), 18);
+        // ③ 矢印 (灰)
+        drawArrow(s, 600.0f, 348.0f, 870.0f, 402.0f, hex(0x8893A6), 6.0f);
+
+        // ④ 緑の円を周回するアクセント点 (speed / Lock のデモ)。Lock 中は赤く止まる。
+        const float ox = 650.0f + std::cos(orbit) * 72.0f;
+        const float oy = 250.0f + std::sin(orbit) * 72.0f;
+        s.fillCircle(ox, oy, 15.0f, locked ? hex(0xC0463C) : hex(0xF0A12E));
+
+        // ⑤ マウスに追従する赤い円
+        s.fillCircle(curX, curY, 30.0f, hexa(0xE0503CB0));
+        s.drawCircleFrame({curX, curY}, 30.0f, hexa(0xFFFFFFB0), 2.0f);
     }
 };
 
