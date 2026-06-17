@@ -91,13 +91,14 @@ struct {{.ProjectIdent}}Game
         if (in.action("count")) { ++count; }
         if (in.action("lock"))  { const char* p = in.actionPayload("lock");  locked = (p && p[0] == 't'); }
         if (in.action("speed")) { const char* p = in.actionPayload("speed"); if (p) { speed = (float)std::atof(p); } }
-        if (in.action("pop"))   // 「ポン！」ボタン: 音 + ボールを跳ね上げ + パーティクル
+        if (in.action("pop"))   // 「ポン！」ボタン: 音 + ボールを上から落とし直す
         {
             hud.play("pop");
             for (int i = 0; i < kBalls; ++i)
             {
-                balls[i].vy = -360.0f - random() * 140.0f;
-                burst(balls[i].x, balls[i].y, balls[i].col);
+                balls[i].y  = kBoxT + balls[i].r + random() * 50.0f;   // 上へ持ち上げて
+                balls[i].vy = 0.0f;                                     // 落とす
+                balls[i].vx = (random() - 0.5f) * 180.0f;
             }
         }
         if (in.cancelPressed()) { hud.quit(); }   // ESC で終了
@@ -112,7 +113,11 @@ struct {{.ProjectIdent}}Game
                 b.vy += g * dt;
                 b.x  += b.vx * dt;
                 b.y  += b.vy * dt;
-                if (b.y + b.r > kBoxFloor) { b.y = kBoxFloor - b.r; b.vy = -b.vy * 0.82f; }
+                if (b.y + b.r > kBoxFloor)
+                {
+                    if (b.vy > 160.0f) { burst(b.x, kBoxFloor - b.r, b.col); } // 着地で粒が弾ける
+                    b.y = kBoxFloor - b.r; b.vy = -b.vy * 0.82f;
+                }
                 if (b.y - b.r < kBoxT)     { b.y = kBoxT + b.r;     b.vy = -b.vy * 0.6f; }
                 if (b.x - b.r < kBoxL)     { b.x = kBoxL + b.r;     b.vx = -b.vx * 0.9f; }
                 if (b.x + b.r > kBoxR)     { b.x = kBoxR - b.r;     b.vx = -b.vx * 0.9f; }
@@ -162,8 +167,6 @@ struct {{.ProjectIdent}}Game
         {
             const Ball& b = balls[i];
             s.fillCircle(b.x, b.y, b.r, hexa((b.col << 8) | 0xFF));
-            s.fillCircle(b.x - b.r * 0.3f, b.y - b.r * 0.3f, b.r * 0.28f,
-                         hexa(0xFFFFFF66));   // ハイライト
         }
 
         // ④ パーティクル (ポンで弾ける。寿命で薄くなる)。
