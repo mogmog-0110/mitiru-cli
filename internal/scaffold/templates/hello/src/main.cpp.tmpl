@@ -1,32 +1,28 @@
 // {{.ProjectName}} — MitiruEngine のショーケース。
-// 1 画面でいろいろ試せます: 画像スプライト・図形・アニメ・マウス入力、
-// そして HTML / CSS の UI (ボタン・チェック・スライダー)。
+// 1 画面でいろいろ試せます: 画像スプライト・図形・物理(跳ねるボール)・パーティクル・
+// マウス入力、そして HTML / CSS の UI (ボタン・チェック・スライダー)。
 //
 // ゲームは「状態の struct + update + draw」だけ。絵は C++ (draw)、画面 UI は
 // HTML / CSS (assets/scene.html)。値は HTML→C++→HTML と往復します。
 // mitiru watch 中に数値や色を書き換えて保存すると、止めずにその場で反映されます。
 
 #include <mitiru.hpp>
-#include <algorithm>   // std::min
-#include <cmath>       // std::sin, std::cos, std::atan2
+#include <algorithm>   // std::min, std::clamp
+#include <cmath>       // std::sin, std::cos
 #include <cstdlib>     // std::atof
 using namespace mitiru;
 
 namespace {
 
-// 線 + 三角の頭で矢印を 1 本描く。
-void drawArrow(Screen& s, float x0, float y0, float x1, float y1, Color c, float th)
-{
-    s.line(x0, y0, x1, y1, c, th);
-    const float a  = std::atan2(y1 - y0, x1 - x0);
-    const float hl = 24.0f;   // 頭の長さ
-    const float hw = 0.42f;   // 頭の広がり(rad)
-    s.drawTriangle(
-        Vec2{x1, y1},
-        Vec2{x1 - std::cos(a - hw) * hl, y1 - std::sin(a - hw) * hl},
-        Vec2{x1 - std::cos(a + hw) * hl, y1 - std::sin(a + hw) * hl},
-        c);
-}
+// 跳ねるボールが暴れる箱 (右下の空きスペース)。タイトル・パネルと重ならない。
+constexpr float kBoxL = 580.0f, kBoxR = 905.0f;   // 左右の壁
+constexpr float kBoxT = 315.0f, kBoxFloor = 605.0f; // 天井と床
+
+constexpr int kBalls = 5;     // ボールの数
+constexpr int kParts = 96;    // パーティクルの最大数 (リング bufferで使い回す)
+
+struct Ball { float x, y, vx, vy, r; std::uint32_t col; };  // 物理ボール (flat POD)
+struct Part { float x, y, vx, vy, life; std::uint32_t col; }; // 粒 (life<=0 で消える)
 
 }  // namespace
 
@@ -34,24 +30,102 @@ struct {{.ProjectIdent}}Game
 {
     float t      = 0.0f;     // 経過秒
     int   count  = 0;        // count ボタンの回数
-    bool  locked = false;    // Lock チェックの状態
-    float speed  = 240.0f;   // speed スライダーの値 (0..600)
-    float orbit  = 0.0f;     // 周回点の角度
+    bool  locked = false;    // Lock チェック (物理を止める)
+    float speed  = 240.0f;   // speed スライダー = 重力の強さ (0..600)
     float curX   = 980.0f;   // マウス追従の赤い円(イージング後)
     float curY   = 360.0f;
+    Ball  balls[kBalls];     // 物理ボール
+    Part  parts[kParts];     // パーティクル
+    int   partHead = 0;      // パーティクルのリング buffer 書き込み位置
+    bool  ready    = false;  // ボール初期化済みか
+    std::uint32_t rng = 0x2545F4A3u;
+
+    // 0..1 のかんたんな乱数 (決定的)。
+    float random()
+    {
+        rng = rng * 1664525u + 1013904223u;
+        return static_cast<float>((rng >> 8) & 0xFFFF) / 65535.0f;
+    }
+
+    void init()
+    {
+        count = 0; locked = false; speed = 240.0f; t = 0.0f;
+        partHead = 0; ready = false;
+    }
+
+    // 最初の update でボールを配置する (init より乱数を回したいので遅延)。
+    void spawnBalls()
+    {
+        ready = true;
+        const std::uint32_t cols[kBalls] =
+            {0xEA5535, 0x4C95F2, 0x2E9E6B, 0xF5C842, 0x9B6FE0};
+        for (int i = 0; i < kBalls; ++i)
+        {
+            balls[i] = { kBoxL + 50.0f + random() * (kBoxR - kBoxL - 100.0f),
+                         kBoxT + 30.0f + random() * 80.0f,
+                         (random() - 0.5f) * 240.0f, random() * 60.0f,
+                         15.0f + random() * 9.0f, cols[i] };
+        }
+        for (int i = 0; i < kParts; ++i) { parts[i].life = 0.0f; }
+    }
+
+    // (x,y) から放射状にパーティクルを撒く。
+    void burst(float x, float y, std::uint32_t col)
+    {
+        for (int k = 0; k < 16; ++k)
+        {
+            const float a  = random() * 6.2832f;
+            const float sp = 90.0f + random() * 240.0f;
+            parts[partHead] = { x, y, std::cos(a) * sp, std::sin(a) * sp - 110.0f,
+                                0.85f, col };
+            partHead = (partHead + 1) % kParts;
+        }
+    }
 
     void update(Input in, Hud hud, float dt)
     {
+        if (!ready) { spawnBalls(); }
         t += dt;
 
         // ── HTML の UI から C++ へ (data-m-action → in.action) ──
         if (in.action("count")) { ++count; }
-        if (in.action("lock"))  { const char* p = in.actionPayload("lock");  locked = (p && p[0] == 't'); } // true/false
+        if (in.action("lock"))  { const char* p = in.actionPayload("lock");  locked = (p && p[0] == 't'); }
         if (in.action("speed")) { const char* p = in.actionPayload("speed"); if (p) { speed = (float)std::atof(p); } }
+        if (in.action("pop"))   // 「ポン！」ボタン: 音 + ボールを跳ね上げ + パーティクル
+        {
+            hud.play("pop");
+            for (int i = 0; i < kBalls; ++i)
+            {
+                balls[i].vy = -360.0f - random() * 140.0f;
+                burst(balls[i].x, balls[i].y, balls[i].col);
+            }
+        }
         if (in.cancelPressed()) { hud.quit(); }   // ESC で終了
 
-        // 周回点は Lock 中は止まり、speed で回転が速くなる
-        if (!locked) { orbit += speed * 0.012f * dt; }
+        // ── 物理 (Lock 中は止まる。speed が重力) ──
+        if (!locked)
+        {
+            const float g = speed * 4.0f;
+            for (int i = 0; i < kBalls; ++i)
+            {
+                Ball& b = balls[i];
+                b.vy += g * dt;
+                b.x  += b.vx * dt;
+                b.y  += b.vy * dt;
+                if (b.y + b.r > kBoxFloor) { b.y = kBoxFloor - b.r; b.vy = -b.vy * 0.82f; }
+                if (b.y - b.r < kBoxT)     { b.y = kBoxT + b.r;     b.vy = -b.vy * 0.6f; }
+                if (b.x - b.r < kBoxL)     { b.x = kBoxL + b.r;     b.vx = -b.vx * 0.9f; }
+                if (b.x + b.r > kBoxR)     { b.x = kBoxR - b.r;     b.vx = -b.vx * 0.9f; }
+            }
+            for (int i = 0; i < kParts; ++i)
+            {
+                if (parts[i].life <= 0.0f) { continue; }
+                parts[i].vy   += 520.0f * dt;          // パーティクルにも重力
+                parts[i].x    += parts[i].vx * dt;
+                parts[i].y    += parts[i].vy * dt;
+                parts[i].life -= dt * 1.4f;
+            }
+        }
 
         // 赤い円はマウスへなめらかに追従する
         const float ease = std::min(1.0f, dt * 7.0f);
@@ -70,25 +144,36 @@ struct {{.ProjectIdent}}Game
 
         // ① 画像スプライト: 北斎「神奈川沖浪裏」(パブリックドメイン)。
         //    assets/sprites/wave.png を貼る。自分の絵に差し替えても OK。
-        constexpr float kImgW = 512.0f;                       // 描画幅
-        const float     kImgH = kImgW * 524.0f / 760.0f;      // wave.png の比 (760x524)
-        s.drawRect({34.0f, 34.0f, kImgW + 16.0f, kImgH + 16.0f}, color::White);   // 白マット
-        s.sprite("wave", 42.0f, 42.0f, kImgW / 760.0f);                           // 原寸 760px を縮小
+        constexpr float kImgW = 512.0f;
+        const float     kImgH = kImgW * 524.0f / 760.0f;   // wave.png の比 (760x524)
+        s.drawRect({34.0f, 34.0f, kImgW + 16.0f, kImgH + 16.0f}, color::White);
+        s.sprite("wave", 42.0f, 42.0f, kImgW / 760.0f);
         s.drawRectFrame({34.0f, 34.0f, kImgW + 16.0f, kImgH + 16.0f}, hex(0xBFCAD9), 2.0f);
 
         // ② 図形: 白い四角・青い角丸・緑の円
         s.drawRect({600.0f, 40.0f, 100.0f, 100.0f}, color::White);
         s.drawRectFrame({600.0f, 40.0f, 100.0f, 100.0f}, hex(0xBFCAD9), 2.0f);
-        s.drawRoundedRect({740.0f, 40.0f, 96.0f, 182.0f}, hex(0x1E73B0), 18.0f);
-        s.fillCircle(650.0f, 250.0f, 46.0f, hex(0x2E9E6B));
+        s.drawRoundedRect({740.0f, 40.0f, 96.0f, 176.0f}, hex(0x1E73B0), 18.0f);
+        s.fillCircle(650.0f, 224.0f, 42.0f, hex(0x2E9E6B));
 
-        // ③ 矢印 (灰)
-        drawArrow(s, 600.0f, 348.0f, 870.0f, 402.0f, hex(0x8893A6), 6.0f);
+        // ③ 物理: 跳ねるボール (speed で重力・Lock で停止・ポンで跳ね上げ)。
+        s.drawRect({kBoxL, kBoxFloor, kBoxR - kBoxL, 2.0f}, hexa(0xBFCAD955));  // 床ライン
+        for (int i = 0; i < kBalls; ++i)
+        {
+            const Ball& b = balls[i];
+            s.fillCircle(b.x, b.y, b.r, hexa((b.col << 8) | 0xFF));
+            s.fillCircle(b.x - b.r * 0.3f, b.y - b.r * 0.3f, b.r * 0.28f,
+                         hexa(0xFFFFFF66));   // ハイライト
+        }
 
-        // ④ 緑の円を周回するアクセント点 (speed / Lock のデモ)。Lock 中は赤く止まる。
-        const float ox = 650.0f + std::cos(orbit) * 72.0f;
-        const float oy = 250.0f + std::sin(orbit) * 72.0f;
-        s.fillCircle(ox, oy, 15.0f, locked ? hex(0xC0463C) : hex(0xF0A12E));
+        // ④ パーティクル (ポンで弾ける。寿命で薄くなる)。
+        for (int i = 0; i < kParts; ++i)
+        {
+            if (parts[i].life <= 0.0f) { continue; }
+            Color c = hexa((parts[i].col << 8) | 0xFF);
+            c.a = std::min(1.0f, parts[i].life);
+            s.fillCircle(parts[i].x, parts[i].y, 4.0f, c);
+        }
 
         // ⑤ マウスに追従する赤い円
         s.fillCircle(curX, curY, 30.0f, hexa(0xE0503CB0));

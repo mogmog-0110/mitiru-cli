@@ -44,6 +44,8 @@
     box-shadow: 0 3px 10px rgba(47,109,240,.32);
   }
   .btn:active { transform: translateY(1px); }
+  .btn-pop { width: 100%; background: linear-gradient(180deg, #ff8a5b, #f4632f);
+             box-shadow: 0 3px 12px rgba(244,99,47,.38); }
   .check { font-size: 15px; font-weight: 600; color: #344; cursor: pointer;
            display: flex; align-items: center; gap: 6px; }
   .check input { width: 17px; height: 17px; accent-color: #2f6df0; cursor: pointer; }
@@ -61,7 +63,7 @@
   <!-- C++ が draw() で描く絵の上に、この HTML/CSS が重なる -->
   <div class="title">Hello, MitiruEngine!</div>
   <p class="lead"><b>C++</b> で絵を描き、<b>HTML / CSS</b> で画面(UI)を作るフレームワークです。
-     左の浮世絵・図形・追従する赤い円は C++、右下のボタン・チェック・スライダーは HTML。
+     浮世絵・図形・跳ねるボール・パーティクル・追従する赤い円は C++、右下の UI は HTML。
      つなぎの JavaScript は 1 行も書いていません。</p>
 
   <!-- 操作 UI: 値は HTML→C++→HTML と往復する -->
@@ -71,13 +73,16 @@
       <label class="check"><input type="checkbox" data-m-action="lock"> Lock</label>
     </div>
     <div class="row slider">
-      <span class="k">speed</span>
+      <span class="k">重力</span>
       <input type="range" min="0" max="600" value="240" data-m-action="speed">
       <span class="v" data-m-text="view.speed">240</span>
     </div>
+    <div class="row">
+      <button class="btn btn-pop" data-m-action="pop">ポン！(音 + 弾ける)</button>
+    </div>
   </div>
 
-  <div class="hint">マウスで赤い円が追従 · Lock で回転停止 · スライダーで回転速度 · ESC で終了</div>
+  <div class="hint">ポンでボールが跳ねて音が鳴る · 重力スライダー · Lock で物理停止 · ESC で終了</div>
 
   <!-- バインダ本体。mitiru build が mitiru_runtime/* をこの隣へ自動コピーします。 -->
   <script src="mitiru_runtime/mitiru_cef_state.js"></script>
