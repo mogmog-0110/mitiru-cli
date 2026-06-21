@@ -5,6 +5,9 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
+	"sort"
+	"strings"
 
 	"github.com/spf13/cobra"
 )
@@ -14,6 +17,7 @@ var (
 	replayPlayFile   string
 	replayTestFile   string
 	replayExpectFile string
+	replaySuiteDir   string
 	replayGame       bool
 )
 
@@ -40,12 +44,19 @@ Provide exactly one of:
 	cmd.Flags().StringVar(&replayPlayFile, "replay", "", "play back <file>")
 	cmd.Flags().StringVar(&replayTestFile, "test", "", "headless regression test against <file>")
 	cmd.Flags().StringVar(&replayExpectFile, "expect", "", "expected final-state JSON for --test comparison")
+	cmd.Flags().StringVar(&replaySuiteDir, "suite", "",
+		"regression suite: replay every *.mtrr in <dir> against this project's game, "+
+			"print a pass/fail table, exit non-zero on any divergence (CI gate)")
 	cmd.Flags().BoolVar(&replayGame, "game", false,
 		"replay THIS project's game (build + headless host) instead of the standalone demo subsystem")
 	return cmd
 }
 
 func runReplay() error {
+	if replaySuiteDir != "" {
+		return runReplaySuite()
+	}
+
 	record := replayRecordFile != ""
 	play := replayPlayFile != ""
 	test := replayTestFile != ""
@@ -156,6 +167,61 @@ func runReplayGameTest(absFile string) error {
 			os.Exit(exitErr.ExitCode()) // regression-gate の exit code を忠実に伝える
 		}
 		return fmt.Errorf("replay --game: %w", err)
+	}
+	return nil
+}
+
+// runReplaySuite は <dir>/*.mtrr を全部、プロジェクトの game へ headless replay-test し、
+// pass/fail 表と失敗本数=exit code を出す。録ったプレイ群がゼロコスト回帰テストになる。
+// 単一 flat-POD GameMemory + bit-exact replay があるから成立する (決定論ツール軸)。
+func runReplaySuite() error {
+	absDir, err := filepath.Abs(replaySuiteDir)
+	if err != nil {
+		return fmt.Errorf("replay --suite: resolve %q: %w", replaySuiteDir, err)
+	}
+	mtrrs, _ := filepath.Glob(filepath.Join(absDir, "*.mtrr"))
+	sort.Strings(mtrrs)
+	if len(mtrrs) == 0 {
+		return fmt.Errorf("replay --suite: %s に *.mtrr がありません (まず `mitiru run --record` で録画)", absDir)
+	}
+
+	result, err := runBuild() // host + DLL を 1 回だけ build
+	if err != nil {
+		return err
+	}
+	art := result.Artifacts
+
+	passRe := regexp.MustCompile(`reproduced bit-exact \((\d+) frames\)`)
+	divRe := regexp.MustCompile(`DIVERGED at frame (\d+)`)
+	diffRe := regexp.MustCompile(`replay diff: (\[.*\])`)
+
+	fmt.Printf("replay-suite: %d 本\n\n", len(mtrrs))
+	fails := 0
+	for _, m := range mtrrs {
+		c := exec.Command(art.HostExePath, art.DllRel, "--replay-test", m,
+			"--no-tool-windows", "--window-pos", "-2200", "0")
+		c.Dir = art.DeployDir
+		out, _ := c.CombinedOutput()
+		s := string(out)
+		name := strings.TrimSuffix(filepath.Base(m), ".mtrr")
+		if mm := passRe.FindStringSubmatch(s); mm != nil {
+			fmt.Printf("  [PASS] %s  bit-exact / %s frames\n", name, mm[1])
+		} else if mm := divRe.FindStringSubmatch(s); mm != nil {
+			detail := "DIVERGED @frame " + mm[1]
+			if dm := diffRe.FindStringSubmatch(s); dm != nil {
+				detail += "  diff: " + dm[1]
+			}
+			fmt.Printf("  [FAIL] %s  %s\n", name, detail)
+			fails++
+		} else {
+			fmt.Printf("  [FAIL] %s  (no verdict)\n", name)
+			fails++
+		}
+	}
+	fmt.Printf("\n%d/%d green%s\n", len(mtrrs)-fails, len(mtrrs),
+		map[bool]string{true: "  -- 全 green", false: fmt.Sprintf("  -- %d 本が回帰", fails)}[fails == 0])
+	if fails > 0 {
+		os.Exit(1)
 	}
 	return nil
 }
