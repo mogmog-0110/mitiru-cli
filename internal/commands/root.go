@@ -75,6 +75,7 @@ Manage MitiruEngine game projects without touching CMakeLists.txt:
 	root.AddCommand(newReplayCommand())
 	root.AddCommand(newFuzzCommand())
 	root.AddCommand(newBisectCommand())
+	root.AddCommand(newAiPlaytestCommand())
 	root.AddCommand(newUICommand())
 	root.AddCommand(newInspectCommand())
 	root.AddCommand(newInstallCommand())
