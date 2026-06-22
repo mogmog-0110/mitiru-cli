@@ -106,10 +106,11 @@ func runWatch() error {
 
 	fmt.Printf("mitiru watch: watching %s\n", cwd)
 	fmt.Println("  ↳ src/**.{cpp,hpp,...}  →  rebuild DLL (host hot-reloads in place)")
-	fmt.Println("  ↳ assets/**             →  engine hot-reload (no rebuild)")
+	fmt.Println("  ↳ assets/** (.lvl 等)   →  deploy へ同期 (rebuild 無し、走行中ゲームが拾う)")
 	fmt.Println("  Ctrl-C to stop")
 
 	state := newGameState(projectRoot)
+	state.srcAssetsDir = filepath.Join(cwd, "assets")  // データ資産 live 同期の元
 	defer state.stop()
 
 	// 初回 build + host を --watch で launch する。以降の DLL swap は host が内部で
@@ -174,9 +175,17 @@ func runWatch() error {
 					_ = watcher.Add(ev.Name)
 				}
 			}
-			if !shouldTrigger(ev.Name, ev.Op) { continue }
-			fmt.Printf("mitiru watch: %s changed\n", filepath.Base(ev.Name))
-			schedule()
+			if shouldTrigger(ev.Name, ev.Op) {
+				fmt.Printf("mitiru watch: %s changed\n", filepath.Base(ev.Name))
+				schedule()
+			} else if state.shouldSyncAsset(ev.Name, ev.Op) {
+				// データ資産 (.lvl 等) は rebuild せず deploy へコピー → 走行中ゲームが拾う。
+				if err := state.syncAsset(ev.Name); err != nil {
+					fmt.Fprintf(os.Stderr, "watch: asset sync %s: %v\n", filepath.Base(ev.Name), err)
+				} else {
+					fmt.Printf("mitiru watch: %s → deploy (live)\n", filepath.Base(ev.Name))
+				}
+			}
 		case err, ok := <-watcher.Errors:
 			if !ok { return nil }
 			fmt.Fprintf(os.Stderr, "watch: %v\n", err)
@@ -209,6 +218,57 @@ type gameState struct {
 	exited      chan struct{} // host(ゲーム) process が終了したら close される
 	exitOnce    sync.Once
 	projectRoot string // エラーファイル (build/.mitiru_build_error.txt) の anchor
+
+	// データ資産 (.lvl 等) を rebuild 無しで source→deploy 同期するための path。
+	// deploy はソースのコピーなので、走行中ゲームに届けるにはコピーが要る。
+	srcAssetsDir    string // <cwd>/assets
+	deployAssetsDir string // <DeployDir>/<project>/assets (firstBuildAndLaunch で確定)
+}
+
+// shouldSyncAsset は cpp 以外の assets/ 配下ファイル変更 (= rebuild 不要なデータ資産) か判定する。
+func (s *gameState) shouldSyncAsset(path string, op fsnotify.Op) bool {
+	if op&(fsnotify.Write|fsnotify.Create|fsnotify.Rename) == 0 {
+		return false
+	}
+	if s.srcAssetsDir == "" || s.deployAssetsDir == "" {
+		return false
+	}
+	if !strings.HasPrefix(path, s.srcAssetsDir) {
+		return false
+	}
+	base := filepath.Base(path)
+	if strings.HasPrefix(base, ".") || strings.HasSuffix(base, "~") {
+		return false // editor の temp/swap
+	}
+	st, err := os.Stat(path)
+	return err == nil && !st.IsDir()
+}
+
+// syncAsset は変更されたソース資産を deploy の同じ相対位置へコピーする。
+// ゲーム側 (.lvl の mtime 監視など) が deploy 側の変更を拾って走行中に反映する。
+func (s *gameState) syncAsset(srcPath string) error {
+	rel, err := filepath.Rel(s.srcAssetsDir, srcPath)
+	if err != nil {
+		return err
+	}
+	dst := filepath.Join(s.deployAssetsDir, rel)
+	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
+		return err
+	}
+	in, err := os.Open(srcPath)
+	if err != nil {
+		return err
+	}
+	defer in.Close()
+	out, err := os.Create(dst)
+	if err != nil {
+		return err
+	}
+	if _, err := io.Copy(out, in); err != nil {
+		out.Close()
+		return err
+	}
+	return out.Close()
 }
 
 func newGameState(projectRoot string) *gameState {
@@ -258,6 +318,8 @@ func (s *gameState) firstBuildAndLaunch() error {
 		return err
 	}
 	art := result.Artifacts
+	// deploy 側 assets の場所を確定 (<DeployDir>/<project>/assets)。.lvl 等の live 同期先。
+	s.deployAssetsDir = filepath.Join(art.DeployDir, filepath.Dir(art.DllRel), "assets")
 
 	fmt.Printf("\nLaunching %s %s --watch\n",
 		filepath.Base(art.HostExePath), art.DllRel)
