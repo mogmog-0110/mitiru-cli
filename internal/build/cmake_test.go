@@ -70,3 +70,25 @@ func TestConfigure_TemplateDeploysCEF(t *testing.T) {
 		t.Error("generated CMakeLists.txt missing mitiru_add_cef_game(mitiru_host)")
 	}
 }
+
+// #56: vcpkg applocal の pwsh stale 化を是正する engine モジュールを、project() より前に
+// include していること。project() で vcpkg toolchain が pwsh を find_program するため、
+// 是正は必ずそれより前に走らせる必要がある。
+func TestConfigure_TemplateIncludesPwshFixBeforeProject(t *testing.T) {
+	projectRoot, engineRoot := fakeProject(t)
+	cmake := generatedCMake(t, projectRoot, engineRoot)
+
+	idxInclude := strings.Index(cmake, "VcpkgPwshFix.cmake")
+	if idxInclude < 0 {
+		t.Fatal("generated CMakeLists.txt missing VcpkgPwshFix.cmake include (#56)")
+	}
+	// 行頭の project( を実宣言とみなす (コメント中の "project()" 言及に引っかからないように)。
+	idxProject := strings.Index(cmake, "\nproject(")
+	if idxProject < 0 {
+		t.Fatal("generated CMakeLists.txt missing project() call")
+	}
+	if idxInclude > idxProject {
+		t.Errorf("VcpkgPwshFix.cmake include must precede project() (#56): include@%d project@%d",
+			idxInclude, idxProject)
+	}
+}
