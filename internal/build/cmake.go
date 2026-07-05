@@ -476,10 +476,13 @@ func runCMakeConfigure(vcvars, generator, srcDir, outDir string, opts Options) e
 // vcvarsPrelude は cmake を駆動する全 batch script に必要な boilerplate を出す:
 // VS Installer dir を PATH に載せ (vcvars64.bat が "is not recognized" noise を
 // 出さずに vswhere.exe を見つけられるように)、その後 vcvars64.bat を有効化する。
+// VSLANG=1033 は cl 出力を英語に固定する — 日本語 cl だと CMake が /showIncludes
+// prefix を console CP 依存で焼き、ninja の header 依存追跡が全滅する (#deps 0) 根治。
 func vcvarsPrelude(vcvars string) string {
 	return fmt.Sprintf(
 		"@echo off\r\n"+
 			"set \"PATH=C:\\Program Files (x86)\\Microsoft Visual Studio\\Installer;%%PATH%%\"\r\n"+
+			"set \"VSLANG=1033\"\r\n"+
 			"call \"%s\" >NUL\r\n"+
 			"if errorlevel 1 exit /b %%errorlevel%%\r\n",
 		vcvars)

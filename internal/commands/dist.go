@@ -155,18 +155,39 @@ func runDist() error {
 
 	hostArgs := hostArgsFromConfig(cfg)
 
+	// 顔つき: window title は project.name。project root に icon.ico があれば
+	// data/ へ同梱し --icon で window icon にも使う (無ければ既定のまま = 正当)。
+	iconSrc := filepath.Join(projectRoot, "icon.ico")
+	hasIcon := false
+	if _, statErr := os.Stat(iconSrc); statErr == nil {
+		if err := copyFile(iconSrc, filepath.Join(dataDir, "icon.ico")); err != nil {
+			return fmt.Errorf("dist: copy icon.ico: %w", err)
+		}
+		hasIcon = true
+		n++
+	}
+	hostArgs = append(hostArgs, distFaceArgs(cfg.Project.Name, hasIcon)...)
+
 	// 既定ランチャ: トップ階層の <name>.exe = GUI stub (mitiru_start)。コンソール窓を
 	// 一切出さずに data\mitiru_host.exe を起動する。stub は data\launch.mtargs から
 	// host への argv を読む (cwd=data 相対)。
 	launchArgs := filepath.ToSlash(art.DllRel)
 	if len(hostArgs) > 0 {
-		launchArgs += " " + strings.Join(hostArgs, " ")
+		launchArgs += " " + mtargsJoin(hostArgs)
 	}
 	stubSrc := filepath.Join(art.DeployDir, "mitiru_start.exe")
 	stubUsed := false
 	if _, statErr := os.Stat(stubSrc); statErr == nil {
-		if err := copyFile(stubSrc, filepath.Join(bundleRoot, name+".exe")); err != nil {
+		stubDst := filepath.Join(bundleRoot, name+".exe")
+		if err := copyFile(stubSrc, stubDst); err != nil {
 			return fmt.Errorf("dist: copy launcher stub: %w", err)
+		}
+		if hasIcon {
+			// stub exe 自体の PE リソースにも埋める (explorer の顔)。失敗しても
+			// アイコン無し配布は正当なので警告のみで続行。
+			if err := embedExeIcon(stubDst, iconSrc); err != nil {
+				fmt.Printf("dist: warning: exe icon の埋め込みに失敗 (アイコン無しで続行): %v\n", err)
+			}
 		}
 		if err := os.WriteFile(filepath.Join(dataDir, "launch.mtargs"),
 			[]byte(launchArgs+"\n"), 0o644); err != nil {
@@ -265,7 +286,7 @@ func writeExeLauncher(bundleRoot, name, dllRel string, hostArgs []string) error 
 	}
 	args := filepath.ToSlash(dllRel)
 	if len(hostArgs) > 0 {
-		args += " " + strings.Join(hostArgs, " ")
+		args += " " + mtargsJoin(hostArgs)
 	}
 	return os.WriteFile(filepath.Join(bundleRoot, name+".mtargs"), []byte(args+"\n"), 0o644)
 }
@@ -370,7 +391,7 @@ func copyFile(src, dst string) error {
 func writeLauncher(path, dllRel string, hostArgs []string) error {
 	args := dllRel
 	if len(hostArgs) > 0 {
-		args += " " + strings.Join(hostArgs, " ")
+		args += " " + mtargsJoin(hostArgs)
 	}
 	body := "@echo off\r\n" +
 		"rem MitiruEngine game launcher\r\n" +
