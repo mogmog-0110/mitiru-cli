@@ -78,15 +78,19 @@ func resolveEngineRoot() (string, error) {
 	return root, nil
 }
 
-// findOrBuildEngineExe は engine の example 実行ファイル (例 mitiru_subsys_replay、
-// mitiru_inspector) への path を返す。まだ存在しない場合は cache 済み engine source
-// から build する。
+// findOrBuildEngineExe は engine の実行ファイル (例 mitiru_subsys_replay、
+// mitiru_tool_cef) への path を返す。まだ存在しない場合は cache 済み engine source
+// から build する。出力 dir は build/apps/ (製品・インフラ) と build/examples/
+// (subsystem / 旧 engine snapshot) の両方を見る。
 func findOrBuildEngineExe(engineRoot, target, exeName string) (string, error) {
-	dir := filepath.Join(engineRoot, "build", "examples", target)
-	candidates := []string{
-		filepath.Join(dir, exeName),
-		filepath.Join(dir, "Debug", exeName),
-		filepath.Join(dir, "Release", exeName),
+	var candidates []string
+	for _, parent := range []string{"apps", "examples"} {
+		dir := filepath.Join(engineRoot, "build", parent, target)
+		candidates = append(candidates,
+			filepath.Join(dir, exeName),
+			filepath.Join(dir, "Debug", exeName),
+			filepath.Join(dir, "Release", exeName),
+		)
 	}
 	for _, c := range candidates {
 		if _, err := os.Stat(c); err == nil {
@@ -105,7 +109,8 @@ func findOrBuildEngineExe(engineRoot, target, exeName string) (string, error) {
 			return c, nil
 		}
 	}
-	return "", fmt.Errorf("built %s but no executable appeared under %s", target, dir)
+	return "", fmt.Errorf("built %s but no executable appeared under %s",
+		target, filepath.Join(engineRoot, "build", "{apps,examples}", target))
 }
 
 // ensureEngineConfigured は cache 済み engine が configure 済みの build/ tree

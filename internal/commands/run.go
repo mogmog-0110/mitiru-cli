@@ -204,8 +204,11 @@ func startInspectorChild(gamePid int, page string) (*exec.Cmd, error) {
 	if err != nil {
 		return nil, fmt.Errorf("locate engine source: %w", err)
 	}
+	// 現行 layout は build/apps/、旧 engine snapshot は build/examples/。
 	exePath := ""
 	for _, c := range []string{
+		filepath.Join(engineRoot, "build", "apps", "mitiru_tool_cef", "mitiru_tool_cef.exe"),
+		filepath.Join(engineRoot, "build", "apps", "mitiru_tool_cef", "Debug", "mitiru_tool_cef.exe"),
 		filepath.Join(engineRoot, "build", "examples", "mitiru_tool_cef", "mitiru_tool_cef.exe"),
 		filepath.Join(engineRoot, "build", "examples", "mitiru_tool_cef", "Debug", "mitiru_tool_cef.exe"),
 	} {

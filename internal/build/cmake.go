@@ -59,7 +59,8 @@ type templateData struct {
 	ProjectRoot string
 	MainCppAbs  string
 	HostMainAbs string
-	// 配布用 GUI ランチャ stub のソース (examples/mitiru_start/main.cpp)。
+	// 配布用 GUI ランチャ stub のソース (apps/mitiru_start/main.cpp、
+	// 旧 engine では examples/mitiru_start/main.cpp)。
 	// 無い古い engine では空文字 → テンプレートが target を生成しない。
 	StartMainAbs string
 }
@@ -68,7 +69,8 @@ type templateData struct {
 //
 //   <TargetName>      SHARED library。user の game DLL。
 //   mitiru_host       汎用 launcher exe (engine reference impl、
-//                     ${MITIRU_ENGINE_ROOT}/examples/mitiru_host/main.cpp から compile)。
+//                     ${MITIRU_ENGINE_ROOT}/apps/mitiru_host/main.cpp から compile。
+//                     旧 engine snapshot では examples/mitiru_host/main.cpp)。
 //
 // <projectRoot>/build/out/<Config>/ 内の layout:
 //   mitiru_host.exe
@@ -211,6 +213,19 @@ endif()
 add_dependencies({{.TargetName}} mitiru_host)
 `
 
+// resolveEngineSource は engine tree 内の app source を探す。現行 layout の
+// apps/<dir>/<file> を先に、旧 engine snapshot の examples/<dir>/<file> を
+// fallback として見る。見つからなければ空文字。
+func resolveEngineSource(engineRoot, dir, file string) string {
+	for _, parent := range []string{"apps", "examples"} {
+		p := filepath.Join(engineRoot, parent, dir, file)
+		if _, err := os.Stat(p); err == nil {
+			return p
+		}
+	}
+	return ""
+}
+
 // BuildDirs は projectRoot に対する build artefact の標準 layout を算出する:
 //
 //	<projectRoot>/build/cmake/      ← 生成された CMakeLists.txt の source tree
@@ -241,20 +256,20 @@ func Configure(opts Options) (cmakeSrcDir, cmakeOutDir string, err error) {
 		return "", "", fmt.Errorf("expected source file %s: %w", mainCpp, statErr)
 	}
 
-	hostMain := filepath.Join(opts.EngineRoot, "examples", "mitiru_host", "main.cpp")
-	if _, statErr := os.Stat(hostMain); statErr != nil {
+	// host source は apps/ (現行 layout)、無ければ examples/ (旧 engine snapshot)。
+	hostMain := resolveEngineSource(opts.EngineRoot, "mitiru_host", "main.cpp")
+	if hostMain == "" {
 		return "", "", fmt.Errorf(
 			"engine reference host source missing: %s\n"+
 				"  the cached engine tree looks incomplete or pre-v0.2.0;\n"+
 				"  set MITIRU_ENGINE_ROOT to a v0.2.0+ checkout or re-run `mitiru build`\n"+
 				"  with MITIRU_CACHE_DIR cleared",
-			hostMain)
+			filepath.Join(opts.EngineRoot, "apps", "mitiru_host", "main.cpp"))
 	}
 
 	// 配布用ランチャ stub (任意)。古い engine では不在 → 空文字でテンプレートが skip。
 	startMainAbs := ""
-	startMain := filepath.Join(opts.EngineRoot, "examples", "mitiru_start", "main.cpp")
-	if _, statErr := os.Stat(startMain); statErr == nil {
+	if startMain := resolveEngineSource(opts.EngineRoot, "mitiru_start", "main.cpp"); startMain != "" {
 		startMainAbs = toCMakePath(startMain)
 	}
 

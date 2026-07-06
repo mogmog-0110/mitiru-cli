@@ -23,8 +23,32 @@ func fakeProject(t *testing.T) (projectRoot, engineRoot string) {
 		}
 	}
 	mustWrite(filepath.Join(projectRoot, "src", "main.cpp"), "// game\n")
-	mustWrite(filepath.Join(engineRoot, "examples", "mitiru_host", "main.cpp"), "// host\n")
+	mustWrite(filepath.Join(engineRoot, "apps", "mitiru_host", "main.cpp"), "// host\n")
 	return projectRoot, engineRoot
+}
+
+// 旧 engine snapshot (examples/ layout) でも host source を解決できること。
+func TestConfigure_FallsBackToExamplesLayout(t *testing.T) {
+	projectRoot := t.TempDir()
+	engineRoot := t.TempDir()
+	hostMain := filepath.Join(engineRoot, "examples", "mitiru_host", "main.cpp")
+	if err := os.MkdirAll(filepath.Dir(hostMain), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(hostMain, []byte("// host\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	srcMain := filepath.Join(projectRoot, "src", "main.cpp")
+	if err := os.MkdirAll(filepath.Dir(srcMain), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(srcMain, []byte("// game\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cmake := generatedCMake(t, projectRoot, engineRoot)
+	if !strings.Contains(cmake, "examples/mitiru_host/main.cpp") {
+		t.Error("generated CMakeLists.txt should reference examples/ host source on old engines")
+	}
 }
 
 func generatedCMake(t *testing.T, projectRoot, engineRoot string) string {
