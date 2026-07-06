@@ -32,7 +32,7 @@ var allInspectables = []string{"gameplay", "input", "timetravel"}
 func newInspectCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "inspect [pid]",
-		Short: "Open a sub-window inspector watching a running MitiruEngine game (axis 5)",
+		Short: "Open a sub-window inspector watching a running MitiruEngine game",
 		Long: `Launches the engine's standalone inspector as a separate OS-level
 window that polls the snapshot a running MitiruEngine process exports
 to %TEMP%\mitiru_inspector_<pid>.json.
@@ -44,7 +44,7 @@ Usage:
   mitiru inspect 12345 --all           # gameplay + input + timetravel windows
   mitiru inspect --file <path>         # watch a specific file directly (debug)
 
-This is the axis 5 (modular sub-window architecture) showcase tool —
+This is the modular sub-window architecture showcase tool —
 gameplay stays in its own window, the inspector lives in another window
 that can be dragged to a different monitor. With --all, three observer
 windows open side by side, each watching the same game process. No CEF
@@ -90,7 +90,7 @@ multi-process required.`,
 	cmd.Flags().StringVar(&inspectInspectable, "inspectable", "",
 		"open a single named panel (e.g. gameplay, input, timetravel)")
 	cmd.Flags().BoolVar(&inspectAll, "all", false,
-		"open gameplay + input + timetravel inspector windows side by side (axis 5)")
+		"open gameplay + input + timetravel inspector windows side by side")
 	cmd.Flags().BoolVar(&inspectJSON, "json", false,
 		"print live game state, recent events, and invariant status as a single JSON document to stdout")
 	return cmd
@@ -425,7 +425,7 @@ func runInspectAll(pid int) error {
 	if launched == 0 {
 		return fmt.Errorf("inspect --all: no inspector windows could be launched")
 	}
-	fmt.Printf("Opened %d/%d sub-windows for game %d (each is an independent OS window — axis 5)\n",
+	fmt.Printf("Opened %d/%d sub-windows for game %d (each is an independent OS window)\n",
 		launched, len(allInspectables), pid)
 	return nil
 }

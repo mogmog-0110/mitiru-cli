@@ -26,7 +26,7 @@ AI ツール (Claude Code など) からゲームの状態取得・操作を行�
 ポートは --port フラグ、または環境変数 MITIRU_AI_PORT で指定する (既定: 8090)。
 
 提供するツール:
-  game_state       GET /api/ai/state       — GameMemory の構造化 JSON
+  game_state       GET /api/ai/state       — ゲームの状態の構造化 JSON
   state_diff       GET /api/ai/diff        — 直前フレームとの差分 JSON
   screenshot       GET /api/screenshot     — PNG を base64 で返す
   simulate_input   POST /api/input/simulate — 入力イベントを送る
@@ -112,7 +112,7 @@ type mcpTool struct {
 var mcpTools = []mcpTool{
 	{
 		Name:        "game_state",
-		Description: "GameMemory の構造化 JSON を返す (GET /api/ai/state)",
+		Description: "ゲームの状態の構造化 JSON を返す (GET /api/ai/state)",
 		InputSchema: json.RawMessage(`{"type":"object","properties":{}}`),
 	},
 	{

@@ -34,16 +34,16 @@ Manage MitiruEngine game projects without touching CMakeLists.txt:
   mitiru run             build and run
   mitiru debug           build (Debug) and run with engine debug helpers
   mitiru watch           file watch + auto rebuild + auto relaunch
-  mitiru renderer        launch the renderer subsystem standalone (axis 3)
-  mitiru audio [file]    launch the audio subsystem standalone (axis 3)
-  mitiru input           launch the input subsystem standalone (axis 3)
-  mitiru scene           launch the scene subsystem standalone (axis 3)
-  mitiru replay          record / play back an input replay (axis 4)
+  mitiru renderer        launch the renderer subsystem standalone
+  mitiru audio [file]    launch the audio subsystem standalone
+  mitiru input           launch the input subsystem standalone
+  mitiru scene           launch the scene subsystem standalone
+  mitiru replay          record / play back an input replay
   mitiru ui [scene.html] preview HTML/CSS UI in the browser with mock state, no build needed
-  mitiru inspect <pid>   open a sub-window inspector for a running game (axis 5)
+  mitiru inspect <pid>   open a sub-window inspector for a running game
   mitiru dist            build a redistributable folder (no-console launcher)
   mitiru lint            check project layout / manifest / HTML bindings
-  mitiru verify          headless build+run, screenshot, optional golden compare
+  mitiru verify          build+run without a window, screenshot, optional golden compare
   mitiru mcp             run a stdio MCP server for AI tool access
   mitiru install         bootstrap MSVC + mitiru.exe + PATH (Windows)
   mitiru update          bump this project's pinned engine version

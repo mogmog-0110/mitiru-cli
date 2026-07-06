@@ -15,8 +15,8 @@ type detPattern struct {
 }
 
 var detPatterns = []detPattern{
-	{"rand(", "use a seeded std::mt19937 stored in GameMemory"},
-	{"srand(", "use a seeded std::mt19937 stored in GameMemory"},
+	{"rand(", "use a seeded std::mt19937 stored in your game state struct"},
+	{"srand(", "use a seeded std::mt19937 stored in your game state struct"},
 	{"std::random_device", "non-deterministic seed; use a fixed/replay seed"},
 	{"std::chrono::system_clock", "use the engine's dt (frame delta), not wall-clock"},
 	{"std::chrono::high_resolution_clock", "use the engine's dt (frame delta), not wall-clock"},
@@ -137,5 +137,5 @@ func printDeterminismReport(findings []detFinding) {
 	}
 
 	fmt.Println()
-	fmt.Printf("  %d finding(s). These patterns break replay and time-travel. See suggestions above.\n", len(findings))
+	fmt.Printf("  %d finding(s). These patterns break replay and past-frame rewind. See suggestions above.\n", len(findings))
 }

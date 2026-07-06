@@ -82,13 +82,13 @@ the resulting executable with the project root as its working directory.
 
 Standard output, standard error, and exit code are forwarded.
 
-With --inspect, also opens a tool window (axis 5) alongside the game and
+With --inspect, also opens a tool window alongside the game and
 shuts it down when the game exits. Bare --inspect opens the gameplay
 inspector; a window name selects another tool:
 
   mitiru run --inspect             # gameplay inspector
   mitiru run --inspect perf        # performance window
-  mitiru run --inspect timetravel  # time-travel scrubber
+  mitiru run --inspect timetravel  # 巻き戻し窓 (past-frame rewind)
                                    # (perf, inspector, timetravel, mixer,
                                    #  scene, replay, input)`,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -109,7 +109,7 @@ inspector; a window name selects another tool:
 		"also open a tool window: perf|inspector|timetravel|mixer|scene|replay|input (bare --inspect = gameplay inspector)")
 	cmd.Flags().Lookup("inspect").NoOptDefVal = "inspect"
 	cmd.Flags().BoolVar(&runWithConsole, "console", false,
-		"open the runtime control panel (pause/step/scale/screenshot) in your default browser (ADR 0011)")
+		"open the runtime control panel (pause/step/scale/screenshot) in your default browser")
 	cmd.Flags().StringVar(&runRecordFile, "record", "",
 		"record this session's input to <file>.mtrr for `mitiru replay --test --game`")
 	return cmd

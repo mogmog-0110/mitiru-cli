@@ -25,13 +25,13 @@ func newReplayCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "replay",
 		Short: "Record, play back, or regression-test an input replay (deterministic)",
-		Long: `Replays this project's game through the host (deterministic-replay axis:
-the recorded InputSnapshot stream reproduces a session bit-for-bit).
+		Long: `Replays this project's game through the host: the recorded input stream
+reproduces a session bit-exact (byte-for-byte identical every run).
 
 Provide exactly one of:
   --record <file>   alias of 'mitiru run --record <file>' (real input needs a window)
   --replay <file>   play back a previously recorded <file> through the host
-  --test   <file>   headless regression test (no window, no CEF)
+  --test   <file>   regression test without opening a window
                     prints final-state JSON to stdout and exits 0 on success.
                     Combine with --expect <json> to diff against a known baseline.`,
 		Args: cobra.NoArgs,
@@ -41,7 +41,7 @@ Provide exactly one of:
 	}
 	cmd.Flags().StringVar(&replayRecordFile, "record", "", "record a session to <file>")
 	cmd.Flags().StringVar(&replayPlayFile, "replay", "", "play back <file>")
-	cmd.Flags().StringVar(&replayTestFile, "test", "", "headless regression test against <file>")
+	cmd.Flags().StringVar(&replayTestFile, "test", "", "regression-test against <file> without opening a window")
 	cmd.Flags().StringVar(&replayExpectFile, "expect", "", "expected final-state JSON for --test comparison")
 	cmd.Flags().StringVar(&replaySuiteDir, "suite", "",
 		"regression suite: replay every *.mtrr in <dir> against this project's game, "+
@@ -178,8 +178,10 @@ func runReplaySuite() error {
 	}
 	art := result.Artifacts
 
-	passRe := regexp.MustCompile(`reproduced bit-exact \((\d+) frames\)`)
-	divRe := regexp.MustCompile(`DIVERGED at frame (\d+)`)
+	// host verdict 行の機械可読タグ: "replay state: PASS (bit-exact, N frames)" /
+	// "replay state: FAIL (diverged at frame N of M frames)"。タグ部は ASCII 固定。
+	passRe := regexp.MustCompile(`replay state: PASS \(bit-exact, (\d+) frames\)`)
+	divRe := regexp.MustCompile(`replay state: FAIL \(diverged at frame (\d+)`)
 	diffRe := regexp.MustCompile(`replay diff: (\[.*\])`)
 
 	fmt.Printf("replay-suite: %d 本\n\n", len(mtrrs))

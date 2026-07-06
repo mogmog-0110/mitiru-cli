@@ -29,12 +29,12 @@ func newFuzzCommand() *cobra.Command {
 		Use:   "fuzz",
 		Short: "Hunt for crashes, nondeterminism, and invariant violations with random input",
 		Long: `Throws randomized deterministic input at THIS project's game and watches for
-three failure classes, each caught for free by the single flat-POD GameMemory +
-bit-exact replay substrate:
+three failure classes, each caught for free because every run is recorded and
+replays bit-exact (byte-for-byte identical):
 
   1. crash          -- the recording run dies / produces no .mtrr
-  2. nondeterminism -- the same input DIVERGEs when replayed
-  3. invariant      -- the final reflected state fails an --assert
+  2. nondeterminism -- the same input diverges when replayed
+  3. invariant      -- the final game state (MITIRU_REFLECT fields) fails an --assert
 
 A found failure is delta-debug minimized into a reproducing input script and a
 .mtrr -- because every random run is a recorded replay, any failure is a

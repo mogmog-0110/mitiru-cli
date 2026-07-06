@@ -30,11 +30,11 @@ var cppExts = map[string]bool{
 func newWatchCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "watch",
-		Short: "Run with L3 hot reload — rebuild on src/ change, host swaps the DLL live",
+		Short: "Run with hot reload — rebuild on src/ change, the running game swaps the DLL live",
 		Long: `'mitiru watch' is the editor loop. It builds and launches the game
 once via mitiru_host --watch, then rebuilds on every src/ change. The
 host detects the new DLL by mtime and reloads it in place — gameplay
-state survives the swap (ADR 0005).
+state survives the swap.
 
   src/**/*.{cpp,h,hpp,...} change → rebuild DLL → host hot-reloads
   assets/**/*.{html,css,js}      → engine's own hot reload picks it up

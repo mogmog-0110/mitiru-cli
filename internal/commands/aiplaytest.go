@@ -39,19 +39,19 @@ var reVerdict = regexp.MustCompile(`(?i)VERDICT:\s*(BUG|CLEAN)\s*(.*)`)
 func newAiPlaytestCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "ai-playtest",
-		Short: "Playtest the game by observing its reflected state and trying inputs counterfactually",
+		Short: "Playtest the game by observing its state fields and trying inputs counterfactually",
 		Long: `Launches THIS project's game with the AI observation API up (MITIRU_AI=1,
 off-screen), then probes it through /api/ai/branch -- simulating inputs N frames
 forward WITHOUT committing -- and judges whether a reachable state is illegal.
 
-Only possible on MitiruEngine: state is a single flat-POD GameMemory exposed
-semantically via MITIRU_REFLECT, and /api/ai/branch answers "what if I held these
+Only possible on MitiruEngine: the game state is exposed as named fields
+(declared via MITIRU_REFLECT), and /api/ai/branch answers "what if I held these
 keys for N frames" with zero side effects. The agent reasons over named fields,
 not pixels.
 
 Drivers:
   --driver sweep        (default) fixed strategies + numeric --assert. No LLM, no key.
-  --driver claude-code  drive it with local Claude Code headless (claude -p): semantic
+  --driver claude-code  drive it with local Claude Code (claude -p, no window): semantic
                         judgment with no numeric thresholds, subscription auth, no API key.
 
   mitiru ai-playtest --assert "playerX<=1232" --assert "playerX>=48"
@@ -194,7 +194,7 @@ func aiPlaytestClaudeCode(baseURL string) (bool, error) {
 	}
 	st0, _, _ := apiGet(baseURL, apiState)
 	fmt.Printf("観測開始: %s\n\n", strings.TrimSpace(string(st0)))
-	fmt.Println("ai-playtest (claude-code headless / サブスク認証・API キー不要)")
+	fmt.Println("ai-playtest (claude-code / ウィンドウなし実行 / サブスク認証・API キー不要)")
 
 	prompt := fmt.Sprintf(`あなたは MitiruEngine 製の決定論ゲームの自動プレイテスターです。画面は 1280x720。状態 API がローカルに立っています — curl で叩いてください:
   GET %[1]s%[2]s … 現在の状態 (MITIRU_REFLECT の名前付き field)

@@ -24,7 +24,7 @@ func newNewCommand() *cobra.Command {
 		Long: `Create a new MitiruEngine project from a template.
 
 The scaffolded project is built as a SHARED library (DLL) and run via the
-mitiru_host launcher — see ADR 0005 for the host/game contract.
+mitiru_host launcher.
 
 Templates: hello (minimal), clicker (incremental loop), shooter (vertical STG).
 

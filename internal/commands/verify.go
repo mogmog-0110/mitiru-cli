@@ -24,7 +24,7 @@ var (
 func newVerifyCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "verify",
-		Short: "ヘッドレスでビルド・起動・スクリーンショットを撮り、合否を JSON で出力する",
+		Short: "ウィンドウを出さずにビルド・起動・スクリーンショットを撮り、合否を JSON で出力する",
 		Long: `Build the current project, launch the host with MITIRU_AI=1,
 wait for readiness, then:
 

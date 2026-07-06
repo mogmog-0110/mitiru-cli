@@ -21,7 +21,7 @@ Equivalent to 'mitiru run' plus:
   - --config Debug forced (overrides project default)
   - MITIRU_DEBUG=1 in the environment
   - MITIRU_INSPECTOR=1 in the environment (engine inspector window
-    opt-in for the time-travel/scrub UI added in P2; ignored by older
+    opt-in for the 巻き戻し窓 (past-frame rewind); ignored by older
     engine builds)
 
 Standard output, standard error, and exit code are forwarded.`,

@@ -29,8 +29,9 @@ snapshot that introduces the regression in log(N) replay-tests and reports the
 broken field.
 
 git bisect's test step, automated by deterministic-replay agreement instead of a
-human verdict -- only possible because bit-exact replay lets each build be judged
-mechanically (does the same input still reproduce the recorded GameMemory?).
+human verdict -- possible because a replay is bit-exact (byte-for-byte identical),
+so each build can be judged mechanically: does the same input still reproduce
+the recorded game state?
 
 The project is built once for the host exe; its deployed DLL is temporarily
 overwritten with each snapshot and restored when bisect finishes.

@@ -14,9 +14,11 @@ import (
 	"time"
 )
 
+// host verdict 行の機械可読タグ: "replay state: PASS (bit-exact, N frames)" /
+// "replay state: FAIL (diverged at frame N of M frames)"。タグ部は ASCII 固定。
 var (
-	reReproduced  = regexp.MustCompile(`reproduced bit-exact`)
-	reDiverged    = regexp.MustCompile(`DIVERGED at frame (\d+)`)
+	reReproduced  = regexp.MustCompile(`replay state: PASS \(bit-exact`)
+	reDiverged    = regexp.MustCompile(`replay state: FAIL \(diverged at frame (\d+)`)
 	reReplayDiff  = regexp.MustCompile(`replay diff: (\[.*\])`)
 	reReplayFinal = regexp.MustCompile(`replay final: (\{.*\})`)
 	reAssert      = regexp.MustCompile(`^\s*([A-Za-z_]\w*)\s*(<=|>=|==|!=|<|>)\s*(-?[0-9.]+)\s*$`)

@@ -48,13 +48,32 @@ func TestCheckInvariants(t *testing.T) {
 }
 
 func TestFormatReplayDiff(t *testing.T) {
-	out := `... DIVERGED at frame 8\nreplay diff: [{"path":"playerX","from":650.0,"to":650.67}]\n`
+	out := `... replay state: FAIL (diverged at frame 8 of 300 frames)\nreplay diff: [{"path":"playerX","from":650.0,"to":650.67}]\n`
 	got := formatReplayDiff(out)
 	if got != "playerX: 650→650.67" {
 		t.Errorf("formatReplayDiff = %q, want playerX: 650→650.67", got)
 	}
 	if formatReplayDiff("no diff here") != "" {
 		t.Errorf("expected empty for output without a diff line")
+	}
+}
+
+// host の verdict 行 (機械可読タグ) とパーサーの同期を固定する。
+func TestReplayVerdictTags(t *testing.T) {
+	pass := "replay state: PASS (bit-exact, 301 frames) — 全フレームでゲームの状態が記録と完全一致"
+	fail := "replay state: FAIL (diverged at frame 73 of 301 frames) — ゲームの状態が記録からずれました"
+	if !reReproduced.MatchString(pass) {
+		t.Errorf("reReproduced should match PASS line: %q", pass)
+	}
+	if reReproduced.MatchString(fail) {
+		t.Errorf("reReproduced must not match FAIL line")
+	}
+	m := reDiverged.FindStringSubmatch(fail)
+	if m == nil || m[1] != "73" {
+		t.Errorf("reDiverged frame capture = %v, want 73", m)
+	}
+	if reDiverged.MatchString(pass) {
+		t.Errorf("reDiverged must not match PASS line")
 	}
 }
 
