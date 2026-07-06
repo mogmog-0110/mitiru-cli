@@ -14,7 +14,7 @@ import (
 
 // locateSubsystem は `name` に対応する standalone な subsystem 実行ファイルを探す
 // (例 "renderer" -> mitiru_subsys_renderer.exe)。subsystem launch コマンド
-// (renderer / audio / input / scene / replay) がバックの exe を発見する方法の
+// (renderer / audio / input / scene) がバックの exe を発見する方法の
 // single source of truth。
 //
 // 探索順:
@@ -78,7 +78,7 @@ func resolveEngineRoot() (string, error) {
 	return root, nil
 }
 
-// findOrBuildEngineExe は engine の実行ファイル (例 mitiru_subsys_replay、
+// findOrBuildEngineExe は engine の実行ファイル (例 mitiru_subsys_renderer、
 // mitiru_tool_cef) への path を返す。まだ存在しない場合は cache 済み engine source
 // から build する。出力 dir は build/apps/ (製品・インフラ) と build/examples/
 // (subsystem / 旧 engine snapshot) の両方を見る。

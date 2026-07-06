@@ -25,13 +25,12 @@ func newReplayCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "replay",
 		Short: "Record, play back, or regression-test an input replay (deterministic)",
-		Long: `Runs the engine's replay subsystem in isolation. Part of
-MitiruEngine's per-system isolation and the deterministic-replay axis:
-the recorded InputSnapshot stream reproduces a session bit-for-bit.
+		Long: `Replays this project's game through the host (deterministic-replay axis:
+the recorded InputSnapshot stream reproduces a session bit-for-bit).
 
 Provide exactly one of:
-  --record <file>   record this session to <file>
-  --replay <file>   play back a previously recorded <file>
+  --record <file>   alias of 'mitiru run --record <file>' (real input needs a window)
+  --replay <file>   play back a previously recorded <file> through the host
   --test   <file>   headless regression test (no window, no CEF)
                     prints final-state JSON to stdout and exits 0 on success.
                     Combine with --expect <json> to diff against a known baseline.`,
@@ -47,8 +46,9 @@ Provide exactly one of:
 	cmd.Flags().StringVar(&replaySuiteDir, "suite", "",
 		"regression suite: replay every *.mtrr in <dir> against this project's game, "+
 			"print a pass/fail table, exit non-zero on any divergence (CI gate)")
-	cmd.Flags().BoolVar(&replayGame, "game", false,
-		"replay THIS project's game (build + headless host) instead of the standalone demo subsystem")
+	cmd.Flags().BoolVar(&replayGame, "game", true,
+		"deprecated: always on (the standalone replay demo was absorbed into the host path)")
+	_ = cmd.Flags().MarkHidden("game")
 	return cmd
 }
 
@@ -82,16 +82,10 @@ func runReplay() error {
 	if replayExpectFile != "" && !test {
 		return fmt.Errorf("replay: --expect requires --test")
 	}
-	if replayGame && !test {
-		return fmt.Errorf("replay: --game supports only --test; to record a game session use `mitiru run --record <file>`")
-	}
 
 	if record {
-		abs, err := filepath.Abs(replayRecordFile)
-		if err != nil {
-			return fmt.Errorf("replay: resolve %q: %w", replayRecordFile, err)
-		}
-		return launchSubsystem("replay", "--record", abs)
+		// 録画は実入力が要る (= window が要る) ので run 側の経路に委譲する。
+		return fmt.Errorf("replay: 録画は `mitiru run --record %s` を使ってください (実入力のため window 起動)", replayRecordFile)
 	}
 
 	if play {
@@ -102,7 +96,17 @@ func runReplay() error {
 		if _, err := os.Stat(abs); err != nil {
 			return fmt.Errorf("replay: %s: %w", abs, err)
 		}
-		return launchSubsystem("replay", "--replay", abs)
+		// プロジェクトの game を host 経由で再生 (standalone replay demo は吸収済み)。
+		result, err := runBuild()
+		if err != nil {
+			return err
+		}
+		art := result.Artifacts
+		c := exec.Command(art.HostExePath, art.DllRel, "--replay", abs)
+		c.Stdout = os.Stdout
+		c.Stderr = os.Stderr
+		c.Dir = art.DeployDir
+		return c.Run()
 	}
 
 	// --test モード: headless、window なし、CEF なし。
@@ -114,25 +118,8 @@ func runReplay() error {
 		return fmt.Errorf("replay: %s: %w", abs, err)
 	}
 
-	// --game: standalone な demo subsystem ではなく、このプロジェクトの DLL を host
-	// 経由で replay する (実ゲーム)。プロジェクトを build してから host を headless 実行。
-	if replayGame {
-		return runReplayGameTest(abs)
-	}
-
-	subsysArgs := []string{"--test", abs}
-	if replayExpectFile != "" {
-		absExpect, err := filepath.Abs(replayExpectFile)
-		if err != nil {
-			return fmt.Errorf("replay: resolve expect %q: %w", replayExpectFile, err)
-		}
-		if _, err := os.Stat(absExpect); err != nil {
-			return fmt.Errorf("replay: expect %s: %w", absExpect, err)
-		}
-		subsysArgs = append(subsysArgs, "--expect", absExpect)
-	}
-
-	return launchSubsystem("replay", subsysArgs...)
+	// このプロジェクトの DLL を host 経由で headless replay する (実ゲーム)。
+	return runReplayGameTest(abs)
 }
 
 // runReplayGameTest は現在のプロジェクトを build し、記録した session をプロジェクトの
