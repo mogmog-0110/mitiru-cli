@@ -1,0 +1,28 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "mitiru build",
+      "type": "shell",
+      "command": "mitiru",
+      "args": ["build"],
+      "group": { "kind": "build", "isDefault": true },
+      "presentation": { "reveal": "always", "panel": "shared" },
+      "problemMatcher": ["$msCompile"]
+    },
+    {
+      "label": "mitiru run",
+      "type": "shell",
+      "command": "mitiru",
+      "args": ["run"],
+      "group": "test",
+      "presentation": { "reveal": "always", "panel": "shared" }
+    },
+    {
+      "label": "mitiru clean",
+      "type": "shell",
+      "command": "mitiru",
+      "args": ["clean"]
+    }
+  ]
+}

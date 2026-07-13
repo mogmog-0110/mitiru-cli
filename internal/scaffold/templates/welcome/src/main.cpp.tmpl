@@ -1,0 +1,207 @@
+// {{.ProjectName}} — MitiruEngine のスタートプロジェクト。
+// 左は C++ が描く絵 (額装した赤富士・ロゴ・歩く赤べこ・マウスを追う蛍・舞う桜)、
+// 右の操作パネル (図形・スライダー・チェック・ボタン・ゲージ) は HTML/CSS (assets/scene.html)。
+// 値は HTML→C++→HTML と往復し、つなぎの JavaScript は 1 行も書かない。
+// mitiru watch 中に数値や色を書き換えて保存すると、止めずにその場で反映されます。
+//
+// native draw は日本語フォントを積まない (mitiru.toml の atlas=none で高速起動) 方針なので、
+// 文字はすべて HTML 側に置く。C++ は「絵」だけを描く。
+
+#include <mitiru.hpp>
+#include <algorithm>   // std::min
+#include <cmath>       // std::sin, std::fmod
+#include <cstdlib>     // std::atof
+using namespace mitiru;
+
+namespace {
+
+constexpr float kScreenW = 1280.0f;
+constexpr float kScreenH = 720.0f;
+
+// ── アセットの実寸 (s.sprite は寸法を返さないので額縁計算用に控える) ──
+constexpr float kFujiW = 960.0f, kFujiH = 641.0f;          // assets/sprites/fuji.png
+constexpr float kLogoNatW = 2400.0f, kLogoNatH = 447.0f;   // assets/sprites/logo.png
+constexpr float kBekoW = 304.0f, kBekoH = 232.0f;          // assets/sprites/akabeko_N.png
+
+// ── 見た目の寸法 ──
+constexpr float kArtScale  = 0.46f;   // 赤富士の表示倍率 (縮小 = くっきり)
+constexpr float kMatte     = 24.0f;   // 絵まわりの生成りマット
+constexpr float kFrameBand = 11.0f;   // その外の焦茶の額縁
+constexpr float kArtX      = 80.0f;   // 額の中の絵の左上
+constexpr float kArtY      = 70.0f;
+constexpr float kLogoW     = 420.0f;  // ロゴの表示幅
+constexpr float kBekoScale = 0.42f;   // 赤べこの表示倍率
+constexpr int   kPetals    = 10;      // 舞う桜の枚数 (控えめ)
+
+// ── 和の配色 ──
+constexpr Color kBgTop      = hex(0xFCF7EF);   // 背景グラデ上 (暖かい生成り)
+constexpr Color kBgBottom   = hex(0xF2F5FA);   // 背景グラデ下 (涼しい紙白)
+constexpr Color kFrameWood  = hex(0x2E2A27);   // 額縁 (焦茶)
+constexpr Color kMatteCream = hex(0xFBF8F1);   // マット (生成り)
+constexpr Color kBevel      = hex(0xD8CFBE);   // 絵ぎわの見切り線
+constexpr Color kSakura     = hex(0xF3C4D4);   // 桜の花びら (淡い桃)
+constexpr Color kFirefly    = hex(0xF6CC5A);   // マウスを追う蛍 (やわらかい金)
+constexpr Color kDropShadow = rgba(20, 20, 24, 40);
+
+constexpr float kRippleLife = 0.9f;
+
+float clampf(float v, float lo, float hi) { return v < lo ? lo : (v > hi ? hi : v); }
+
+}  // namespace
+
+struct {{.ProjectIdent}}Game
+{
+    // 状態はすべて単純な値 (まるごとコピーできる)。ポインタや可変長配列は持たない。
+    float t        = 0.0f;
+    float bekoX    = 360.0f, bekoY = 612.0f;   // 赤べこの中心 (パネルの手前を歩く)
+    float walkT    = 0.0f;                       // 歩行アニメの時計
+    int   step     = 0;                          // 今の歩行コマ (0..3)
+    float fx       = 640.0f, fy = 360.0f;        // マウスを追う蛍
+    struct Ripple { float x = 0.0f, y = 0.0f, age = 9.0f; };
+    Ripple ripples[5] = {};
+    bool  prevClick = false;
+
+    float speed    = 120.0f;   // 赤べこの歩く速さ (HTML スライダー、20..300)
+    int   count    = 0;        // ボタンを押した回数
+    bool  petalsOn = true;     // 桜を降らせるか (HTML チェック)
+    float gauge    = 0.0f;     // ゲージ (0..1)
+    bool  draining = false;    // 満タン後、0 へ減っている最中か
+    float holdT    = 0.0f;     // 満タンの静止時間
+
+    void init()
+    {
+        speed = 120.0f; count = 0; petalsOn = true;
+        gauge = 0.0f; draining = false; holdT = 0.0f;
+        bekoX = 360.0f; bekoY = 612.0f; step = 0; walkT = 0.0f;
+    }
+
+    void update(Input in, Hud hud, float dt)
+    {
+        t += dt;
+
+        // ── HTML の UI から C++ へ (data-m-action → in.action) ──
+        if (in.action("count"))                     // ボタン: 回数を数え、ゲージを溜める
+        {
+            hud.play("pop");
+            ++count;
+            if (!draining)
+            {
+                gauge += 0.1f;
+                if (gauge >= 1.0f) { gauge = 1.0f; draining = true; holdT = 0.0f; }
+            }
+        }
+        if (in.action("speed")) { const char* p = in.actionPayload("speed"); if (p) { speed = clampf((float)std::atof(p), 20.0f, 300.0f); } }
+        if (in.action("sakura")) { const char* p = in.actionPayload("sakura"); petalsOn = (p && p[0] == 't'); }
+        if (in.cancelPressed()) { hud.quit(); }     // ESC で終了
+
+        // ゲージ: 満タンを少し見せてから、滑らかに 0 へ減らす。
+        if (draining)
+        {
+            holdT += dt;
+            if (holdT >= 0.4f)
+            {
+                gauge -= dt * 0.5f;
+                if (gauge <= 0.0f) { gauge = 0.0f; draining = false; }
+            }
+        }
+
+        // ── 矢印キー・WASD・パッドで赤べこを歩かせる (速さは HTML スライダー) ──
+        const Stick m = in.move();
+        bekoX += m.x * speed * dt;
+        bekoY += m.y * speed * dt;
+        bekoX = clampf(bekoX, 90.0f, kScreenW - 90.0f);
+        bekoY = clampf(bekoY, 588.0f, 636.0f);
+        const bool moving = (m.x * m.x + m.y * m.y) > 0.01f;
+        if (moving) { walkT += dt; if (walkT >= 0.13f) { walkT -= 0.13f; step = (step + 1) % 4; } }
+        else        { step = 0; }
+
+        // ── マウスを追う蛍 (少し遅れて寄る) ──
+        const float mx = in.mouseX(), my = in.mouseY();
+        const float k = std::min(1.0f, dt * 6.5f);
+        fx += (mx - fx) * k;
+        fy += (my - fy) * k;
+
+        // ── クリックで広がる波紋 (UI 部品の上では CEF がクリックを拾うのでここには来ない) ──
+        const bool down = in.mouseDown(0);
+        if (down && !prevClick)
+        {
+            int slot = 0;
+            for (int i = 1; i < 5; ++i) { if (ripples[i].age > ripples[slot].age) { slot = i; } }
+            ripples[slot] = Ripple{mx, my, 0.0f};
+        }
+        prevClick = down;
+        for (Ripple& r : ripples) { if (r.age < kRippleLife) { r.age += dt; } }
+
+        // ── C++ から HTML へ (hud.set → data-m-text / data-m-style) ──
+        hud.set("view.count", count);
+        hud.set("view.speed", (int)speed);
+        hud.set("view.gauge", (int)(gauge * 100.0f));   // ゲージ幅 % (data-m-style)
+    }
+
+    // 舞い落ちる控えめな桜。位置は t と番号 i だけから決まる (状態を持たない)。
+    void petals(Screen& s) const
+    {
+        for (int i = 0; i < kPetals; ++i)
+        {
+            const float fi   = (float)i;
+            const float fall = 26.0f + (float)((i * 13) % 20);
+            const float sway = 12.0f + (float)((i * 7) % 14);
+            const float baseX = 50.0f + (kScreenW - 100.0f) * fi / kPetals;
+            const float x = baseX + std::sin(t * (0.5f + fi * 0.11f) + fi) * sway;
+            const float y = std::fmod(fi * 90.0f + t * fall, kScreenH + 60.0f) - 30.0f;
+            const float rx = 6.0f + (float)(i % 3) * 1.5f;
+            const float alpha = 0.16f + (float)(i % 4) * 0.04f;
+            s.pushRotation(deg(fi * 41.0f + t * 40.0f), x, y);
+            s.drawEllipse(Vec2{x, y}, rx, rx * 0.58f, kSakura.withAlpha(alpha));
+            s.popTransform();
+        }
+    }
+
+    // 額に入れた赤富士。落ち影→額縁→マット→絵→見切り線の順に重ねる。
+    void framedArt(Screen& s) const
+    {
+        const float artW = kFujiW * kArtScale;
+        const float artH = kFujiH * kArtScale;
+        const float ox = kArtX - kMatte - kFrameBand, oy = kArtY - kMatte - kFrameBand;
+        const float ow = artW + 2.0f * (kMatte + kFrameBand), oh = artH + 2.0f * (kMatte + kFrameBand);
+        s.drawRoundedRect(Rect{ox + 6.0f, oy + 10.0f, ow, oh}, kDropShadow, 8.0f);   // 落ち影
+        s.drawRoundedRect(Rect{ox, oy, ow, oh}, kFrameWood, 6.0f);                    // 額縁
+        s.drawRoundedRect(Rect{ox + kFrameBand, oy + kFrameBand,
+                               ow - 2.0f * kFrameBand, oh - 2.0f * kFrameBand}, kMatteCream, 3.0f);   // マット
+        s.sprite("fuji", kArtX, kArtY, kArtScale);                                    // 浮世絵
+        s.drawRectFrame(Rect{kArtX, kArtY, artW, artH}, kBevel, 1.0f);                // 見切り線
+    }
+
+    void draw(Screen& s) const
+    {
+        // 背景は上→下のゆるいグラデ。
+        s.drawGradientRect(Rect{0.0f, 0.0f, kScreenW, kScreenH}, kBgTop, kBgBottom);
+        if (petalsOn) { petals(s); }
+
+        // 左: 額装した赤富士 → (キャプションは HTML) → ロゴ画像。
+        framedArt(s);
+        const float artH  = kFujiH * kArtScale;
+        const float logoX = kArtX + kFujiW * kArtScale * 0.5f - kLogoW * 0.5f;
+        const float logoY = kArtY + artH + kMatte + kFrameBand + 40.0f;   // 額の下、キャプションのぶん空ける
+        s.sprite("logo", logoX, logoY, kLogoW / kLogoNatW);
+
+        // 手前: 矢印キーで歩く赤べこ (4 コマ)。
+        const float bw = kBekoW * kBekoScale, bh = kBekoH * kBekoScale;
+        const char* bekoId[4] = {"akabeko_0", "akabeko_1", "akabeko_2", "akabeko_3"};
+        s.sprite(bekoId[step], bekoX - bw * 0.5f, bekoY - bh * 0.5f, kBekoScale);
+
+        // 触れるデモ: クリックの波紋 (金の輪が広がって薄れる)。
+        for (const Ripple& r : ripples)
+        {
+            if (r.age >= kRippleLife) { continue; }
+            const float fade = 1.0f - r.age / kRippleLife;
+            s.drawCircleFrame(Vec2{r.x, r.y}, 8.0f + r.age * 110.0f, kFirefly.withAlpha(fade * 0.5f), 2.0f);
+        }
+        // 触れるデモ: マウスを追う蛍。
+        s.fillCircle(fx, fy, 20.0f, kFirefly.withAlpha(0.10f));
+        s.fillCircle(fx, fy, 12.0f, kFirefly.withAlpha(0.24f));
+        s.fillCircle(fx, fy,  6.0f, kFirefly.withAlpha(0.90f));
+    }
+};
+
+MITIRU_GAME({{.ProjectIdent}}Game)

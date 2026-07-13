@@ -1,0 +1,49 @@
+# {{.ProjectName}}
+
+A MitiruEngine project (game-as-DLL, ADR 0005).
+
+## 動かしかた
+
+```
+mitiru run
+```
+
+Debug ビルド + `mitiru_host` 経由のゲーム起動まで一通り走ります。
+
+ホットリロード付きで開発する場合は:
+
+```
+mitiru watch
+```
+
+`src/main.cpp` を保存 → 自動で DLL が再ビルド → ホストが新しい DLL を取り込む (ゲーム状態は保持)。
+
+## 構成
+
+- `src/main.cpp` — ゲームコード (C++、DLL としてビルドされる)。額装した赤富士・ロゴ・矢印キーで歩く赤べこ・舞う桜・マウスを追う蛍を draw で描く
+- `assets/scene.html` — 画面 UI (HTML/CSS のみ。キャプション・図形・スライダー・チェック・ボタン・ゲージ)
+- `assets/sprites/` — 画像スプライト (`fuji.png` 北斎「凱風快晴」・`logo.png` ブランドロゴ・`akabeko_N.png` 歩行 4 コマ)。自分の絵に差し替え可
+- `assets/audio/pop.wav` — ボタンの効果音
+- `mitiru.toml` — プロジェクト設定 (ウィンドウサイズ・使用エンジン版など)
+
+`CMakeLists.txt` を編集する必要はありません。`mitiru` CLI が裏で生成します。
+
+## UI は JavaScript ゼロ
+
+`assets/scene.html` は素の HTML/CSS。C++ から `hud.set` で名前付きの値を push し、
+HTML 側は `data-m-*` 属性を書くだけで表示が同期します (宣言的バインダ、ADR 0007)。
+JS グルー (`onStateChange` の購読や DOM 操作) は一切書きません。
+
+- `hud.set("view.count", ...)` (C++) ↔ `data-m-text="view.count"` (HTML)
+- ボタン/チェック/スライダーの値は `data-m-action` で C++ の `in.action(...)` に届く (HTML→C++→HTML の往復)
+- 属性の一覧と作例は [画面を作る](https://mogmog-0110.github.io/MitiruEngine/ui.html)
+
+## どう動くのか
+
+- `src/main.cpp` は `<project>.dll` としてビルドされ、エンジン本体ではなく `mitiru_host.exe` にロードされる (ADR 0005)
+- gameplay state はゲーム struct のメンバ変数に集約 (flat POD)。ホットリロード時もホストがポインタを保持するので、状態をなくさずコードだけ差し替えできる。巻き戻し・リプレイも同じ仕組みに乗る
+- DLL ↔ ホスト間は C-only signal flow (InputSnapshot / FrameIntents) しか通らない
+
+## ライセンス
+
+このテンプレートのコードは MIT License です。お好きにどうぞ。

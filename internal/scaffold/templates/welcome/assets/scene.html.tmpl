@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>{{.ProjectName}}</title>
+<style>
+  /* 画面の文字と操作 UI は HTML/CSS。C++ が hud.set した値を data-m-text / data-m-style で受け、
+     ボタン/チェック/スライダーは data-m-action で C++ (in.action) へ送る。JS は書かない。
+     背景は透明 — 下に C++ の draw() の絵 (赤富士・赤べこ・蛍・桜) が透ける。 */
+  html, body {
+    margin: 0; height: 100%; overflow: hidden;
+    background: transparent;
+    pointer-events: none;             /* クリックはゲームへ素通し */
+    user-select: none;
+    font-family: "Segoe UI", "Noto Sans JP", "Hiragino Sans", "Yu Gothic", system-ui, sans-serif;
+    color: #1d1d1f;
+  }
+  input, button, label { pointer-events: auto; }   /* UI 部品だけクリックを拾う */
+
+  /* 額の下のキャプション (美術館の解説札のように) */
+  .caption {
+    position: absolute; left: 45px; top: 404px; width: 512px;
+    text-align: center; font-size: 15px; color: #6b7280; letter-spacing: .02em;
+  }
+
+  /* 右の「触って試す」カード */
+  .panel {
+    position: absolute; left: 672px; top: 48px; width: 536px;
+    box-sizing: border-box; padding: 30px 40px 34px;
+    background: #ffffff; border-radius: 18px;
+    box-shadow: 0 12px 30px rgba(28,32,44,.14);
+  }
+
+  /* 1 段目: 基本図形 4 つ */
+  .shapes { display: flex; align-items: flex-end; justify-content: space-around; height: 76px; }
+  .sq  { width: 60px; height: 60px; border-radius: 15px; background: #0a84ff; }
+  .ci  { width: 62px; height: 62px; border-radius: 50%;  background: #1fa654; }
+  .cap { width: 42px; height: 66px; border-radius: 21px; background: #ff9500; }
+  .tri { width: 0; height: 0; border-left: 33px solid transparent; border-right: 33px solid transparent;
+         border-bottom: 58px solid #e8338a; }
+
+  /* 2 段目: スライダー */
+  .slider-row { display: flex; align-items: baseline; justify-content: space-between; margin-top: 30px; }
+  .slider-row .label { font-size: 18px; color: #1d1d1f; }
+  .slider-row .value { font-size: 20px; font-weight: 700; color: #0a84ff; font-variant-numeric: tabular-nums; }
+  input[type=range] { width: 100%; margin: 10px 0 0; accent-color: #0a84ff; }
+
+  /* 3 段目: チェックボックス */
+  .check { display: flex; align-items: center; gap: 12px; margin-top: 24px;
+           font-size: 18px; color: #1d1d1f; cursor: pointer; }
+  .check input { width: 22px; height: 22px; accent-color: #0a84ff; cursor: pointer; }
+
+  /* 4 段目: ボタン + ゲージ (1 組) */
+  .set-label { margin-top: 28px; font-size: 18px; color: #1d1d1f; }
+  .btn {
+    display: block; width: 100%; margin-top: 10px; cursor: pointer;
+    font: 700 22px inherit; color: #fff; background: #0a84ff;
+    border: 0; border-radius: 12px; padding: 14px 0;
+    box-shadow: 0 4px 12px rgba(10,132,255,.30);
+  }
+  .btn:active { transform: translateY(2px); background: #0060d8; }
+  .gauge { margin-top: 14px; height: 14px; background: #d8dee9; border-radius: 7px; overflow: hidden; }
+  .gauge-fill { height: 100%; width: 0; background: #ff9500; border-radius: 7px; transition: width .08s linear; }
+
+  /* 下部の案内 */
+  .hint {
+    position: absolute; left: 0; bottom: 0; width: 100%;
+    background: rgba(226,231,240,.88); color: #3a4048;
+    font-size: 18px; text-align: center; padding: 7px 0;
+  }
+</style>
+</head>
+<body>
+  <!-- C++ が draw() で描く絵の上に、この HTML/CSS が重なる -->
+  <div class="caption">葛飾北斎「凱風快晴」冨嶽三十六景</div>
+
+  <div class="panel">
+    <div class="shapes">
+      <div class="sq"></div><div class="ci"></div><div class="cap"></div><div class="tri"></div>
+    </div>
+
+    <div class="slider-row">
+      <span class="label">赤べこの速さ</span>
+      <span class="value" data-m-text="view.speed">120</span>
+    </div>
+    <input type="range" min="20" max="300" value="120" data-m-action="speed">
+
+    <label class="check"><input type="checkbox" checked data-m-action="sakura"> 桜を降らせる</label>
+
+    <div class="set-label">おすと たまる（満タンで戻る）</div>
+    <button class="btn" data-m-action="count">count: <span data-m-text="view.count">0</span></button>
+    <div class="gauge"><div class="gauge-fill" data-m-style="width: {view.gauge}%"></div></div>
+  </div>
+
+  <div class="hint">矢印キーで赤べこが歩く　　右のスライダーとボタンは触って動かせる</div>
+
+  <!-- バインダ本体。build が mitiru_runtime/* をこの隣へ自動コピーします。 -->
+  <script src="mitiru_runtime/mitiru_cef_state.js"></script>
+  <script src="mitiru_runtime/mitiru_bind.js"></script>
+</body>
+</html>
