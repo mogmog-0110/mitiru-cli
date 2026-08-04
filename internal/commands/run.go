@@ -69,6 +69,13 @@ func hostArgsFromConfig(pc *config.ProjectConfig) []string {
 			extra = append(extra, "--lofi-dither",
 				strconv.FormatFloat(*pc.Lofi.Dither, 'g', -1, 64))
 		}
+		if pc.Lofi.Vi {
+			extra = append(extra, "--lofi-vi")
+		}
+		if pc.Lofi.Gamma != nil {
+			extra = append(extra, "--lofi-gamma",
+				strconv.FormatFloat(*pc.Lofi.Gamma, 'g', -1, 64))
+		}
 	}
 	return extra
 }

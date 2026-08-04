@@ -183,6 +183,15 @@ foreach(_tool perf inspector scene_tree replay mixer)
     endif()
 endforeach()
 
+# ── Deploy bundled fonts next to the host exe ─────────────────────
+# Native text (drawTextInRect 等) は AssetPath::resolve が exe 隣の
+# assets/fonts/ から日本語フォントを解決する。これが無いと [font]
+# atlas = "kana"/"japanese" のプロジェクトで日本語が豆腐になる。
+set(_mitiru_fonts_dir "${MITIRU_ENGINE_ROOT}/assets/fonts")
+if(EXISTS "${_mitiru_fonts_dir}")
+    file(COPY "${_mitiru_fonts_dir}" DESTINATION "${CMAKE_BINARY_DIR}/assets")
+endif()
+
 # ── Deploy the game DLL into <host_dir>/<TargetName>/ ─────────────
 # Putting the DLL next to its assets keeps the host's cwd anchor stable
 # (cwd = mitiru_host dir → relative path "<TargetName>/assets/scene.html").

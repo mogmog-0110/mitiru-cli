@@ -69,6 +69,9 @@ type LofiSection struct {
 	Height  int      `toml:"height"`
 	Bits    string   `toml:"bits"`
 	Dither  *float64 `toml:"dither"`
+	// Vi は映像出力段の de-dither + divot。ON なら拡大はニアレスト固定。
+	Vi    bool     `toml:"vi"`
+	Gamma *float64 `toml:"gamma"`
 }
 
 // FindManifest は startDir から上方向に mitiru.toml を探す。manifest の

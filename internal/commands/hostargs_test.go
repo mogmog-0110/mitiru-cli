@@ -123,3 +123,26 @@ func TestHostArgs_LofiDitherZeroExplicit(t *testing.T) {
 		t.Errorf("explicit dither=0 must be passed: %q", argsStr(pc))
 	}
 }
+
+func TestHostArgs_LofiViAndGamma(t *testing.T) {
+	pc := &config.ProjectConfig{}
+	pc.Lofi.Enabled = true
+	pc.Lofi.Vi = true
+	g := 0.5
+	pc.Lofi.Gamma = &g
+
+	got := argsStr(pc)
+	for _, want := range []string{"--lofi-vi", "--lofi-gamma 0.5"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("expected %q in %q", want, got)
+		}
+	}
+}
+
+func TestHostArgs_LofiViGatedByEnabled(t *testing.T) {
+	pc := &config.ProjectConfig{}
+	pc.Lofi.Vi = true // enabled=false なので何も渡さない
+	if strings.Contains(argsStr(pc), "--lofi-vi") {
+		t.Errorf("vi must be gated by enabled: %q", argsStr(pc))
+	}
+}
