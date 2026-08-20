@@ -187,10 +187,17 @@ set_target_properties({{.TargetName}} PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY "${_game_runtime_dir}"
     LIBRARY_OUTPUT_DIRECTORY "${_game_runtime_dir}")
 
-# Copy user assets/ into the deploy dir on every build.
+# Copy user assets/ into the deploy dir on every build. 3.26+ では差分コピーに
+# する — 素の copy_directory は DLL を relink するたびに全ファイルを書き直すので、
+# 起動前の待ちがアセット数に比例して伸びる。
+if(CMAKE_VERSION VERSION_GREATER_EQUAL "3.26")
+    set(_mitiru_copy_dir copy_directory_if_different)
+else()
+    set(_mitiru_copy_dir copy_directory)
+endif()
 if(EXISTS "${MITIRU_PROJECT_ROOT}/assets")
     add_custom_command(TARGET {{.TargetName}} POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E copy_directory
+        COMMAND ${CMAKE_COMMAND} -E ${_mitiru_copy_dir}
             "${MITIRU_PROJECT_ROOT}/assets"
             "${_game_runtime_dir}/assets"
         COMMENT "mitiru-cli: copying assets/ next to {{.TargetName}}.dll")
@@ -201,7 +208,7 @@ endif()
 # put their HTML.
 if(EXISTS "${MITIRU_ENGINE_ROOT}/web/mitiru_runtime")
     add_custom_command(TARGET {{.TargetName}} POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E copy_directory
+        COMMAND ${CMAKE_COMMAND} -E ${_mitiru_copy_dir}
             "${MITIRU_ENGINE_ROOT}/web/mitiru_runtime"
             "${_game_runtime_dir}/assets/mitiru_runtime"
         COMMENT "mitiru-cli: copying mitiru_runtime/* into deployed assets/")
