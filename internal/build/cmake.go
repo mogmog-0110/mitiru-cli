@@ -68,19 +68,20 @@ type templateData struct {
 
 // CMake template — project ごとに 2 つの target を生成する:
 //
-//   <TargetName>      SHARED library。user の game DLL。
-//   mitiru_host       汎用 launcher exe (engine reference impl、
-//                     ${MITIRU_ENGINE_ROOT}/apps/mitiru_host/main.cpp から compile。
-//                     旧 engine snapshot では examples/mitiru_host/main.cpp)。
+//	<TargetName>      SHARED library。user の game DLL。
+//	mitiru_host       汎用 launcher exe (engine reference impl、
+//	                  ${MITIRU_ENGINE_ROOT}/apps/mitiru_host/main.cpp から compile。
+//	                  旧 engine snapshot では examples/mitiru_host/main.cpp)。
 //
 // <projectRoot>/build/out/<Config>/ 内の layout:
-//   mitiru_host.exe
-//   libcef.dll, *.pak, locales/, MitiruCefHelper.exe   (mitiru_add_cef_game 経由で deploy)
-//   <TargetName>/
-//     <TargetName>.dll
-//     assets/
-//       scene.html
-//       mitiru_runtime/mitiru_cef_state.js
+//
+//	mitiru_host.exe
+//	libcef.dll, *.pak, locales/, MitiruCefHelper.exe   (mitiru_add_cef_game 経由で deploy)
+//	<TargetName>/
+//	  <TargetName>.dll
+//	  assets/
+//	    scene.html
+//	    mitiru_runtime/mitiru_cef_state.js
 //
 // 起動:  mitiru_host.exe <TargetName>/<TargetName>.dll
 // host は DLL path から CEF の start URL を自動的に導く。
@@ -153,6 +154,8 @@ endif()
 {{if .StartMainAbs}}if(WIN32)
     add_executable(mitiru_start WIN32 "{{.StartMainAbs}}")
     target_compile_features(mitiru_start PRIVATE cxx_std_20)
+    # engine には link しないが、純ヘッダ (platform/Utf8Args.hpp) だけ使う。
+    target_include_directories(mitiru_start PRIVATE "{{.EngineRoot}}/include")
     target_link_options(mitiru_start PRIVATE /SUBSYSTEM:WINDOWS)
     if(MSVC)
         target_compile_options(mitiru_start PRIVATE /utf-8)
@@ -546,6 +549,7 @@ func isMultiConfigGenerator(generator string) bool {
 //     Windows path の drive-letter colon でつまずかない — NMake はそこで
 //     "fatal error U1033: 構文エラー : 予期しない ':'" で中断するが、Ninja はしない。
 //   - VS は ninja.exe を同梱し vcvars64.bat が PATH に載せるので、追加 install 不要。
+//
 // NMake や .sln を使いたい user は
 // `mitiru build --generator "NMake Makefiles"` / `--generator "Visual Studio 17 2022"` で opt-in できる。
 func generatorForVcvars(vcvars string) string {
@@ -669,4 +673,3 @@ func sanitiseTargetName(name string) string {
 	}
 	return s
 }
-
