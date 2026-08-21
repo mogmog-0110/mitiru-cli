@@ -234,14 +234,6 @@ func runDist() error {
 		}
 	}
 
-	if distZip {
-		zipPath := bundleRoot + ".zip"
-		if err := zipDir(bundleRoot, filepath.Dir(bundleRoot), zipPath); err != nil {
-			return err
-		}
-		fmt.Printf("Zipped: %s\n", zipPath)
-	}
-
 	// 起動方法を決める (README / 最終メッセージ共通)。
 	primary := batName
 	if stubUsed {
@@ -252,10 +244,26 @@ func runDist() error {
 	readme := name + " — MitiruEngine game\r\n\r\n" +
 		primary + " をダブルクリックで起動。\r\n" +
 		"data/ にランタイム一式が入っています (移動・削除しないでください)。\r\n"
+	// 頒布物の README はサークル名・利用規約・連絡先を載せる作者の文書で、
+	// ここで生成した 3 行に毎回上書きされては書く意味が無い。
+	// プロジェクトに README.dist.txt があればそれをそのまま配る。
+	if custom, rerr := os.ReadFile(filepath.Join(projectRoot, "README.dist.txt")); rerr == nil {
+		readme = string(custom)
+	}
 	if err := os.WriteFile(filepath.Join(bundleRoot, "README.txt"), []byte(readme), 0o644); err != nil {
 		return err
 	}
 	n++
+
+	// zip は README を書いたあとに作る。先に固めると
+	// README.txt の入っていない zip が出来上がり、それがそのまま頒布物になる。
+	if distZip {
+		zipPath := bundleRoot + ".zip"
+		if err := zipDir(bundleRoot, filepath.Dir(bundleRoot), zipPath); err != nil {
+			return err
+		}
+		fmt.Printf("Zipped: %s\n", zipPath)
+	}
 
 	mode := "HTML UI (CEF) 同梱"
 	if noCef {
@@ -469,7 +477,9 @@ func packAssets(assetsDir, outFile, keyPrefix string) (int, error) {
 
 // writeAssetPack は AssetPack.hpp (ADR 0016) と **バイト互換**の .mtpak を書く。
 // 形式: magic"MTPAK\0" | version u16 | flags u16 | count u32 |
-//       [count] keyLen u16, key, offset u64, size u64 | blob region (scramble 時 XOR)。
+//
+//	[count] keyLen u16, key, offset u64, size u64 | blob region (scramble 時 XOR)。
+//
 // C++ 側 (mitiru::vfs::AssetPack::open/read) がこれを読むので、両者の形式は一致必須。
 func writeAssetPack(outFile string, keys []string, datas [][]byte, scramble bool) error {
 	blobStart := uint64(6 + 2 + 2 + 4)
