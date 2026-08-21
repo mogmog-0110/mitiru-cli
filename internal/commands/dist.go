@@ -166,7 +166,9 @@ func runDist() error {
 		hasIcon = true
 		n++
 	}
-	hostArgs = append(hostArgs, distFaceArgs(cfg.Project.Name, hasIcon)...)
+	// 窓の表題は [window] title。project.name はファイル名の
+	// ASCII 識別子で、遊ぶ側に見せる名前ではない。
+	hostArgs = append(hostArgs, distFaceArgs(cfg.Window.Title, hasIcon)...)
 
 	// 既定ランチャ: トップ階層の <name>.exe = GUI stub (mitiru_start)。コンソール窓を
 	// 一切出さずに data\mitiru_host.exe を起動する。stub は data\launch.mtargs から
