@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"strings"
 	"text/template"
@@ -245,6 +246,9 @@ func BuildDirs(projectRoot string) (cmakeSrcDir, cmakeOutDir string) {
 
 // Configure は <projectRoot>/build/cmake/ に CMakeLists.txt を生成し、
 // cmake に渡すべき source / output directory を返す。
+// engineRootRe は生成済み CMakeLists から前回の engine 源を取り出す。
+var engineRootRe = regexp.MustCompile(`set\(MITIRU_ENGINE_ROOT "([^"]+)"\)`)
+
 func Configure(opts Options) (cmakeSrcDir, cmakeOutDir string, err error) {
 	cmakeSrcDir, cmakeOutDir = BuildDirs(opts.ProjectRoot)
 	if opts.OutDir != "" {
@@ -288,6 +292,23 @@ func Configure(opts Options) (cmakeSrcDir, cmakeOutDir string, err error) {
 		MainCppAbs:   toCMakePath(mainCpp),
 		HostMainAbs:  toCMakePath(hostMain),
 		StartMainAbs: startMainAbs,
+	}
+
+	// engine 源の切り替わりは全ターゲットの作り直しになる。黙って始めると
+	// 「毎回 400 近いコンパイルが走る」ようにしか見えないので、原因を先に言う。
+	// 典型は、古いターミナルに残った MITIRU_ENGINE_ROOT が mitiru.toml のピンと
+	// 交互に効いてしまうケース。
+	if prev, readErr := os.ReadFile(filepath.Join(cmakeSrcDir, "CMakeLists.txt")); readErr == nil {
+		if m := engineRootRe.FindSubmatch(prev); m != nil && string(m[1]) != data.EngineRoot {
+			if opts.Stdout != nil {
+				fmt.Fprintf(opts.Stdout,
+					"NOTE: engine source changed:\n  %s\n  -> %s\n"+
+						"  the whole engine rebuilds from scratch. If this is unexpected,\n"+
+						"  check this terminal for a stale MITIRU_ENGINE_ROOT\n"+
+						"  (the env var overrides the mitiru.toml pin).\n",
+					string(m[1]), data.EngineRoot)
+			}
+		}
 	}
 
 	tmpl, err := template.New("CMakeLists").
