@@ -8,8 +8,11 @@ import (
 )
 
 func main() {
+	restoreConsoleCP := setConsoleUTF8()
 	if err := commands.NewRootCommand().Execute(); err != nil {
+		restoreConsoleCP()
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
+	restoreConsoleCP()
 }
