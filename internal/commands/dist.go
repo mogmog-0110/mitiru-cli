@@ -274,6 +274,15 @@ func runDist() error {
 	if custom, rerr := os.ReadFile(filepath.Join(projectRoot, "README.dist.txt")); rerr == nil {
 		readme = string(custom)
 	}
+	// 第三者ライセンスの表記。CEF (BSD) はバイナリ再配布にライセンス文書の同梱が
+	// 要件なので、プロジェクトに THIRD_PARTY_NOTICES.txt があれば bundle に入れる。
+	if notices, nerr := os.ReadFile(filepath.Join(projectRoot, "THIRD_PARTY_NOTICES.txt")); nerr == nil {
+		if err := os.WriteFile(filepath.Join(bundleRoot, "THIRD_PARTY_NOTICES.txt"),
+			notices, 0o644); err != nil {
+			return err
+		}
+		n++
+	}
 	if err := os.WriteFile(filepath.Join(bundleRoot, "README.txt"), []byte(readme), 0o644); err != nil {
 		return err
 	}
