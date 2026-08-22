@@ -32,6 +32,26 @@ var distShipExe = map[string]bool{
 // distJunkExt は配布物に含めない build linker 中間物。
 var distJunkExt = map[string]bool{".ilk": true, ".pdb": true, ".exp": true, ".lib": true}
 
+// isDistRuntimeJunk は ゲーム dir 配下の相対パス (スラッシュ区切り) が
+// 開発専用ファイルかを判定する。engine の web runtime は HUD の実行に使う
+// binder だけ配り、テストページ・fixtures・debug 用 JS は落とす。
+func isDistRuntimeJunk(rel string) bool {
+	low := strings.ToLower(filepath.ToSlash(rel))
+	if !strings.Contains(low, "mitiru_runtime/") {
+		return false
+	}
+	switch {
+	case strings.Contains(low, "mitiru_runtime/tests/"):
+		return true
+	case strings.Contains(low, "mitiru_test_"),
+		strings.Contains(low, "mitiru_debug.js"),
+		strings.Contains(low, "mitiru_crash_reporter.js"):
+		return true
+	default:
+		return false
+	}
+}
+
 // isDistDropTopLevel は top-level ファイル (rel に "/" なし) を配布から外すか判定する。
 // DeployDir は cmake 出力 dir なので CMakeCache.txt / build.ninja / *.cmake / 他ツール exe /
 // build log 等が同居する。drop ルールに当たらないものは全て KEEP — 特に host が実際に
@@ -44,6 +64,8 @@ func isDistDropTopLevel(base string) bool {
 	case distJunkExt[ext]: // .ilk/.pdb/.exp/.lib
 		return true
 	case base == "CMakeCache.txt", base == "build.ninja", base == "cmake_install.cmake":
+		return true
+	case strings.HasPrefix(base, "CMakeDoxy"): // CMakeDoxyfile.in / CMakeDoxygenDefaults.cmake
 		return true
 	case ext == ".cmake": // *.cmake (cmake 生成物)
 		return true
@@ -368,7 +390,10 @@ func copyDeploy(src, dst, gameDir string) (int, error) {
 		}
 		switch {
 		case first == gameDir, first == "locales":
-			// ゲーム dir 配下 / locales は入れる。
+			// ゲーム dir 配下 / locales は入れる。ただし開発専用の runtime は落とす。
+			if isDistRuntimeJunk(rel) {
+				return nil
+			}
 		case !strings.Contains(rel, "/"): // top-level ファイル: drop ルールに当たるものだけ除外
 			if isDistDropTopLevel(base) {
 				return nil
