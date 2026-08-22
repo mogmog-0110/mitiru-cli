@@ -99,7 +99,7 @@ Examples:
   mitiru dist                 # → dist/<name>/  (no-console <name>.exe)
   mitiru dist --bat           # also add a console-visible <name>.bat
   mitiru dist --zip           # also produce dist/<name>.zip
-  mitiru dist --pack          # hide assets in a single assets.mtpak
+  mitiru dist --pack=false    # keep loose assets/ (packing is the default)
   mitiru dist --out build/ship`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runDist()
@@ -111,8 +111,11 @@ Examples:
 		"also copy <name>.exe (mitiru_host) into data/ as a Steam entry point")
 	cmd.Flags().BoolVar(&distBat, "bat", false,
 		"also write a console-visible <name>.bat launcher (handy for log/debug)")
-	cmd.Flags().BoolVar(&distPack, "pack", false,
-		"embed assets/ into a single assets.mtpak (hide HTML/CSS/images/audio from the folder)")
+	// pack は既定 ON (2026-08-23)。配布物に assets がバラ置きされると、譜面・台本・
+	// 絵が誰でも読めて書き換えられる。開発ビルド (mitiru build / run) はこれまで
+	// どおり生ファイルで、dist だけが秘匿形になる。
+	cmd.Flags().BoolVar(&distPack, "pack", true,
+		"embed assets/ into a single assets.mtpak (default on; --pack=false to keep loose files)")
 	cmd.Flags().StringVar(&buildGenerator, "generator", "",
 		"explicit CMake generator (default Ninja)")
 	return cmd
