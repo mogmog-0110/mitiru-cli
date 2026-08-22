@@ -257,14 +257,22 @@ func runDist() error {
 	}
 	n++
 
-	// zip は README を書いたあとに作る。先に固めると
-	// README.txt の入っていない zip が出来上がり、それがそのまま頒布物になる。
+	// zip は README を書いたあとに作る。頒布セットは
+	//   dist/README.txt      ← アップロード先で zip の隣に並べる
+	//   dist/<name>.zip      ← 中は exe + data/ だけ
+	// の最小構成にする。README は bundleRoot (フォルダのまま配る人向け) には残し、
+	// zip には入れない。
 	if distZip {
 		zipPath := bundleRoot + ".zip"
-		if err := zipDir(bundleRoot, filepath.Dir(bundleRoot), zipPath); err != nil {
+		if err := zipDir(bundleRoot, filepath.Dir(bundleRoot), zipPath,
+			name+"/README.txt"); err != nil {
 			return err
 		}
-		fmt.Printf("Zipped: %s\n", zipPath)
+		if err := os.WriteFile(filepath.Join(filepath.Dir(bundleRoot), "README.txt"),
+			[]byte(readme), 0o644); err != nil {
+			return err
+		}
+		fmt.Printf("Zipped: %s (README.txt は zip の外)\n", zipPath)
 	}
 
 	mode := "HTML UI (CEF) 同梱"
@@ -413,8 +421,10 @@ func writeLauncher(path, dllRel string, hostArgs []string) error {
 }
 
 // zipDir は root 以下を、base からの相対パスを arcname にして zip 化する
-// (展開すると <name>/ フォルダが現れる)。
-func zipDir(root, base, zipPath string) error {
+// (展開すると <name>/ フォルダが現れる)。skip に挙げた arcname (スラッシュ区切り)
+// は入れない — 頒布セットは「README + zip」を並べる形なので、README を zip の
+// 中に重複させない。
+func zipDir(root, base, zipPath string, skip ...string) error {
 	f, err := os.Create(zipPath)
 	if err != nil {
 		return err
@@ -430,7 +440,13 @@ func zipDir(root, base, zipPath string) error {
 		if relErr != nil {
 			return relErr
 		}
-		w, err := zw.Create(filepath.ToSlash(rel))
+		arc := filepath.ToSlash(rel)
+		for _, sk := range skip {
+			if arc == sk {
+				return nil
+			}
+		}
+		w, err := zw.Create(arc)
 		if err != nil {
 			return err
 		}
