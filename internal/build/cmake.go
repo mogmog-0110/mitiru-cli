@@ -355,11 +355,6 @@ type Artifacts struct {
 // Run は configure + build pipeline 全体を実行する。成功時に Artifacts を返す
 // — host launcher と user の game DLL の両方。
 func Run(opts Options) (*Artifacts, error) {
-	if runtime.GOOS != "windows" {
-		return nil, fmt.Errorf("mitiru build is currently Windows-only (running on %s)",
-			runtime.GOOS)
-	}
-
 	if opts.Stdout == nil {
 		opts.Stdout = os.Stdout
 	}
@@ -370,13 +365,24 @@ func Run(opts Options) (*Artifacts, error) {
 		opts.Config = "Debug"
 	}
 
-	vcvars, err := FindVcvars64()
-	if err != nil {
-		return nil, err
+	// Windows は MSVC の環境変数を張るために vcvars を噛ませる。
+	// それ以外の OS では toolchain が最初から PATH にあるので不要。
+	var vcvars string
+	if runtime.GOOS == "windows" {
+		found, err := FindVcvars64()
+		if err != nil {
+			return nil, err
+		}
+		vcvars = found
 	}
+
 	generator := opts.Generator
 	if generator == "" {
-		generator = generatorForVcvars(vcvars)
+		if runtime.GOOS == "windows" {
+			generator = generatorForVcvars(vcvars)
+		} else {
+			generator = defaultUnixGenerator()
+		}
 	}
 
 	cmakeSrcDir, cmakeOutDir, err := Configure(opts)
@@ -423,16 +429,16 @@ func Run(opts Options) (*Artifacts, error) {
 		deploy := filepath.Join(cmakeOutDir, opts.Config)
 		return &Artifacts{
 			DeployDir:   deploy,
-			HostExePath: filepath.Join(deploy, "mitiru_host.exe"),
-			DllPath:     filepath.Join(deploy, targetName, targetName+".dll"),
-			DllRel:      filepath.Join(targetName, targetName+".dll"),
+			HostExePath: filepath.Join(deploy, hostExeName()),
+			DllPath:     filepath.Join(deploy, targetName, gameLibName(targetName)),
+			DllRel:      filepath.Join(targetName, gameLibName(targetName)),
 		}, nil
 	}
 
 	// mitiru_host.exe を探す — その親 directory が deploy dir。
 	hostCandidates := []string{
-		filepath.Join(cmakeOutDir, opts.Config, "mitiru_host.exe"),
-		filepath.Join(cmakeOutDir, "mitiru_host.exe"),
+		filepath.Join(cmakeOutDir, opts.Config, hostExeName()),
+		filepath.Join(cmakeOutDir, hostExeName()),
 	}
 	hostExe := ""
 	for _, c := range hostCandidates {
@@ -443,17 +449,17 @@ func Run(opts Options) (*Artifacts, error) {
 	}
 	if hostExe == "" {
 		return nil, fmt.Errorf(
-			"build succeeded but mitiru_host.exe was not found under %s\n"+
+			"build succeeded but %s was not found under %s\n"+
 				"  expected one of:\n    %s",
-			cmakeOutDir, strings.Join(hostCandidates, "\n    "))
+			hostExeName(), cmakeOutDir, strings.Join(hostCandidates, "\n    "))
 	}
 
 	deployDir := filepath.Dir(hostExe)
-	dllPath := filepath.Join(deployDir, targetName, targetName+".dll")
+	dllPath := filepath.Join(deployDir, targetName, gameLibName(targetName))
 	if _, err := os.Stat(dllPath); err != nil {
 		return nil, fmt.Errorf(
-			"build succeeded but %s.dll was not found at %s: %w",
-			targetName, dllPath, err)
+			"build succeeded but %s was not found at %s: %w",
+			gameLibName(targetName), dllPath, err)
 	}
 
 	// assets/ を deploy 先へ常時同期する (R-04)。CMake 側の copy は DLL 再リンク
@@ -473,7 +479,7 @@ func Run(opts Options) (*Artifacts, error) {
 		DeployDir:   deployDir,
 		HostExePath: hostExe,
 		DllPath:     dllPath,
-		DllRel:      filepath.Join(targetName, targetName+".dll"),
+		DllRel:      filepath.Join(targetName, gameLibName(targetName)),
 	}, nil
 }
 
@@ -497,6 +503,18 @@ func runCMakeConfigure(vcvars, generator, srcDir, outDir string, opts Options) e
 	script := fmt.Sprintf(
 		"%scmake -S \"%s\" -B \"%s\" -G \"%s\" %s%s\r\n",
 		vcvarsPrelude(vcvars), srcDir, outDir, generator, archAndType, defs)
+
+	// 非 Windows はバッチを挟まず cmake を直接起動する。
+	if runtime.GOOS != "windows" {
+		args := []string{"-S", srcDir, "-B", outDir, "-G", generator}
+		if archAndType != "" {
+			args = append(args, strings.Fields(archAndType)...)
+		}
+		for _, d := range opts.ExtraDefines {
+			args = append(args, "-D"+d)
+		}
+		return runQuietly("mitiru_configure", "cmake", args, opts)
+	}
 
 	// CMake の configure 出力は成功時には純粋な diagnostic noise —
 	// "Jolt not found"、"Tracy not found" のような feature detection 行は
@@ -581,10 +599,76 @@ func generatorMismatch(outDir, want string) (bool, string) {
 }
 
 func runCMakeBuild(vcvars, outDir string, opts Options) error {
+	if runtime.GOOS != "windows" {
+		return runDirect("cmake",
+			[]string{"--build", outDir, "--config", opts.Config}, opts)
+	}
 	script := fmt.Sprintf(
 		"%scmake --build \"%s\" --config %s\r\n",
 		vcvarsPrelude(vcvars), outDir, opts.Config)
 	return runBatchScript("mitiru_build", script, opts)
+}
+
+// hostExeName は OS ごとの mitiru_host の実行ファイル名を返す。
+func hostExeName() string {
+	if runtime.GOOS == "windows" {
+		return "mitiru_host.exe"
+	}
+	return "mitiru_host"
+}
+
+// gameLibName は OS ごとの game module のファイル名を返す。
+// engine の ModuleHost は Windows で LoadLibrary、それ以外で dlopen を使い、
+// CMake が出す共有ライブラリの拡張子もそれぞれ .dll / .dylib / .so になる。
+func gameLibName(targetName string) string {
+	switch runtime.GOOS {
+	case "windows":
+		return targetName + ".dll"
+	case "darwin":
+		return "lib" + targetName + ".dylib"
+	default:
+		return "lib" + targetName + ".so"
+	}
+}
+
+// defaultUnixGenerator は Ninja があればそれを、無ければ Unix Makefiles を選ぶ。
+// どちらも single-config なので CMAKE_BUILD_TYPE の指定が要る。
+func defaultUnixGenerator() string {
+	if _, err := exec.LookPath("ninja"); err == nil {
+		return "Ninja"
+	}
+	return "Unix Makefiles"
+}
+
+// runDirect は cmake を直接起動する (バッチを挟まない)。
+func runDirect(name string, args []string, opts Options) error {
+	if os.Getenv("MITIRU_DRY_RUN") == "1" {
+		fmt.Fprintf(opts.Stdout, "[dry-run] would run: %s %s\n", name, strings.Join(args, " "))
+		return nil
+	}
+	cmd := exec.Command(name, args...)
+	cmd.Stdout = opts.Stdout
+	cmd.Stderr = opts.Stderr
+	cmd.Dir = opts.ProjectRoot
+	return cmd.Run()
+}
+
+// runQuietly は runDirect と同じだが、成功時は出力を捨てる。
+// configure の出力は成功時 "Jolt not found" のような feature detection の羅列で、
+// 初回ユーザーには error に見える。失敗したときだけ表に出す。
+func runQuietly(prefix, name string, args []string, opts Options) error {
+	if os.Getenv("MITIRU_DRY_RUN") == "1" || os.Getenv("MITIRU_VERBOSE") == "1" {
+		return runDirect(name, args, opts)
+	}
+	var buf bytes.Buffer
+	quiet := opts
+	quiet.Stdout = &buf
+	quiet.Stderr = &buf
+	if err := runDirect(name, args, quiet); err != nil {
+		_, _ = opts.Stderr.Write(buf.Bytes())
+		return err
+	}
+	return nil
 }
 
 // runBatchScript は与えられた script を OS の temp dir 下に .bat として

@@ -8,15 +8,16 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 )
 
 const (
-	cefVersion   = "128.4.12+g1d7a1f9+chromium-128.0.6613.138"
-	cefPlatform  = "windows64"
-	cefDistType  = "minimal"
-	cefCDNBase   = "https://cef-builds.spotifycdn.com"
-	cefTimeout   = httpTimeout // cache.go の 5 分上限を再利用
+	cefVersion  = "128.4.12+g1d7a1f9+chromium-128.0.6613.138"
+	cefPlatform = "windows64"
+	cefDistType = "minimal"
+	cefCDNBase  = "https://cef-builds.spotifycdn.com"
+	cefTimeout  = httpTimeout // cache.go の 5 分上限を再利用
 )
 
 // cefArchiveName は pin した CEF build の .tar.bz2 ファイル名を返す。
@@ -45,6 +46,16 @@ func cefDownloadURL() string {
 func EnsureCEF(engineRoot string, progress io.Writer) error {
 	if progress == nil {
 		progress = io.Discard
+	}
+
+	// CEF は今のところ Windows 向けの配布物しか取りに行かない。
+	// 他の OS では黙って落とさず、HTML UI が出ない事実を告げて先へ進む
+	// (ネイティブ描画だけのゲームはそのまま動く)。
+	if runtime.GOOS != "windows" {
+		fmt.Fprintf(progress,
+			"CEF は %s 向けに未対応です。HTML/CSS の UI (HUD・メニュー等) は表示されません。\n"+
+				"  ネイティブ描画のみでビルドを続けます。\n", runtime.GOOS)
+		return nil
 	}
 
 	externalCef := filepath.Join(engineRoot, "external", "cef")
