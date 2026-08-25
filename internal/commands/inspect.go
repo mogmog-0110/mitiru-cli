@@ -27,7 +27,7 @@ var (
 // allInspectables は `mitiru inspect --all` が起動する panel 集合。各 name は
 // engine の inspector が独自の OS-level window に描画できる named inspectable に
 // 対応する — 1 ツール、1 関心事、1 ウィンドウ (axis 5)。
-var allInspectables = []string{"gameplay", "input", "timetravel"}
+var allInspectables = []string{"gameplay", "input", "rewind"}
 
 func newInspectCommand() *cobra.Command {
 	cmd := &cobra.Command{
@@ -40,8 +40,8 @@ to %TEMP%\mitiru_inspector_<pid>.json.
 Usage:
   mitiru inspect                       # auto-pick the most recently-updated game
   mitiru inspect 12345                 # explicit pid
-  mitiru inspect 12345 --inspectable timetravel  # one named panel
-  mitiru inspect 12345 --all           # gameplay + input + timetravel windows
+  mitiru inspect 12345 --inspectable rewind      # one named panel
+  mitiru inspect 12345 --all           # gameplay + input + rewind windows
   mitiru inspect --file <path>         # watch a specific file directly (debug)
 
 This is the modular sub-window architecture showcase tool —
@@ -88,9 +88,9 @@ multi-process required.`,
 	cmd.Flags().StringVar(&inspectFilePath, "file", "",
 		"watch a snapshot file directly (instead of a pid). For debugging.")
 	cmd.Flags().StringVar(&inspectInspectable, "inspectable", "",
-		"open a single named panel (e.g. gameplay, input, timetravel)")
+		"open a single named panel (e.g. gameplay, input, rewind)")
 	cmd.Flags().BoolVar(&inspectAll, "all", false,
-		"open gameplay + input + timetravel inspector windows side by side")
+		"open gameplay + input + rewind inspector windows side by side")
 	cmd.Flags().BoolVar(&inspectJSON, "json", false,
 		"print live game state, recent events, and invariant status as a single JSON document to stdout")
 	return cmd
@@ -175,8 +175,8 @@ func pageFor(inspectable string) string {
 		return "inspect"
 	case "input":
 		return "input"
-	case "timetravel":
-		return "timetravel"
+	case "rewind", "timetravel":
+		return "rewind"
 	default:
 		return inspectable // 未知名はそのまま page として渡す (assets/<name>.html)
 	}

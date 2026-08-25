@@ -21,7 +21,8 @@ func TestResolveInspectPage(t *testing.T) {
 		{"--inspect=mixer scene の二重指定はエラー", "mixer", []string{"scene"}, "", true},
 		{"窓名 2 個はエラー", "inspect", []string{"perf", "mixer"}, "", true},
 		{"未知の窓名はエラー", "inspect", []string{"bogus"}, "", true},
-		{"timetravel", "timetravel", nil, "timetravel", false},
+		{"rewind", "rewind", nil, "rewind", false},
+		{"timetravel", "timetravel", nil, "rewind", false},
 		{"replay", "inspect", []string{"replay"}, "replay", false},
 	}
 	for _, c := range cases {

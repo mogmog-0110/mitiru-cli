@@ -12,7 +12,8 @@ var inspectPageAliases = map[string]string{
 	"inspector":  "inspect",
 	"gameplay":   "inspect",
 	"input":      "input",
-	"timetravel": "timetravel",
+	"rewind":     "rewind",
+	"timetravel": "rewind", // 旧名。engine 側は rewind へ改名済み
 	"scene":      "scene",
 	"replay":     "replay",
 	"perf":       "perf",
@@ -20,7 +21,7 @@ var inspectPageAliases = map[string]string{
 }
 
 // inspectWindowNames はエラーメッセージ用の窓名一覧 (表示順固定)。
-const inspectWindowNames = "perf, inspector, timetravel, mixer, scene, replay, input"
+const inspectWindowNames = "perf, inspector, rewind, mixer, scene, replay, input"
 
 // resolveInspectPage は --inspect フラグ値と positional 引数から tool page 名を決める。
 // 返り値 "" は「窓を開かない」。`--inspect` 単独は NoOptDefVal で flagVal="inspect"、

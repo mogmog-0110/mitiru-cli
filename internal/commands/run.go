@@ -95,8 +95,8 @@ inspector; a window name selects another tool:
 
   mitiru run --inspect             # gameplay inspector
   mitiru run --inspect perf        # performance window
-  mitiru run --inspect timetravel  # 巻き戻し窓 (past-frame rewind)
-                                   # (perf, inspector, timetravel, mixer,
+  mitiru run --inspect rewind      # 巻き戻し窓 (past-frame rewind)
+                                   # (perf, inspector, rewind, mixer,
                                    #  scene, replay, input)`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			page, err := resolveInspectPage(runInspectArg, args)
@@ -113,7 +113,7 @@ inspector; a window name selects another tool:
 	cmd.Flags().StringVar(&buildGenerator, "generator", "",
 		"explicit CMake generator (e.g. \"Visual Studio 17 2022\", \"NMake Makefiles\"); default is Ninja")
 	cmd.Flags().StringVar(&runInspectArg, "inspect", "",
-		"also open a tool window: perf|inspector|timetravel|mixer|scene|replay|input (bare --inspect = gameplay inspector)")
+		"also open a tool window: perf|inspector|rewind|mixer|scene|replay|input (bare --inspect = gameplay inspector)")
 	cmd.Flags().Lookup("inspect").NoOptDefVal = "inspect"
 	cmd.Flags().BoolVar(&runWithConsole, "console", false,
 		"open the runtime control panel (pause/step/scale/screenshot) in your default browser")
