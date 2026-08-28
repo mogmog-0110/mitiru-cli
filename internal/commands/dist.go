@@ -329,7 +329,13 @@ func runDist() error {
 			}
 			defer os.Remove(stub)
 		}
-		onefileExe = filepath.Join(filepath.Dir(bundleRoot), name+".exe")
+		// 配布 exe の名前は [dist] exe_name。遊ぶ側が受け取るファイルなので、
+		// ASCII 識別子の project.name とは分けられるようにしてある。
+		exeName := strings.TrimSpace(cfg.Dist.ExeName)
+		if exeName == "" {
+			exeName = name
+		}
+		onefileExe = filepath.Join(filepath.Dir(bundleRoot), exeName+".exe")
 		_ = os.Remove(onefileExe)
 		packCmd := exec.Command(selfpack, onefileExe, stub, bundleRoot,
 			name, "data/mitiru_host.exe", launchArgs, "data")
@@ -360,7 +366,8 @@ func runDist() error {
 		// onefile では bundle フォルダはもう無い。頒布セットは
 		//   dist/README.txt  ← zip の外
 		//   dist/<name>.zip  ← 単一 exe + 第三者ライセンス表記
-		zipPath := bundleRoot + ".zip"
+		zipPath := filepath.Join(filepath.Dir(bundleRoot),
+			strings.TrimSuffix(filepath.Base(onefileExe), ".exe")+".zip")
 		members := []string{onefileExe}
 		notices := filepath.Join(filepath.Dir(bundleRoot), "THIRD_PARTY_NOTICES.txt")
 		if _, statErr := os.Stat(notices); statErr == nil {

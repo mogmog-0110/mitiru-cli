@@ -22,12 +22,20 @@ type ProjectConfig struct {
 	Build   BuildSection   `toml:"build"`
 	Font    FontSection    `toml:"font"`
 	Lofi    LofiSection    `toml:"lofi"`
+	Dist    DistSection    `toml:"dist"`
 }
 
 type ProjectSection struct {
 	Name    string `toml:"name"`
 	Version string `toml:"version"`
 	Engine  string `toml:"engine"`
+}
+
+// DistSection は配布物だけに効く設定。project.name は DLL 名や CMake の target 名に
+// 使う ASCII 識別子なので、遊ぶ側が受け取るファイルの名前とは分けている。
+type DistSection struct {
+	// ExeName は配布 exe のファイル名 (拡張子なし)。空なら project.name を使う。
+	ExeName string `toml:"exe_name"`
 }
 
 type WindowSection struct {
