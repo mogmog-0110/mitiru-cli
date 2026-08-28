@@ -64,6 +64,11 @@ type templateData struct {
 	// 旧 engine では examples/mitiru_start/main.cpp)。
 	// 無い古い engine では空文字 → テンプレートが target を生成しない。
 	StartMainAbs string
+	// 単一 exe 配布 (mitiru dist --onefile) の器。selfrun は配布物の頭に付く
+	// 自己展開ランチャ、selfpack はそれに bundle を連結する梱包ツール。
+	// StartMainAbs と同じく、無い engine では空文字で skip する。
+	SelfrunMainAbs  string
+	SelfpackMainAbs string
 }
 
 // CMake template — project ごとに 2 つの target を生成する:
@@ -163,6 +168,35 @@ endif()
     set_target_properties(mitiru_start PROPERTIES
         RUNTIME_OUTPUT_DIRECTORY "$<TARGET_FILE_DIR:mitiru_host>")
     add_dependencies({{.TargetName}} mitiru_start)
+endif()
+{{end}}
+
+# ── Single-file distribution (mitiru dist --onefile) ───────────────
+# selfrun は bundle を末尾に連結して配る自己展開ランチャ、selfpack はその連結を
+# 行う梱包ツール。どちらも engine には link しない (AssetPack は純データのヘッダ)。
+{{if .SelfrunMainAbs}}if(WIN32)
+    add_executable(mitiru_selfrun WIN32 "{{.SelfrunMainAbs}}")
+    target_compile_features(mitiru_selfrun PRIVATE cxx_std_20)
+    target_include_directories(mitiru_selfrun PRIVATE "{{.EngineRoot}}/include")
+    target_link_options(mitiru_selfrun PRIVATE /SUBSYSTEM:WINDOWS)
+    if(MSVC)
+        target_compile_options(mitiru_selfrun PRIVATE /utf-8)
+    endif()
+    set_target_properties(mitiru_selfrun PROPERTIES
+        RUNTIME_OUTPUT_DIRECTORY "$<TARGET_FILE_DIR:mitiru_host>")
+    add_dependencies({{.TargetName}} mitiru_selfrun)
+endif()
+{{end}}
+{{if .SelfpackMainAbs}}if(WIN32)
+    add_executable(mitiru_selfpack "{{.SelfpackMainAbs}}")
+    target_compile_features(mitiru_selfpack PRIVATE cxx_std_20)
+    target_include_directories(mitiru_selfpack PRIVATE "{{.EngineRoot}}/include")
+    if(MSVC)
+        target_compile_options(mitiru_selfpack PRIVATE /utf-8)
+    endif()
+    set_target_properties(mitiru_selfpack PROPERTIES
+        RUNTIME_OUTPUT_DIRECTORY "$<TARGET_FILE_DIR:mitiru_host>")
+    add_dependencies({{.TargetName}} mitiru_selfpack)
 endif()
 {{end}}
 # ── Tool windows (独立ウィンドウ: inspector / perf / scene_tree / replay / mixer) ──
@@ -296,14 +330,25 @@ func Configure(opts Options) (cmakeSrcDir, cmakeOutDir string, err error) {
 		startMainAbs = toCMakePath(startMain)
 	}
 
+	// 単一 exe 化の器 (任意)。selfpack は console、selfrun は GUI subsystem。
+	selfrunMainAbs, selfpackMainAbs := "", ""
+	if p := resolveEngineSource(opts.EngineRoot, "mitiru_selfrun", "main.cpp"); p != "" {
+		selfrunMainAbs = toCMakePath(p)
+	}
+	if p := resolveEngineSource(opts.EngineRoot, "mitiru_selfpack", "main.cpp"); p != "" {
+		selfpackMainAbs = toCMakePath(p)
+	}
+
 	data := templateData{
-		ProjectName:  opts.ProjectName,
-		TargetName:   sanitiseTargetName(opts.ProjectName),
-		EngineRoot:   toCMakePath(opts.EngineRoot),
-		ProjectRoot:  toCMakePath(opts.ProjectRoot),
-		MainCppAbs:   toCMakePath(mainCpp),
-		HostMainAbs:  toCMakePath(hostMain),
-		StartMainAbs: startMainAbs,
+		ProjectName:     opts.ProjectName,
+		TargetName:      sanitiseTargetName(opts.ProjectName),
+		EngineRoot:      toCMakePath(opts.EngineRoot),
+		ProjectRoot:     toCMakePath(opts.ProjectRoot),
+		MainCppAbs:      toCMakePath(mainCpp),
+		HostMainAbs:     toCMakePath(hostMain),
+		StartMainAbs:    startMainAbs,
+		SelfrunMainAbs:  selfrunMainAbs,
+		SelfpackMainAbs: selfpackMainAbs,
 	}
 
 	// engine 源の切り替わりは全ターゲットの作り直しになる。黙って始めると

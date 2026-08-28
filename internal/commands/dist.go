@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 
@@ -20,6 +21,7 @@ var (
 	distExe  bool
 	distBat  bool
 	distPack bool
+	distOne  bool
 )
 
 // distShipExe は top-level で配布してよい exe (host + CEF helper のみ)。他のツール exe
@@ -116,6 +118,8 @@ Examples:
 	// どおり生ファイルで、dist だけが秘匿形になる。
 	cmd.Flags().BoolVar(&distPack, "pack", true,
 		"embed assets/ into a single assets.mtpak (default on; --pack=false to keep loose files)")
+	cmd.Flags().BoolVar(&distOne, "onefile", false,
+		"fold the whole bundle into a single self-extracting <name>.exe (Windows)")
 	cmd.Flags().StringVar(&buildGenerator, "generator", "",
 		"explicit CMake generator (default Ninja)")
 	return cmd
@@ -296,7 +300,77 @@ func runDist() error {
 	//   dist/<name>.zip      ← 中は exe + data/ だけ
 	// の最小構成にする。README は bundleRoot (フォルダのまま配る人向け) には残し、
 	// zip には入れない。
-	if distZip {
+	// ── 単一 exe 化 (--onefile) ────────────────────────────────────────
+	// bundle 一式を selfrun (自己展開ランチャ) の末尾へ連結し、dist/<name>.exe
+	// 1 つにする。配布先にアセットや DLL が生のフォルダとして現れない。
+	// CEF のランタイムは exe から直接は動かせないので、初回起動でローカルへ
+	// 展開する器になる。
+	onefileExe := ""
+	if distOne {
+		selfrun := filepath.Join(art.DeployDir, "mitiru_selfrun.exe")
+		selfpack := filepath.Join(art.DeployDir, "mitiru_selfpack.exe")
+		for _, tool := range []string{selfrun, selfpack} {
+			if _, statErr := os.Stat(tool); statErr != nil {
+				return fmt.Errorf("dist --onefile: %s が無い。engine が古いか "+
+					"apps/mitiru_selfrun・mitiru_selfpack を持っていない", filepath.Base(tool))
+			}
+		}
+		// 配布 exe の顔は selfrun 側に焼く。selfpack は渡された stub を複製して
+		// 末尾へ連結するだけなので、複製元にアイコンを入れておけば付いてくる。
+		stub := selfrun
+		if hasIcon {
+			stub = filepath.Join(filepath.Dir(bundleRoot), ".selfrun_face.exe")
+			if err := copyFile(selfrun, stub); err != nil {
+				return fmt.Errorf("dist --onefile: copy selfrun: %w", err)
+			}
+			if err := embedExeIcon(stub, iconSrc); err != nil {
+				fmt.Printf("dist --onefile: warning: exe icon の埋め込みに失敗 "+
+					"(アイコン無しで続行): %v\n", err)
+			}
+			defer os.Remove(stub)
+		}
+		onefileExe = filepath.Join(filepath.Dir(bundleRoot), name+".exe")
+		_ = os.Remove(onefileExe)
+		packCmd := exec.Command(selfpack, onefileExe, stub, bundleRoot,
+			name, "data/mitiru_host.exe", launchArgs, "data")
+		packCmd.Stdout, packCmd.Stderr = os.Stdout, os.Stderr
+		if err := packCmd.Run(); err != nil {
+			return fmt.Errorf("dist --onefile: selfpack: %w", err)
+		}
+		// 展開元のフォルダは配布物ではない。残すと「exe と data/ の両方を配る」
+		// 形に見えて、単一 exe にした意味が消える。
+		if err := os.RemoveAll(bundleRoot); err != nil {
+			return fmt.Errorf("dist --onefile: remove bundle dir: %w", err)
+		}
+		if err := os.WriteFile(filepath.Join(filepath.Dir(bundleRoot), "README.txt"),
+			[]byte(readme), 0o644); err != nil {
+			return err
+		}
+		if notices, nerr := os.ReadFile(filepath.Join(projectRoot, "THIRD_PARTY_NOTICES.txt")); nerr == nil {
+			if err := os.WriteFile(filepath.Join(filepath.Dir(bundleRoot),
+				"THIRD_PARTY_NOTICES.txt"), notices, 0o644); err != nil {
+				return err
+			}
+		}
+		info, _ := os.Stat(onefileExe)
+		fmt.Printf("Onefile OK: %s (%.1f MB)\n", onefileExe, float64(info.Size())/(1024*1024))
+	}
+
+	if distZip && onefileExe != "" {
+		// onefile では bundle フォルダはもう無い。頒布セットは
+		//   dist/README.txt  ← zip の外
+		//   dist/<name>.zip  ← 単一 exe + 第三者ライセンス表記
+		zipPath := bundleRoot + ".zip"
+		members := []string{onefileExe}
+		notices := filepath.Join(filepath.Dir(bundleRoot), "THIRD_PARTY_NOTICES.txt")
+		if _, statErr := os.Stat(notices); statErr == nil {
+			members = append(members, notices)
+		}
+		if err := zipFiles(members, zipPath); err != nil {
+			return err
+		}
+		fmt.Printf("Zipped: %s (README.txt は zip の外)\n", zipPath)
+	} else if distZip {
 		zipPath := bundleRoot + ".zip"
 		if err := zipDir(bundleRoot, filepath.Dir(bundleRoot), zipPath,
 			name+"/README.txt"); err != nil {
@@ -319,6 +393,13 @@ func runDist() error {
 		if writeBat {
 			launch += " / " + batName
 		}
+	}
+	if onefileExe != "" {
+		info, _ := os.Stat(onefileExe)
+		fmt.Printf("\nDist OK: %s\n  単一 exe %.1f MB / %s\n  配るのは %s と README.txt の 2 つ\n  起動: ダブルクリック (初回に展開)\n",
+			filepath.Dir(bundleRoot), float64(info.Size())/(1024*1024), mode,
+			filepath.Base(onefileExe))
+		return nil
 	}
 	fmt.Printf("\nDist OK: %s\n  %d files / %s\n  トップは %s + README + data/ のみ\n  起動: %s\n",
 		bundleRoot, n, mode, primary, launch)
@@ -461,6 +542,36 @@ func writeLauncher(path, dllRel string, hostArgs []string) error {
 // (展開すると <name>/ フォルダが現れる)。skip に挙げた arcname (スラッシュ区切り)
 // は入れない — 頒布セットは「README + zip」を並べる形なので、README を zip の
 // 中に重複させない。
+// zipFiles は指定したファイルだけを、ディレクトリ構造を持たない zip に固める。
+// onefile 配布は「単一 exe + ライセンス表記」の 2 つだけなので、zipDir の
+// ディレクトリ走査は要らない。
+func zipFiles(paths []string, zipPath string) error {
+	f, err := os.Create(zipPath)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	zw := zip.NewWriter(f)
+	defer zw.Close()
+	for _, src := range paths {
+		in, oerr := os.Open(src)
+		if oerr != nil {
+			return oerr
+		}
+		w, cerr := zw.Create(filepath.Base(src))
+		if cerr != nil {
+			in.Close()
+			return cerr
+		}
+		_, werr := io.Copy(w, in)
+		in.Close()
+		if werr != nil {
+			return werr
+		}
+	}
+	return nil
+}
+
 func zipDir(root, base, zipPath string, skip ...string) error {
 	f, err := os.Create(zipPath)
 	if err != nil {
