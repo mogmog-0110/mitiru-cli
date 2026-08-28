@@ -32,7 +32,7 @@ mitiru run
 | `mitiru build` | `mitiru.toml` を読み込んでビルド。デフォルトは Debug |
 | `mitiru run` | ビルドして実行。stdin、stdout、exit code を転送 |
 | `mitiru watch` | ビルドして起動し、`src/` の保存時に state を維持したまま hot reload |
-| `mitiru dist` | 配布フォルダを生成。ランタイムを `data/` に分離し、コンソールなしの `<name>.exe` を出力。`--bat` でログ用 `.bat`、`--pack` でアセットを埋め込み、`--zip` で zip を追加。`[cef] enabled=false` の場合は Chromium を同梱しない |
+| `mitiru dist` | 配布フォルダを生成。ランタイムを `data/` に分離し、コンソールなしの `<name>.exe` を出力。`--bat` でログ用 `.bat`、`--pack` でアセットを埋め込み、`--zip` で zip を追加。`--onefile` で配布物全体を自己展開の単一 exe に畳む。`[cef] enabled=false` の場合は Chromium を同梱しない |
 | `mitiru debug` | Debug 構成でビルドし、engine debug helper（`MITIRU_DEBUG=1` / `MITIRU_INSPECTOR=1`）を有効にして実行 |
 | `mitiru inspect [pid]` | 実行中の game を別の OS window に表示したツール画面で観察。`--inspectable input\|timetravel`、`--all` に対応 |
 | `mitiru replay <file>` | 記録済みの入力を決定論的に再生 |
