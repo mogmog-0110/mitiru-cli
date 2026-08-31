@@ -61,7 +61,11 @@ func EnsureSource(version string, progress io.Writer) (string, error) {
 			return "", fmt.Errorf("MITIRU_ENGINE_ROOT=%s does not contain CMakeLists.txt: %w",
 				abs, statErr)
 		}
-		fmt.Fprintf(progress, "Using MITIRU_ENGINE_ROOT override: %s\n", abs)
+		// mitiru.toml の pin が黙って捨てられると、版を指定して確かめたつもりの
+		// 検証が別の源を測ってしまう。どの版が無視されたかまで言う
+		fmt.Fprintf(progress,
+			"Using MITIRU_ENGINE_ROOT override: %s\n"+
+				"  (mitiru.toml の engine = %q は無視されます)\n", abs, version)
 		return abs, nil
 	}
 
