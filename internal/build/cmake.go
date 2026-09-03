@@ -46,6 +46,10 @@ type Options struct {
 	// 汚さない別 dir を渡す (configure-time オプションの thrash 回避)。
 	OutDir string
 
+	// Target は `cmake --build` に渡す target (空なら全部)。standalone は自分の
+	// exe だけを建てる。
+	Target string
+
 	// Stdout は progress と cmake の出力を受け取る。
 	Stdout io.Writer
 
@@ -635,10 +639,17 @@ func generatorMismatch(outDir, want string) (bool, string) {
 }
 
 func runCMakeBuild(vcvars, outDir string, opts Options) error {
-	script := fmt.Sprintf(
-		"%scmake --build \"%s\" --config %s\r\n",
-		vcvarsPrelude(vcvars), outDir, opts.Config)
+	script := vcvarsPrelude(vcvars) + cmakeBuildCommand(outDir, opts.Config, opts.Target) + "\r\n"
 	return runBatchScript("mitiru_build", script, opts)
+}
+
+// cmakeBuildCommand は build 段の cmake 呼び出し 1 行。target が空なら全部を建てる。
+func cmakeBuildCommand(outDir, config, target string) string {
+	cmd := fmt.Sprintf("cmake --build \"%s\" --config %s", outDir, config)
+	if target != "" {
+		cmd += " --target " + target
+	}
+	return cmd
 }
 
 // runBatchScript は与えられた script を OS の temp dir 下に .bat として

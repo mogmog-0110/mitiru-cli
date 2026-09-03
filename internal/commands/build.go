@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 
 	"github.com/mogmog-0110/mitiru-cli/internal/build"
 	"github.com/mogmog-0110/mitiru-cli/internal/config"
@@ -34,7 +35,7 @@ Examples:
   mitiru build              # Debug build (default)
   mitiru build --release    # Release build`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			res, err := runBuild()
+			res, err := runAnyBuild()
 			if err != nil {
 				return err
 			}
@@ -60,14 +61,26 @@ type buildResult struct {
 	Artifacts   *build.Artifacts
 }
 
+// runBuild は host 型の project を build する。standalone 型は断る: 呼ぶ側は
+// mitiru_host と game DLL の layout (Artifacts の DLL 側) を前提にしている。
 func runBuild() (*buildResult, error) {
 	return runBuildTo(os.Stdout, os.Stderr)
+}
+
+// runAnyBuild は host 型も standalone 型も build する。`mitiru build` と
+// `mitiru run` だけがこちらを使う。
+func runAnyBuild() (*buildResult, error) {
+	return buildProject(os.Stdout, os.Stderr, true)
 }
 
 // runBuildTo は build の進捗 / cmake 出力を任意の writer に流す。watch は
 // io.MultiWriter で console + buffer に tee し、失敗時に buffer からエラー行を
 // 抽出してエラーファイルへ書く (ビルドエラーのゲーム画面表示)。
 func runBuildTo(stdout, stderr io.Writer) (*buildResult, error) {
+	return buildProject(stdout, stderr, false)
+}
+
+func buildProject(stdout, stderr io.Writer, allowStandalone bool) (*buildResult, error) {
 	cwd, err := os.Getwd()
 	if err != nil {
 		return nil, fmt.Errorf("getwd: %w", err)
@@ -81,6 +94,28 @@ func runBuildTo(stdout, stderr io.Writer) (*buildResult, error) {
 	cfg, err := config.Load(manifestPath)
 	if err != nil {
 		return nil, err
+	}
+
+	if cfg.Standalone() {
+		if !allowStandalone {
+			return nil, fmt.Errorf(
+				"%s is a standalone project ([build] kind = \"standalone\"); only 'mitiru build' and 'mitiru run' work with it",
+				cfg.Project.Name)
+		}
+		artifacts, err := build.RunStandalone(build.StandaloneOptions{
+			ProjectRoot: projectRoot,
+			SourceDir:   filepath.Join(projectRoot, filepath.FromSlash(cfg.Build.Source)),
+			Target:      cfg.Build.Target,
+			Config:      resolveBuildConfig(),
+			Generator:   buildGenerator,
+			Stdout:      stdout,
+			Stderr:      stderr,
+		})
+		if err != nil {
+			return nil, err
+		}
+		fmt.Fprintf(stdout, "Build OK: %s\n", artifacts.HostExePath)
+		return &buildResult{ProjectRoot: projectRoot, Config: cfg, Artifacts: artifacts}, nil
 	}
 
 	engineRoot, err := engine.EnsureSource(cfg.EngineTag(), stdout)

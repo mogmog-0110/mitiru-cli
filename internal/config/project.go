@@ -58,7 +58,26 @@ type CEFSection struct {
 
 type BuildSection struct {
 	Backend string `toml:"backend"`
+	// Kind は project の形。"host" (既定) は mitiru が CMakeLists.txt を生成し
+	// mitiru_host が game DLL を駆動する。"standalone" は project が自前の
+	// CMakeLists.txt と exe を持ち、mitiru は configure / build / 起動だけを担う
+	// (engine は project 側の CMake が取り込むので、取りに行かない)。
+	Kind string `toml:"kind"`
+	// Source は standalone の CMakeLists.txt がある directory。project root からの
+	// 相対で、既定は "."。
+	Source string `toml:"source"`
+	// Target は standalone で build する CMake target。exe の名前 (拡張子なし) でも
+	// ある。既定は project.name。
+	Target string `toml:"target"`
 }
+
+const (
+	BuildKindHost       = "host"
+	BuildKindStandalone = "standalone"
+)
+
+// Standalone は project が自前の CMake と exe を持つ形かを返す。
+func (c *ProjectConfig) Standalone() bool { return c.Build.Kind == BuildKindStandalone }
 
 // FontSection は native draw 用フォントアトラスの範囲を指定する。
 // atlas: "" or "none"=フォント skip(起動高速) / "latin"=ASCII / "kana"=かな /
@@ -126,8 +145,18 @@ func (c *ProjectConfig) validate(path string) error {
 	if c.Project.Name == "" {
 		return fmt.Errorf("%s: project.name is required", path)
 	}
-	if c.Project.Engine == "" {
+	switch c.Build.Kind {
+	case "", BuildKindHost, BuildKindStandalone:
+	default:
+		return fmt.Errorf("%s: build.kind must be %q or %q, got %q",
+			path, BuildKindHost, BuildKindStandalone, c.Build.Kind)
+	}
+	// standalone は自前の CMake が engine を取り込むので、pin は要らない。
+	if c.Project.Engine == "" && !c.Standalone() {
 		return fmt.Errorf("%s: project.engine is required", path)
+	}
+	if filepath.IsAbs(c.Build.Source) {
+		return fmt.Errorf("%s: build.source must be relative to the project root", path)
 	}
 	if c.Window.Width < 0 || c.Window.Height < 0 {
 		return fmt.Errorf("%s: window.width/height must not be negative", path)
@@ -150,6 +179,15 @@ func (c *ProjectConfig) applyDefaults() {
 	}
 	if c.Build.Backend == "" {
 		c.Build.Backend = "auto"
+	}
+	if c.Build.Kind == "" {
+		c.Build.Kind = BuildKindHost
+	}
+	if c.Build.Source == "" {
+		c.Build.Source = "."
+	}
+	if c.Build.Target == "" {
+		c.Build.Target = c.Project.Name
 	}
 }
 

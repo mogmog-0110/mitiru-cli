@@ -97,8 +97,17 @@ inspector; a window name selects another tool:
   mitiru run --inspect perf        # performance window
   mitiru run --inspect rewind      # 巻き戻し窓 (past-frame rewind)
                                    # (perf, inspector, rewind, mixer,
-                                   #  scene, replay, input)`,
+                                   #  scene, replay, input)
+
+A standalone project ([build] kind = "standalone") runs its own exe instead
+of mitiru_host; arguments after -- go to that exe:
+
+  mitiru run -- --selftest`,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			// standalone では引数は exe のもの (`mitiru run -- --selftest`)。
+			if standaloneProjectHere() {
+				return runStandalone(args)
+			}
 			page, err := resolveInspectPage(runInspectArg, args)
 			if err != nil {
 				return err
@@ -197,6 +206,47 @@ func runRun() error {
 
 	// ゲーム終了後に受動的な更新通知を出す (コマンド末尾、一行 footer)。
 	maybeNotifyUpdates(result.Config.Project.Engine, os.Stdout)
+	return nil
+}
+
+// standaloneProjectHere は cwd の manifest が standalone 型かを返す。manifest が
+// 無い、または読めないときは false にして、いつもの経路にいつもの error を出させる。
+func standaloneProjectHere() bool {
+	mp, _, err := config.FindManifest(".")
+	if err != nil {
+		return false
+	}
+	pc, err := config.Load(mp)
+	return err == nil && pc.Standalone()
+}
+
+// runStandalone は project 自身の exe を、project root を cwd にして起動する。
+// host 向けの窓 (inspector、console、record) は host が無いので付けられない。
+func runStandalone(exeArgs []string) error {
+	if runInspectArg != "" || runWithConsole || runRecordFile != "" {
+		return fmt.Errorf("--inspect, --console and --record need mitiru_host; a standalone project runs its own exe")
+	}
+	result, err := runAnyBuild()
+	if err != nil {
+		return err
+	}
+	exe := result.Artifacts.HostExePath
+	fmt.Printf("\nRunning %s %s\n", filepath.Base(exe), strings.Join(exeArgs, " "))
+
+	cmd := exec.Command(exe, exeArgs...)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	cmd.Stdin = os.Stdin
+	cmd.Dir = result.ProjectRoot
+	// Debug ビルドは Debug CRT に依存し、素の shell の PATH では解決できない。
+	cmd.Env = build.HostEnv()
+	if err := cmd.Run(); err != nil {
+		if exitErr, ok := err.(*exec.ExitError); ok {
+			return fmt.Errorf("%s exited with status %d = %s",
+				filepath.Base(exe), exitErr.ExitCode(), hostExitHint(exitErr.ExitCode()))
+		}
+		return fmt.Errorf("run %s: %w", filepath.Base(exe), err)
+	}
 	return nil
 }
 

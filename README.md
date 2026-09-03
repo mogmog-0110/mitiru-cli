@@ -96,6 +96,22 @@ backend = "auto"        # auto / dx11 / dx12 / vulkan / opengl / webgl2 / null
 
 `mitiru build` はこの TOML を読み込み、設定を C++ ヘッダへ埋め込みます。`src/main.cpp` で `mitiru::EngineConfig` の `title`、`windowWidth`、`windowHeight`、`cefStartUrl` を設定する必要はありません。
 
+### 自前の CMakeLists.txt を持つプロジェクト
+
+エンジンをライブラリとして取り込み、自分で exe を作るプロジェクトは `[build] kind = "standalone"` にします。`mitiru` は CMakeLists.txt を生成せず、`source` の CMake をそのまま configure と build して、`target` の exe を起動します。ビルドツリーは `build/` です。
+
+```toml
+[project]
+name = "desktop_world"
+
+[build]
+kind = "standalone"
+source = "src"           # CMakeLists.txt のある場所
+target = "desktop_world" # ビルドする CMake target。exe の名前でもある
+```
+
+`project.engine` は不要です。`mitiru run -- --selftest` のように `--` の後ろの引数は exe に渡ります。`--inspect`、`--console`、`--record`、`mitiru watch`、`mitiru dist` は mitiru_host の機能なので使えません。
+
 ## ビルドと実行の流れ
 
 ```text
