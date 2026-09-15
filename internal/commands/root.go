@@ -31,6 +31,7 @@ func NewRootCommand() *cobra.Command {
 Manage MitiruEngine game projects without touching CMakeLists.txt:
   mitiru new <name>      create a new project
   mitiru build           build the current project
+  mitiru test            compile + run tests/*.cpp with MSVC
   mitiru run             build and run
   mitiru debug           build (Debug) and run with engine debug helpers
   mitiru watch           file watch + auto rebuild + auto relaunch
@@ -64,6 +65,7 @@ Manage MitiruEngine game projects without touching CMakeLists.txt:
 	root.AddCommand(newMenuCommand())
 	root.AddCommand(newNewCommand())
 	root.AddCommand(newBuildCommand())
+	root.AddCommand(newTestCommand())
 	root.AddCommand(newRunCommand())
 	root.AddCommand(newDistCommand())
 	root.AddCommand(newDebugCommand())
@@ -75,6 +77,7 @@ Manage MitiruEngine game projects without touching CMakeLists.txt:
 	root.AddCommand(newReplayCommand())
 	root.AddCommand(newFuzzCommand())
 	root.AddCommand(newBisectCommand())
+	root.AddCommand(newHuntCommand())
 	root.AddCommand(newAiPlaytestCommand())
 	root.AddCommand(newUICommand())
 	root.AddCommand(newInspectCommand())

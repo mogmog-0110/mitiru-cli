@@ -5,6 +5,7 @@ package build
 import (
 	"bufio"
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -467,6 +468,9 @@ func Run(opts Options) (*Artifacts, error) {
 	if err := runCMakeConfigure(vcvars, generator, cmakeSrcDir, cmakeOutDir, opts); err != nil {
 		return nil, err
 	}
+	if err := writeBuildMeta(cmakeOutDir, generator); err != nil {
+		return nil, fmt.Errorf("write %s: %w", buildMetaFile, err)
+	}
 
 	fmt.Fprintf(opts.Stdout, "Building %s (%s)...\n", opts.ProjectName, opts.Config)
 	if err := runCMakeBuild(vcvars, cmakeOutDir, opts); err != nil {
@@ -615,11 +619,35 @@ func generatorForVcvars(vcvars string) string {
 	return "Ninja"
 }
 
-// generatorMismatch は outDir が、pin された CMAKE_GENERATOR が want と
-// 異なる CMakeCache.txt を持つかを返す。まだ cache が無い (新しい build dir は
-// 決して mismatch にならない)、または cache が読めない/generator 行が無い
-// 場合は (false, "") を返す (その場合は cmake 自身に判断させる)。
+// buildMetaFile は outDir 内に CLI が自分で書く状態メモのファイル名。cmake の
+// 内部表現 (CMakeCache.txt のキー名や引用の形) は cmake のバージョンで変わりうるので、
+// CLI 自身が要る値は CLI 自身の JSON に持つ (E11)。
+const buildMetaFile = "mitiru_build.json"
+
+type buildMeta struct {
+	Generator string `json:"generator"`
+}
+
+func writeBuildMeta(outDir, generator string) error {
+	data, err := json.MarshalIndent(buildMeta{Generator: generator}, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(filepath.Join(outDir, buildMetaFile), data, 0o644)
+}
+
+// generatorMismatch は outDir の mitiru_build.json に記録された generator を
+// want と比較する。このファイルが無い build dir では CMakeCache.txt の
+// CMAKE_GENERATOR:INTERNAL= 行を見る。どちらも読めなければ (false, "") を返し、
+// 判断は cmake 自身に委ねる。
 func generatorMismatch(outDir, want string) (bool, string) {
+	if data, err := os.ReadFile(filepath.Join(outDir, buildMetaFile)); err == nil {
+		var meta buildMeta
+		if json.Unmarshal(data, &meta) == nil && meta.Generator != "" {
+			return meta.Generator != want, meta.Generator
+		}
+	}
+
 	f, err := os.Open(filepath.Join(outDir, "CMakeCache.txt"))
 	if err != nil {
 		return false, ""
@@ -640,7 +668,22 @@ func generatorMismatch(outDir, want string) (bool, string) {
 
 func runCMakeBuild(vcvars, outDir string, opts Options) error {
 	script := vcvarsPrelude(vcvars) + cmakeBuildCommand(outDir, opts.Config, opts.Target) + "\r\n"
-	return runBatchScript("mitiru_build", script, opts)
+
+	// MITIRU_VERBOSE / dry-run は生ログをそのまま見たいときの opt-out。
+	// 既定は /showIncludes の生ログ (header-only なエンジンで数十万行になる) を
+	// 落とし、ninja の [N/M] 進捗だけ 1 行更新表示にする (E1)。
+	if os.Getenv("MITIRU_DRY_RUN") == "1" || os.Getenv("MITIRU_VERBOSE") == "1" {
+		return runBatchScript("mitiru_build", script, opts)
+	}
+
+	filtered := opts
+	pf := newBuildProgressFilter(opts.Stdout, sanitiseTargetName(opts.ProjectName))
+	filtered.Stdout = pf
+	buildErr := runBatchScript("mitiru_build", script, filtered)
+	if finishErr := pf.Finish(); finishErr != nil && buildErr == nil {
+		return finishErr
+	}
+	return buildErr
 }
 
 // cmakeBuildCommand は build 段の cmake 呼び出し 1 行。target が空なら全部を建てる。

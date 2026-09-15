@@ -11,18 +11,18 @@ import (
 // エンジン HTTP API のエンドポイント定数。
 // エンドポイント名が変わった場合はこのファイルの定数のみ直す。
 const (
-	apiState    = "/api/ai/state"
-	apiDiff     = "/api/ai/diff"
-	apiBranch   = "/api/ai/branch"
-	apiShot     = "/api/screenshot"
-	apiInput    = "/api/input/simulate"
-	apiPause    = "/api/runtime/pause"
-	apiStep     = "/api/runtime/step"
+	apiState     = "/api/ai/state"
+	apiDiff      = "/api/ai/diff"
+	apiBranch    = "/api/ai/branch"
+	apiShot      = "/api/screenshot"
+	apiInput     = "/api/input/simulate"
+	apiPause     = "/api/runtime/pause"
+	apiStep      = "/api/runtime/step"
 	apiTimescale = "/api/runtime/timescale"
-	apiQuit     = "/api/runtime/quit"
-	apiScene    = "/api/scene/tree"
-	apiFrame    = "/api/ai/frame"
-	apiAudio    = "/api/ai/audio"
+	apiQuit      = "/api/runtime/quit"
+	apiScene     = "/api/scene/tree"
+	apiFrame     = "/api/ai/frame"
+	apiAudio     = "/api/ai/audio"
 )
 
 // apiGet は baseURL に対して GET リクエストを送り、レスポンスボディを返す。
@@ -57,6 +57,27 @@ func apiPost(baseURL, path string, body io.Reader, contentType string) ([]byte, 
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, resp.StatusCode, fmt.Errorf("read POST %s: %w", path, err)
+	}
+	return respBody, resp.StatusCode, nil
+}
+
+// apiPut は baseURL に対して PUT リクエストを送る (/api/ai/state の書き戻し等、3-3)。
+func apiPut(baseURL, path string, body io.Reader, contentType string) ([]byte, int, error) {
+	req, err := http.NewRequest(http.MethodPut, baseURL+path, body)
+	if err != nil {
+		return nil, 0, fmt.Errorf("PUT %s: build request: %w", path, err)
+	}
+	if contentType != "" {
+		req.Header.Set("Content-Type", contentType)
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, 0, fmt.Errorf("PUT %s: %w", path, err)
+	}
+	defer resp.Body.Close()
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, resp.StatusCode, fmt.Errorf("read PUT %s: %w", path, err)
 	}
 	return respBody, resp.StatusCode, nil
 }

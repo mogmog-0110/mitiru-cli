@@ -7,6 +7,7 @@
 // mitiru watch 中に数値や色を書き換えて保存すると、止めずにその場で反映されます。
 
 #include <mitiru.hpp>
+#include <mitiru/module/AutoReflect.hpp>
 #include <algorithm>   // std::min, std::clamp
 #include <cmath>       // std::sin, std::cos
 #include <cstdlib>     // std::atof
@@ -183,5 +184,8 @@ struct {{.ProjectIdent}}Game
         s.drawCircleFrame({curX, curY}, 30.0f, hexa(0xFFFFFFB0), 2.0f);
     }
 };
+
+// GameMemory を巻き戻し・観測 inspector に自動反射する (フィールド列挙不要)。
+MITIRU_REFLECT_AUTO({{.ProjectIdent}}Game);
 
 MITIRU_GAME({{.ProjectIdent}}Game)

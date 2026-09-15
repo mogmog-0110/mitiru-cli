@@ -21,6 +21,7 @@ var (
 	runInspectPage string // resolveInspectPage 済みの tool page 名 ("" = 窓なし)
 	runWithConsole bool
 	runRecordFile  string
+	runLearn       bool // --learn: gameplay inspector を自動で開く (2026-09-16 初心者導線相談)
 )
 
 // tomlHostArgs は cwd の mitiru.toml の [window] / [font] / [lofi] を
@@ -98,6 +99,7 @@ inspector; a window name selects another tool:
   mitiru run --inspect rewind      # 巻き戻し窓 (past-frame rewind)
                                    # (perf, inspector, rewind, mixer,
                                    #  scene, replay, input)
+  mitiru run --learn                # gameplay inspector を自動で開く (--inspect を知らなくてよい)
 
 A standalone project ([build] kind = "standalone") runs its own exe instead
 of mitiru_host; arguments after -- go to that exe:
@@ -112,7 +114,10 @@ of mitiru_host; arguments after -- go to that exe:
 			if err != nil {
 				return err
 			}
-			runInspectPage = page
+			runInspectPage = learnInspectPage(page, runLearn)
+			if runLearn {
+				warnIfNoAutoReflect(".")
+			}
 			return runRun()
 		},
 	}
@@ -128,7 +133,50 @@ of mitiru_host; arguments after -- go to that exe:
 		"open the runtime control panel (pause/step/scale/screenshot) in your default browser")
 	cmd.Flags().StringVar(&runRecordFile, "record", "",
 		"record this session's input to <file>.mtrr for `mitiru replay --test --game`")
+	cmd.Flags().BoolVar(&runLearn, "learn", false,
+		"open the gameplay inspector automatically (same window as bare --inspect, for first-time exploration)")
 	return cmd
+}
+
+// learnInspectPage は --inspect 解決済み page と --learn を合成する。page が
+// 未指定 (窓なし) かつ --learn 指定なら素の --inspect と同じ "inspect" を返す。
+// page が既に何か指定されていれば --learn は何もしない (明示指定を優先)。
+func learnInspectPage(page string, learn bool) string {
+	if page == "" && learn {
+		return "inspect"
+	}
+	return page
+}
+
+// warnIfNoAutoReflect は --learn 使用時、プロジェクトの src/ に MITIRU_REFLECT_AUTO /
+// MITIRU_REFLECT が 1 つも無ければヒントを 1 行出す。この宣言が無いと GameMemory の
+// フィールドを反射する情報がコンパイル時に存在しないため、inspector を開いても空になる
+// (C++ には実行時リフレクションが無く、macro がコード生成した schema 登録に頼っているため)。
+// 既定の `mitiru run` (--learn 無し) の挙動は変えない (pulled UI: 頼まれた時だけ言う)。
+func warnIfNoAutoReflect(projectRoot string) {
+	srcDir := filepath.Join(projectRoot, "src")
+	entries, err := os.ReadDir(srcDir)
+	if err != nil {
+		return
+	}
+	for _, e := range entries {
+		if e.IsDir() {
+			continue
+		}
+		name := e.Name()
+		if !strings.HasSuffix(name, ".cpp") && !strings.HasSuffix(name, ".hpp") {
+			continue
+		}
+		data, readErr := os.ReadFile(filepath.Join(srcDir, name))
+		if readErr != nil {
+			continue
+		}
+		if strings.Contains(string(data), "MITIRU_REFLECT") {
+			return // 見つかった (AUTO/手動どちらでも可)
+		}
+	}
+	fmt.Println("--learn: src/ に MITIRU_REFLECT_AUTO(YourGameType) が無いので inspector は空のままです。")
+	fmt.Println("         状態を GameMemory の struct 定義の後ろに 1 行足すと全フィールドが見えるようになります。")
 }
 
 func runRun() error {

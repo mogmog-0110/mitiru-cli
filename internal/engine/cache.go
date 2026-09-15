@@ -62,10 +62,12 @@ func EnsureSource(version string, progress io.Writer) (string, error) {
 				abs, statErr)
 		}
 		// mitiru.toml の pin が黙って捨てられると、版を指定して確かめたつもりの
-		// 検証が別の源を測ってしまう。どの版が無視されたかまで言う
+		// 検証が別の源を測ってしまう。1 行に「どちらが使われ、どちらが無視されたか」を
+		// 両方入れ、見落とされないよう黄色にする (E3)。
+		const yellow, reset = "\x1b[33m", "\x1b[0m"
 		fmt.Fprintf(progress,
-			"Using MITIRU_ENGINE_ROOT override: %s\n"+
-				"  (mitiru.toml の engine = %q は無視されます)\n", abs, version)
+			"%s[warn] MITIRU_ENGINE_ROOT=%s を使用 (mitiru.toml の engine = %q は無視)%s\n",
+			yellow, abs, version, reset)
 		return abs, nil
 	}
 

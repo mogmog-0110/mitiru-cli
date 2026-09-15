@@ -52,6 +52,42 @@ overwritten with each snapshot and restored when bisect finishes.
 	return cmd
 }
 
+// minimizeIntervals は区間削除のデルタデバッグ (ddmin, Zeller & Hildebrandt)。
+// fuzz.go の minimizeFuzz は要素を1個ずつ間引くため O(n) 回の test 呼び出しが要るが、
+// こちらはまず大きな連続区間を削って試し、削れなくなったら区間を半分に狭める。
+// test(candidate) は「まだ壊れている (再現する)」なら true を返すこと。mitiru hunt (N3) の
+// 最短化ステップから使う。
+func minimizeIntervals(events []string, test func([]string) bool) []string {
+	cur := append([]string{}, events...)
+	granularity := 2
+	for len(cur) >= 2 {
+		chunkSize := (len(cur) + granularity - 1) / granularity
+		removedAny := false
+		for start := 0; start < len(cur); {
+			end := start + chunkSize
+			if end > len(cur) {
+				end = len(cur)
+			}
+			trial := append(append([]string{}, cur[:start]...), cur[end:]...)
+			if len(trial) > 0 && test(trial) {
+				cur = trial
+				removedAny = true
+				// この区間は削れた。詰まった配列を同じ start から続けて試す。
+			} else {
+				start = end
+			}
+		}
+		if removedAny {
+			granularity = 2 // 削除できたら粗い区間からやり直す (ddmin の定石)
+		} else if granularity >= len(cur) {
+			break
+		} else {
+			granularity *= 2
+		}
+	}
+	return cur
+}
+
 func runBisect() error {
 	absReplay, err := filepath.Abs(bisectReplay)
 	if err != nil {

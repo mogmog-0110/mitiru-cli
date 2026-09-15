@@ -100,7 +100,52 @@ func runDoctor() error {
 		// mitiru.toml が見つからなければ lint を黙って skip する。
 	}
 
+	printSymptomTable()
+
 	return nil
+}
+
+// symptom は「よくある症状 → 対処」の 1 行分。原因を断定できない症状 (環境やプロジェクトごとに
+// 事情が異なる) はチェック項目化できないため、doctor 本体の自動判定とは別に固定テキストで並べる。
+type symptom struct {
+	what string
+	why  string
+	fix  string
+}
+
+// printSymptomTable は doctor の自動チェックが拾えない「よくある詰まり」を症状表として出す。
+// 対象は最初の数分で最も多く踏まれる 4 種 (2026-09-16 の初心者導線相談で挙がったもの)。
+func printSymptomTable() {
+	symptoms := []symptom{
+		{
+			what: "build が長い (初回 5〜10 分)",
+			why:  "初回 build はエンジン本体 (CEF 込み) を丸ごとコンパイルするため。2 回目以降は数秒〜数十秒",
+			fix:  "初回は待つしかない。何度も長いなら CMake の並列度 (`cmake --build build -j N`) を確認する",
+		},
+		{
+			what: "DLL not found (host が起動直後に落ちる)",
+			why:  "`mitiru build` が失敗したか未実行で、host の隣に <game>.dll / SDL2.dll / libcef.dll が無い",
+			fix:  "`mitiru build` を通してから `mitiru run`。個別の欠落 DLL は上の Runtime checks を見る",
+		},
+		{
+			what: "窓が出ない (プロセスは起動するが画面が真っ黒/出ない)",
+			why:  "CEF の cold start に数秒かかる、または GPU backend の生成に失敗して NullDevice に fallback している",
+			fix:  "数秒待つ。stderr の `[mitiru] gfx.*.fallback` 行を確認し、GPU ドライバ/対応 backend を見直す",
+		},
+		{
+			what: "録画がずれる (`--record` の再生が元と違う動きをする)",
+			why:  "GameMemory が flat POD でない (乱数・時刻・std::vector 等) か、記録後にゲームロジックを変更した",
+			fix:  "`docs/FLAT_POD.md` に従い状態を flat POD に保つ。ロジック変更後は録画を撮り直す",
+		},
+	}
+
+	fmt.Println()
+	fmt.Println("Common symptoms:")
+	for _, s := range symptoms {
+		fmt.Printf("  症状: %s\n", s.what)
+		fmt.Printf("    なぜ: %s\n", s.why)
+		fmt.Printf("    対処: %s\n", s.fix)
+	}
 }
 
 // printRuntimeChecks は build 済み host の起動前提を診断する (R-02)。

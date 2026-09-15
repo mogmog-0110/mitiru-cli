@@ -30,14 +30,23 @@ mitiru run
 | --- | --- |
 | `mitiru new <name>` | テンプレートから `./<name>/` にプロジェクトを作成 |
 | `mitiru build` | `mitiru.toml` を読み込んでビルド。デフォルトは Debug |
+| `mitiru test` | `tests/*.cpp` を `cl /std:c++20 /utf-8` で 1 本ずつビルド・実行し、exit code で合否集計。`--filter` / `--release` / `--include` に対応 |
 | `mitiru run` | ビルドして実行。stdin、stdout、exit code を転送 |
 | `mitiru watch` | ビルドして起動し、`src/` の保存時に state を維持したまま hot reload |
 | `mitiru dist` | 配布フォルダを生成。ランタイムを `data/` に分離し、コンソールなしの `<name>.exe` を出力。`--bat` でログ用 `.bat`、`--pack` でアセットを埋め込み、`--zip` で zip を追加。`--onefile` で配布物全体を自己展開の単一 exe に畳む (ファイル名は `[dist] exe_name`、既定は `project.name`)。`[cef] enabled=false` の場合は Chromium を同梱しない |
 | `mitiru debug` | Debug 構成でビルドし、engine debug helper（`MITIRU_DEBUG=1` / `MITIRU_INSPECTOR=1`）を有効にして実行 |
 | `mitiru inspect [pid]` | 実行中の game を別の OS window に表示したツール画面で観察。`--inspectable input\|timetravel`、`--all` に対応 |
-| `mitiru replay <file>` | 記録済みの入力を決定論的に再生 |
+| `mitiru replay <file>` | 記録済みの入力を決定論的に再生。`--test` で回帰判定、`--suite <dir>` で `*.mtrr` を一括判定 |
 | `mitiru renderer` / `audio` / `input` / `scene` | 各 subsystem を単独で起動 |
 | `mitiru ui` / `lint` | HTML/CSS UI をブラウザで preview / `data-m-*` バインディングを検査 |
+| `mitiru bisect` | どのビルドから決定論が壊れたかを二分探索で特定 |
+| `mitiru fuzz` | ランダム入力でクラッシュ・非決定・不変条件違反を探す |
+| `mitiru ai-playtest` | 状態 API 経由でゲームを自動プレイし、仕様違反を判定 (`--driver sweep\|claude-code`) |
+| `mitiru verify` | ウィンドウを出さずにビルド・起動・スクリーンショットを撮り、合否を JSON で出力 |
+| `mitiru mcp` | MCP (Model Context Protocol) サーバーを stdio で起動し、AI ツールから状態取得・操作 |
+| `mitiru menu` | 対話メニューでコマンドを選ぶ (`mitiru` 引数なしと同じ) |
+| `mitiru self-update` | `mitiru` CLI 本体を最新リリースへ更新 |
+| `mitiru update` | このプロジェクトが pin する engine バージョンを最新へ更新 |
 | `mitiru clean` | `build/` を削除。`--all` でグローバルキャッシュ `~/.mitiru/cache/` も削除 |
 | `mitiru doctor` | Go、CMake、コンパイラを確認 |
 | `mitiru version` | バージョンを表示 |
@@ -46,6 +55,19 @@ mitiru run
 `mitiru build` と `mitiru run` には、`--release` または `--config <Debug|Release|RelWithDebInfo>` を指定できます。
 
 `mitiru debug` は常に `--config Debug` を使用します。
+
+## テンプレート
+
+`mitiru new -t <template>` で選べる 4 種類。機能の重なりは無く、それぞれ違う API の入口を見せる出発点です。
+
+| テンプレート | 内容 | 使う API | アセット |
+| --- | --- | --- | --- |
+| `welcome`（既定） | 額装した絵・ロゴ・歩くキャラ・マウス追従・舞う桜 + 右側の操作パネル | `MITIRU_GAME`、`s.sprite`、`in.mouse*` | 画像スプライト複数、効果音 |
+| `hello` | 図形・物理（跳ねるボール）・パーティクル・マウス入力を 1 画面で試すショーケース | `MITIRU_GAME`、`s.fillCircle` 等の図形 API、簡易物理 | 画像スプライト、効果音 |
+| `clicker` | クリックでカウンタを増やす最小構成 | `MITIRU_GAME`、`in.mousePressed()`、`hud.set` | なし（`s.fillCircle` のみ） |
+| `shooter` | 縦スクロール STG。固定タイムラインの敵出現、パワーアップ、ボス戦 | 生 `ModuleApi`（`on_init`/`on_update`/`on_draw`）+ `mitiru::bridge::StateWriter` | なし（HTML 側で描画） |
+
+`welcome` / `hello` / `clicker` は `Game.hpp` の `MITIRU_GAME` マクロ (`struct { update(Input,Hud,dt); draw(Screen&); }`) から始まる最小 API 経由。`shooter` だけは `MITIRU_GAME` を使わず `ModuleApi` を直接実装しており、複数エンティティ配列を 1 本の `view.scene` 文字列で HTML へ push する手法のサンプルになっています（`MITIRU_REFLECT_AUTO` 併用の書き直しは TODO、`docs` 未整備）。
 
 ## プロジェクト構成
 

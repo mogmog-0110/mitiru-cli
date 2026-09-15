@@ -18,14 +18,18 @@ var mcpPort int
 func newMCPCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "mcp",
-		Short: "MCP (Model Context Protocol) サーバーを stdio で起動する",
-		Long: `stdio で JSON-RPC 2.0 (MCP protocol v2024-11-05) を話すサーバーを起動する。
+		Short: "Run an MCP (Model Context Protocol) server over stdio",
+		Long: `Runs a server that speaks JSON-RPC 2.0 (MCP protocol v2024-11-05) over stdio,
+so AI tools (Claude Code etc.) can read/operate the running game's state.
+
+stdio で JSON-RPC 2.0 (MCP protocol v2024-11-05) を話すサーバーを起動する。
 AI ツール (Claude Code など) からゲームの状態取得・操作を行える。
 
-エンジン側は MITIRU_AI=1 で起動している必要がある。
+The engine must be running with MITIRU_AI=1. Port is --port or $MITIRU_AI_PORT
+(default 8090)。エンジン側は MITIRU_AI=1 で起動している必要がある。
 ポートは --port フラグ、または環境変数 MITIRU_AI_PORT で指定する (既定: 8090)。
 
-提供するツール:
+Tools provided / 提供するツール:
   game_state       GET /api/ai/state       — ゲームの状態の構造化 JSON
   state_diff       GET /api/ai/diff        — 直前フレームとの差分 JSON
   screenshot       GET /api/screenshot     — PNG を base64 で返す

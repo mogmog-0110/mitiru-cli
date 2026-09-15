@@ -8,6 +8,7 @@
 // 文字はすべて HTML 側に置く。C++ は「絵」だけを描く。
 
 #include <mitiru.hpp>
+#include <mitiru/module/AutoReflect.hpp>
 #include <algorithm>   // std::min
 #include <cmath>       // std::sin, std::fmod
 #include <cstdlib>     // std::atof
@@ -203,5 +204,8 @@ struct {{.ProjectIdent}}Game
         s.fillCircle(fx, fy,  6.0f, kFirefly.withAlpha(0.90f));
     }
 };
+
+// GameMemory を巻き戻し・観測 inspector に自動反射する (フィールド列挙不要)。
+MITIRU_REFLECT_AUTO({{.ProjectIdent}}Game);
 
 MITIRU_GAME({{.ProjectIdent}}Game)

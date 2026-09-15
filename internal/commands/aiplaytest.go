@@ -8,10 +8,10 @@ package commands
 // 意味的に読め、/api/ai/branch が「この入力を N フレーム入れたら」を副作用なしで返す。
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
-	"regexp"
 	"strings"
 	"time"
 
@@ -34,7 +34,12 @@ var aipStrategies = []struct{ name, keys string }{
 	{"何もしない", ""},
 }
 
-var reVerdict = regexp.MustCompile(`(?i)VERDICT:\s*(BUG|CLEAN)\s*(.*)`)
+// aiVerdict は claude-code ドライバの最終出力に要求する 1 行 JSON
+// (自由記述の "VERDICT: BUG ..." を正規表現で拾っていたのを置換、E4 と同趣旨)。
+type aiVerdict struct {
+	Verdict string `json:"verdict"` // "BUG" | "CLEAN"
+	Detail  string `json:"detail"`
+}
 
 func newAiPlaytestCommand() *cobra.Command {
 	cmd := &cobra.Command{
@@ -202,9 +207,9 @@ func aiPlaytestClaudeCode(baseURL string) (bool, error) {
 
 仕事: 入力でゲームを「明らかに仕様違反な状態」に追い込む。数値しきい値は与えない。field 名の意味から正当な状態を推論せよ (座標が画面外へ突き抜ける/スコア負・暴走/フラグ矛盾/NaN・異常値/凍結 など)。まず state を観測し、怪しい仮説 (端まで寄せ続ける等) を branch で検証する。
 
-最後に必ず次のどちらか 1 行だけを出力して終了せよ:
-  VERDICT: BUG <一行: どの field がどう壊れたか + 再現 keys/frames>
-  VERDICT: CLEAN <一行: 何を試して問題なかったか>`, baseURL, apiState, apiBranch)
+最後に必ず次の形の JSON を 1 行だけ出力して終了せよ (他の文字は付けない):
+  {"verdict":"BUG","detail":"どの field がどう壊れたか + 再現 keys/frames"}
+  {"verdict":"CLEAN","detail":"何を試して問題なかったか"}`, baseURL, apiState, apiBranch)
 
 	cmd := exec.Command(claude, "-p", prompt, "--allowedTools", "Bash",
 		"--max-turns", fmt.Sprintf("%d", aipMaxTurns))
@@ -219,15 +224,33 @@ func aiPlaytestClaudeCode(baseURL string) (bool, error) {
 		fmt.Println(s)
 	}
 
-	m := reVerdict.FindStringSubmatch(text)
-	if m == nil {
-		fmt.Fprintln(os.Stderr, "エージェントが VERDICT を出さずに終了 (inconclusive)")
+	v, ok := parseAiVerdict(text)
+	if !ok {
+		fmt.Fprintln(os.Stderr, "エージェントが verdict JSON を出さずに終了 (inconclusive)")
 		return false, nil
 	}
-	if strings.EqualFold(m[1], "BUG") {
-		fmt.Printf("\nバグ発見: %s  → 記録すれば決定論 .mtrr のバグ票\n", strings.TrimSpace(m[2]))
+	if strings.EqualFold(v.Verdict, "BUG") {
+		fmt.Printf("\nバグ発見: %s  → 記録すれば決定論 .mtrr のバグ票\n", strings.TrimSpace(v.Detail))
 		return true, nil
 	}
-	fmt.Printf("\nclean: %s\n", strings.TrimSpace(m[2]))
+	fmt.Printf("\nclean: %s\n", strings.TrimSpace(v.Detail))
 	return false, nil
+}
+
+// parseAiVerdict はエージェント出力の最終非空行から verdict JSON を取り出す。
+// LLM は指示を無視して前後に文章を付けることがあるため、末尾から 1 行ずつ
+// JSON として解釈できるものを探す (replay.go の parseReplayVerdict と同じ方針)。
+func parseAiVerdict(text string) (aiVerdict, bool) {
+	lines := strings.Split(strings.TrimSpace(text), "\n")
+	for i := len(lines) - 1; i >= 0; i-- {
+		line := strings.TrimSpace(lines[i])
+		if line == "" || line[0] != '{' {
+			continue
+		}
+		var v aiVerdict
+		if err := json.Unmarshal([]byte(line), &v); err == nil && v.Verdict != "" {
+			return v, true
+		}
+	}
+	return aiVerdict{}, false
 }

@@ -2,6 +2,7 @@
 // ロジックは C++ (このファイル)、表示は HTML/CSS (assets/scene.html)。JS は書かない。
 
 #include <mitiru/module/Game.hpp>
+#include <mitiru/module/AutoReflect.hpp>
 using namespace mitiru;
 
 struct {{.ProjectIdent}}Game
@@ -21,5 +22,8 @@ struct {{.ProjectIdent}}Game
         s.fillCircle(640.0f, 360.0f, 24.0f + (float)count, color::Yellow);   // 押すほど育つ
     }
 };
+
+// GameMemory を巻き戻し・観測 inspector に自動反射する (フィールド列挙不要)。
+MITIRU_REFLECT_AUTO({{.ProjectIdent}}Game);
 
 MITIRU_GAME({{.ProjectIdent}}Game)
