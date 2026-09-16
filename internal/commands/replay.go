@@ -45,13 +45,14 @@ func parseReplayVerdict(stdout []byte) (replayVerdict, bool) {
 }
 
 var (
-	replayRecordFile string
-	replayPlayFile   string
-	replayTestFile   string
-	replayExpectFile string
-	replaySuiteDir   string
-	replayGame       bool
-	replayDiff       bool
+	replayRecordFile        string
+	replayPlayFile          string
+	replayTestFile          string
+	replayExpectFile        string
+	replaySuiteDir          string
+	replayGame              bool
+	replayDiff              bool
+	replaySaveRoundtripTest bool
 )
 
 // stateDiffResult は `mitiru_host --state-diff A B --nolog` が stdout に出す1行 JSON
@@ -105,6 +106,8 @@ Provide exactly one of:
 	cmd.Flags().BoolVar(&replayGame, "game", true,
 		"deprecated: always on (the standalone replay demo was absorbed into the host path)")
 	_ = cmd.Flags().MarkHidden("game")
+	cmd.Flags().BoolVar(&replaySaveRoundtripTest, "save-roundtrip-test", false,
+		"with --test: also check that save -> load -> save is bit-exact (host --save-roundtrip-test)")
 	return cmd
 }
 
@@ -192,6 +195,9 @@ func runReplayGameTest(absFile string) error {
 	art := result.Artifacts
 
 	hostArgs := []string{art.DllRel, "--replay-test", absFile}
+	if replaySaveRoundtripTest {
+		hostArgs = append(hostArgs, "--save-roundtrip-test")
+	}
 	if replayExpectFile != "" {
 		absExpect, err := filepath.Abs(replayExpectFile)
 		if err != nil {

@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"math"
 	"os/exec"
 	"regexp"
 	"strconv"
@@ -116,6 +117,23 @@ func toFloat(v interface{}) (float64, bool) {
 			return 1, true
 		}
 		return 0, true
+	case string:
+		// engine 側 (NumberAppend.hpp) が JSON に数値として書けない NaN/Inf を "NaN"/"Inf"/"-Inf"
+		// 文字列で出すようになった (6-3)。ここで数値へ戻さないと非有限値の不変条件が常に skip される。
+		return parseNonFiniteJSON(n)
+	}
+	return 0, false
+}
+
+// parseNonFiniteJSON は NumberAppend.hpp の nonFiniteJsonName と対の逆変換。
+func parseNonFiniteJSON(s string) (float64, bool) {
+	switch s {
+	case "NaN":
+		return math.NaN(), true
+	case "Inf":
+		return math.Inf(1), true
+	case "-Inf":
+		return math.Inf(-1), true
 	}
 	return 0, false
 }

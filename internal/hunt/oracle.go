@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"regexp"
 	"strings"
@@ -157,6 +158,17 @@ func toFloat(v interface{}) (float64, bool) {
 			return 1, true
 		}
 		return 0, true
+	case string:
+		// engine 側 (NumberAppend.hpp) が JSON に数値として書けない NaN/Inf を "NaN"/"Inf"/"-Inf"
+		// 文字列で出すようになった (6-3)。ここで数値へ戻さないと非有限値の不変条件が常に skip される。
+		switch n {
+		case "NaN":
+			return math.NaN(), true
+		case "Inf":
+			return math.Inf(1), true
+		case "-Inf":
+			return math.Inf(-1), true
+		}
 	}
 	return 0, false
 }

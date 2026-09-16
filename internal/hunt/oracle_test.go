@@ -51,3 +51,30 @@ func TestScanOracleLinesMatchesEngineFormat(t *testing.T) {
 		}
 	}
 }
+
+// engine 側 (NumberAppend.hpp) は JSON に書けない NaN/Inf を "NaN"/"Inf"/"-Inf" 文字列で出す。
+// CheckInvariants がこれを非有限値として数値扱いできることを確認する (6-3 と対の Go 側修正)。
+func TestCheckInvariantsHandlesNonFiniteStrings(t *testing.T) {
+	inv, err := ParseInvariants([]string{"hp < 100"})
+	if err != nil {
+		t.Fatalf("ParseInvariants: %v", err)
+	}
+
+	// NaN との比較は IEEE754 で常に false → "hp < 100" は破れる (Go の NaN 比較もそのまま false)。
+	got := CheckInvariants(`{"hp":"NaN"}`, inv)
+	if got == "" {
+		t.Fatalf("CheckInvariants() with NaN field = %q, want a violation", got)
+	}
+
+	// +Inf は 100 未満ではないので同じく破れる。
+	got = CheckInvariants(`{"hp":"Inf"}`, inv)
+	if got == "" {
+		t.Fatalf("CheckInvariants() with Inf field = %q, want a violation", got)
+	}
+
+	// -Inf は 100 未満なので違反なし。
+	got = CheckInvariants(`{"hp":"-Inf"}`, inv)
+	if got != "" {
+		t.Fatalf("CheckInvariants() with -Inf field = %q, want no violation", got)
+	}
+}
