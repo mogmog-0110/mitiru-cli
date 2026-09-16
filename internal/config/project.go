@@ -69,6 +69,9 @@ type BuildSection struct {
 	// Target は standalone で build する CMake target。exe の名前 (拡張子なし) でも
 	// ある。既定は project.name。
 	Target string `toml:"target"`
+	// Bake は true なら `mitiru build` の後に自動で `mitiru bake --all` を回す
+	// (★4-1、配置 JSON を POD へ焼いて起動時の再現性を上げる)。既定 false (opt-in)。
+	Bake bool `toml:"bake"`
 }
 
 const (

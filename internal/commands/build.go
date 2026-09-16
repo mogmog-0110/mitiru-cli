@@ -39,6 +39,13 @@ Examples:
 			if err != nil {
 				return err
 			}
+			// [build] bake = true (★4-1): 配置 JSON を焼いて起動時の再現性を上げる。
+			// standalone は Spawner 前提が無いので対象外。
+			if res.Config.Build.Bake && !res.Config.Standalone() {
+				if err := runBakeAll(res.Artifacts, os.Stdout); err != nil {
+					return err
+				}
+			}
 			// 受動的な更新通知 (コマンド末尾。watch のリビルドループには出さない)。
 			maybeNotifyUpdates(res.Config.Project.Engine, os.Stdout)
 			return nil
