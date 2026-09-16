@@ -10,6 +10,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/mogmog-0110/mitiru-cli/internal/hunt"
 	"github.com/spf13/cobra"
 )
 
@@ -277,7 +278,9 @@ func runReplaySuite() error {
 // 報告する (P2)。host は byte 単位でしか比較せず game の reflect schema を読み込まないため、
 // どの field が分岐したかまでは出せない (field 単位 diff には `--state-diff` へ
 // `--game <dll>` を足す host 側の変更が要るが、このコマンドは host の既存引数だけを使う
-// 制約のため見送る)。
+// 制約のため見送る)。代わりに、分岐した frame の state blob を両ファイルから CLI 側で
+// 読み直し (hunt.ReadStateAtFrame)、byte offset の差分区間を表示する (field 名までは
+// 出せないが、host の verdict 1 行だけよりは手掛かりが増える)。
 func runReplayDiff(a, b string) error {
 	absA, err := filepath.Abs(a)
 	if err != nil {
@@ -319,6 +322,37 @@ func runReplayDiff(a, b string) error {
 	}
 	fmt.Printf("  最初に食い違った frame: %d (全 %d frame 中)\n", d.FirstDivergentFrame, d.TotalFrames)
 	fmt.Println("  差分フィールド名は出ません (byte 比較のみ、game の reflect schema 未読込)。")
+	printByteDiffRanges(absA, absB, d.FirstDivergentFrame)
 	os.Exit(1)
 	return nil
+}
+
+// printByteDiffRanges はその frame の state blob を両ファイルから読み直し、値が異なる
+// byte offset の範囲を表示する。読み直しに失敗しても --diff 本体の verdict (非ゼロ終了)
+// は変えず、手掛かりが出せなかった旨だけ伝える。
+func printByteDiffRanges(pathA, pathB string, frameIdx uint32) {
+	stateA, errA := hunt.ReadStateAtFrame(pathA, frameIdx)
+	stateB, errB := hunt.ReadStateAtFrame(pathB, frameIdx)
+	if errA != nil || errB != nil {
+		fmt.Printf("  byte offset 範囲: 読み直し失敗 (%v / %v)\n", errA, errB)
+		return
+	}
+	if len(stateA) != len(stateB) {
+		fmt.Printf("  state サイズが frame %d で既に違います (%d vs %d バイト) — offset 範囲は共通長までのみ\n",
+			frameIdx, len(stateA), len(stateB))
+	}
+	ranges := hunt.DiffByteRanges(stateA, stateB)
+	if len(ranges) == 0 {
+		fmt.Println("  byte offset 範囲: 共通長の範囲内では差分なし (末尾のサイズ差のみ)")
+		return
+	}
+	fmt.Printf("  差分 byte offset (%d 区間, フィールド名は不明):\n", len(ranges))
+	const maxShown = 8
+	for i, r := range ranges {
+		if i >= maxShown {
+			fmt.Printf("    ... 他 %d 区間\n", len(ranges)-maxShown)
+			break
+		}
+		fmt.Printf("    [%d, %d) (%d bytes)\n", r.Start, r.End, r.End-r.Start)
+	}
 }
