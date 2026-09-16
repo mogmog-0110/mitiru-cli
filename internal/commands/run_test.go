@@ -14,7 +14,7 @@ func TestLearnInspectPage(t *testing.T) {
 		want  string
 	}{
 		{"learn なし、page なし → 窓なし", "", false, ""},
-		{"learn あり、page なし → inspect", "", true, "inspect"},
+		{"learn あり、page なし → scene (game memory タブ)", "", true, "scene?tab=memory"},
 		{"learn あり、page 明示指定は上書きしない", "perf", true, "perf"},
 		{"learn なし、page 明示指定はそのまま", "rewind", false, "rewind"},
 	}

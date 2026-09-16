@@ -21,7 +21,7 @@ var (
 	runInspectPage string // resolveInspectPage 済みの tool page 名 ("" = 窓なし)
 	runWithConsole bool
 	runRecordFile  string
-	runLearn       bool // --learn: gameplay inspector を自動で開く (2026-09-16 初心者導線相談)
+	runLearn       bool // --learn: scene 窓 (game memory タブ) を自動で開く
 )
 
 // tomlHostArgs は cwd の mitiru.toml の [window] / [font] / [lofi] を
@@ -99,7 +99,7 @@ inspector; a window name selects another tool:
   mitiru run --inspect rewind      # 巻き戻し窓 (past-frame rewind)
                                    # (perf, inspector, rewind, mixer,
                                    #  scene, replay, input)
-  mitiru run --learn                # gameplay inspector を自動で開く (--inspect を知らなくてよい)
+  mitiru run --learn                # scene 窓を game memory タブで自動で開く (--inspect を知らなくてよい)
 
 A standalone project ([build] kind = "standalone") runs its own exe instead
 of mitiru_host; arguments after -- go to that exe:
@@ -134,16 +134,18 @@ of mitiru_host; arguments after -- go to that exe:
 	cmd.Flags().StringVar(&runRecordFile, "record", "",
 		"record this session's input to <file>.mtrr for `mitiru replay --test --game`")
 	cmd.Flags().BoolVar(&runLearn, "learn", false,
-		"open the gameplay inspector automatically (same window as bare --inspect, for first-time exploration)")
+		"open the scene window on its game memory tab automatically (for first-time exploration)")
 	return cmd
 }
 
 // learnInspectPage は --inspect 解決済み page と --learn を合成する。page が
-// 未指定 (窓なし) かつ --learn 指定なら素の --inspect と同じ "inspect" を返す。
+// 未指定 (窓なし) かつ --learn 指定なら "scene" を返す。C++ には実行時
+// リフレクションが無いため独自機構を新設せず、既存の GameMemory reflect JSON
+// (scene.html の「game memory」タブ) をそのまま初見導線に使い回す。
 // page が既に何か指定されていれば --learn は何もしない (明示指定を優先)。
 func learnInspectPage(page string, learn bool) string {
 	if page == "" && learn {
-		return "inspect"
+		return "scene?tab=memory" // mitiru_tool_cef は ? 以降をページのクエリとして URL に付ける
 	}
 	return page
 }
