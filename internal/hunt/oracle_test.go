@@ -28,3 +28,26 @@ func TestSummarizeOracleWithoutField(t *testing.T) {
 		t.Fatalf("SummarizeOracle() = %q, want %q", got, want)
 	}
 }
+
+// Oracle.hpp の reportOracleEvent が出す書式を ScanOracleLines が拾えることを確認する。
+func TestScanOracleLinesMatchesEngineFormat(t *testing.T) {
+	combined := "some other host stdout\n" +
+		"[oracle] kind=nan frame=42 field=player.hp value=nan\n" +
+		"[oracle] kind=range frame=43 field=player.x value=999.5\n" +
+		"more noise\n"
+
+	got := ScanOracleLines(combined)
+
+	want := []string{
+		"[oracle] kind=nan frame=42 field=player.hp value=nan",
+		"[oracle] kind=range frame=43 field=player.x value=999.5",
+	}
+	if len(got) != len(want) {
+		t.Fatalf("ScanOracleLines() returned %d lines, want %d: %v", len(got), len(want), got)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("ScanOracleLines()[%d] = %q, want %q", i, got[i], want[i])
+		}
+	}
+}

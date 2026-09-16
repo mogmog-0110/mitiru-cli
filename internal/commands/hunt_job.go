@@ -275,7 +275,7 @@ func huntProbeOnce(art *build.Artifacts, work string, events []hunt.Event, frame
 	os.Remove(mtrr)
 
 	recordArgs := []string{art.DllRel, "--headless", "--input-script", script, "--record", mtrr,
-		"--max-frames", strconv.Itoa(frames), "--no-tool-windows"}
+		"--max-frames", strconv.Itoa(frames), "--no-tool-windows", "--oracle-log"}
 	var trace string
 	if wantTrace {
 		trace = filepath.Join(work, "trace.jsonl")
@@ -303,7 +303,7 @@ func huntProbeOnce(art *build.Artifacts, work string, events []hunt.Event, frame
 	}
 
 	rout, rcode, rTimedOut := runHostCaptured(art.HostExePath, art.DeployDir, timeoutSec,
-		art.DllRel, "--replay-test", mtrr, "--json", "--no-tool-windows")
+		art.DllRel, "--replay-test", mtrr, "--json", "--no-tool-windows", "--oracle-log")
 	oracle = append(oracle, hunt.ScanOracleLines(rout)...)
 	if rTimedOut {
 		return huntProbeResult{finding: hunt.Finding{Kind: "crash", Reason: "replay-test がタイムアウト", OracleLines: oracle}, hashes: hashes}
