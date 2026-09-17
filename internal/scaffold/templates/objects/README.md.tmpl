@@ -1,0 +1,38 @@
+# {{.ProjectName}}
+
+MitiruEngine プロジェクト — オブジェクト指向テンプレート (game-as-DLL、`MITIRU_GAME_OBJECTS`)。
+
+クラスの継承、仮想関数、`std::vector<std::unique_ptr<...>>` で game を書く出発点です。
+進行データ (`Progress`) だけが flat POD で、セーブ・ロード・録画の対象になります。
+
+## 動かしかた
+
+```
+mitiru run
+```
+
+ホットリロード付きで開発する場合は:
+
+```
+mitiru watch
+```
+
+`src/main.cpp` を保存 → 自動で DLL が再ビルド → ホストが新しい DLL を取り込みます。
+進行データは保持され、場面は `build` で組み立て直されます。
+
+## 構成
+
+- `src/main.cpp` — ゲームコード (C++、DLL としてビルドされる)
+- `assets/scene.html` — UI (HTML/CSS、CEF オーバーレイ)
+- `mitiru.toml` — プロジェクト設定 (ウィンドウサイズなど)
+
+## 決まりごと
+
+- `build(const Progress&)` は読むだけ。同じ進行データからは必ず同じ場面を作ります。
+- セーブとロードで戻ってほしい値は `Progress` に置きます。置いていないものは、ロードや
+  ホットリロードのたびに初期状態になります。
+- 乱数の状態は `Progress` に置き、壁時計を読まず、ポインタ値の順序に依存しない。これで `--replay` が通ります。
+- フレーム単位の巻き戻し (rewind) と分岐エディタは、この形では使えません。必要なら全状態を
+  flat POD にする `MITIRU_GAME` (他のテンプレート) で書きます。
+
+エンジン側の解説: `docs/OBJECT_STYLE_GAMES.md`、設計判断は ADR 0040。

@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>{{.ProjectName}}</title>
+<style>
+  /* HUD は C++ 描画の上に重なる透明オーバーレイ。値は C++ の hud.set("hud.score", ...) →
+     data-m-text で届く。JS は書かない。 */
+  html, body {
+    margin: 0;
+    height: 100%;
+    overflow: hidden;
+    background: transparent;
+    pointer-events: none;
+    font-family: "Noto Sans JP", "Hiragino Sans", "Yu Gothic", system-ui, sans-serif;
+    color: #fff;
+    user-select: none;
+  }
+  .bar {
+    position: absolute;
+    left: 24px;
+    top: 20px;
+    display: flex;
+    gap: 28px;
+    font-size: 28px;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    text-shadow: 0 2px 8px rgba(0, 0, 0, 0.6);
+  }
+  .hint {
+    position: absolute;
+    left: 24px;
+    bottom: 16px;
+    font-size: 15px;
+    opacity: 0.8;
+  }
+</style>
+</head>
+<body>
+  <div class="bar">
+    <span>ステージ <span data-m-text="hud.stage">1</span></span>
+    <span>スコア <span data-m-text="hud.score">0</span></span>
+  </div>
+  <div class="hint">クリック: スコア / ↑: ステージを進める / S: セーブ / L: ロード / Esc: 終了</div>
+</body>
+</html>

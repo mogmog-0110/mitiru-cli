@@ -1,0 +1,87 @@
+// {{.ProjectName}} — クラスとコンポーネントで書く game の出発点 (MITIRU_GAME_OBJECTS)。
+// 進行データ (Progress) だけが flat POD で、セーブ・ロード・録画の対象になる。
+// 場面 (Scene) は普通の C++ で、仮想関数も std::vector も使ってよい。進行データから組み立て直せること。
+// ロジックは C++ (このファイル)、表示は HTML/CSS (assets/scene.html)。JS は書かない。
+
+#include <memory>
+#include <vector>
+
+#include <mitiru/module/Game.hpp>
+#include <mitiru/module/AutoReflect.hpp>
+using namespace mitiru;
+
+// ── 進行データ: ここに置いたものだけがセーブとロードで戻る ──
+struct {{.ProjectIdent}}Progress
+{
+    int           stage    = 1;
+    int           score    = 0;
+    std::uint32_t rngState = 0x2545F491u;   // 乱数は進行データに置く (replay が通る)
+
+    std::uint32_t nextRandom()
+    {
+        rngState ^= rngState << 13; rngState ^= rngState >> 17; rngState ^= rngState << 5;
+        return rngState;
+    }
+};
+MITIRU_REFLECT_AUTO({{.ProjectIdent}}Progress);
+
+// ── ゲーム内オブジェクト: 継承と仮想関数で書く ──
+struct GameObject
+{
+    float x = 0.0f, y = 0.0f, radius = 24.0f;
+    virtual ~GameObject() = default;
+    virtual void update({{.ProjectIdent}}Progress& progress, float dt) = 0;
+    virtual void draw(Screen& s) const = 0;
+};
+
+struct Bouncer final : GameObject
+{
+    float vy = 0.0f;
+    void update({{.ProjectIdent}}Progress&, float dt) override
+    {
+        vy += 900.0f * dt;
+        y  += vy * dt;
+        if (y > 560.0f) { y = 560.0f; vy = -vy * 0.8f; }
+    }
+    void draw(Screen& s) const override { s.fillCircle(x, y, radius, color::Yellow); }
+};
+
+// ── 場面: DLL の中に 1 個だけ生きる。進行データから組み立てる ──
+struct {{.ProjectIdent}}Scene
+{
+    std::vector<std::unique_ptr<GameObject>> objects;
+
+    // 初回・ホットリロード後・ロード後・さいしょから の後に呼ばれる。読むだけ (const)。
+    void build(const {{.ProjectIdent}}Progress& progress)
+    {
+        objects.clear();
+        for (int i = 0; i < progress.stage; ++i)
+        {
+            auto ball = std::make_unique<Bouncer>();
+            ball->x = 200.0f + 140.0f * static_cast<float>(i);
+            ball->y = 120.0f + 40.0f * static_cast<float>(i);
+            objects.push_back(std::move(ball));
+        }
+    }
+
+    void update({{.ProjectIdent}}Progress& progress, Input in, Hud hud, float dt)
+    {
+        if (in.mousePressed()) { progress.score += 1 + static_cast<int>(progress.nextRandom() % 3u); }
+        if (in.pressed(Key::Up) && progress.stage < 6) { progress.stage += 1; build(progress); }
+        if (in.pressed(Key::S)) { hud.save("slot0"); }
+        if (in.pressed(Key::L)) { hud.load("slot0"); }   // host が進行データを書き戻し、build を呼び直す
+        if (in.cancelPressed()) { hud.quit(); }
+
+        for (auto& object : objects) { object->update(progress, dt); }
+        hud.set("hud.score", progress.score);
+        hud.set("hud.stage", progress.stage);
+    }
+
+    void draw(const {{.ProjectIdent}}Progress&, Screen& s)
+    {
+        s.fillScreen(hex(0x14182A));
+        for (const auto& object : objects) { object->draw(s); }
+    }
+};
+
+MITIRU_GAME_OBJECTS({{.ProjectIdent}}Scene, {{.ProjectIdent}}Progress)

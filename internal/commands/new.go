@@ -27,7 +27,8 @@ The scaffolded project is built as a SHARED library (DLL) and run via the
 mitiru_host launcher.
 
 Templates: welcome (C++ art + HTML/CSS UI, the default), hello (minimal),
-clicker (incremental loop), shooter (vertical STG).
+clicker (incremental loop), shooter (vertical STG),
+objects (classes + virtual components via MITIRU_GAME_OBJECTS; engine >= 0.33).
 
 Example:
   mitiru new myGame                create ./myGame/ from the 'welcome' template
@@ -40,7 +41,7 @@ Example:
 	}
 
 	cmd.Flags().StringVarP(&newTemplateName, "template", "t", "welcome",
-		"template to use: welcome | hello | clicker | shooter")
+		"template to use: welcome | hello | clicker | shooter | objects")
 	cmd.Flags().BoolVar(&newForce, "force", false,
 		"overwrite the target directory if it already exists")
 
