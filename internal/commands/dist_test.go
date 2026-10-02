@@ -131,9 +131,12 @@ func TestWriteExeLauncher(t *testing.T) {
 }
 
 // RmlUi は pack を読まないので、--pack でも assets/ui/ はバラ置きで残り、pack にも入らない。
-func TestPackKeepsUIDirLoose(t *testing.T) {
+// ディスクから直に読まれる 3D モデル・ナビメッシュも同じで、pack に移すと描画と当たり判定が空になる。
+func TestPackKeepsDiskReadAssetsLoose(t *testing.T) {
 	assets := filepath.Join(t.TempDir(), "assets")
-	for _, rel := range []string{"ui/main.rml", "ui/hud.rcss", "sprites/a.png", "audio/pop.wav"} {
+	files := []string{"ui/main.rml", "ui/hud.rcss", "sprites/a.png", "audio/pop.wav",
+		"level.obj", "level.mtl", "level.navmesh", "models/hero.glb", "models/hero.png"}
+	for _, rel := range files {
 		p := filepath.Join(assets, filepath.FromSlash(rel))
 		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
 			t.Fatal(err)
@@ -142,20 +145,25 @@ func TestPackKeepsUIDirLoose(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	n, err := packAssets(assets, filepath.Join(filepath.Dir(assets), "assets.mtpak"), "g/assets")
+	packed, loose, err := packAssets(assets, filepath.Join(filepath.Dir(assets), "assets.mtpak"), "g/assets")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if n != 2 {
-		t.Errorf("packed %d files, want 2 (sprites + audio, not ui/)", n)
+	if len(packed) != 3 || loose != 6 {
+		t.Errorf("packed %d / loose %d, want 3 (png, wav, png) / 6", len(packed), loose)
 	}
-	if err := removePackedAssets(assets); err != nil {
+	if err := removePackedAssets(assets, packed); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := os.Stat(filepath.Join(assets, "ui", "main.rml")); err != nil {
-		t.Errorf("assets/ui/main.rml must stay loose: %v", err)
+	for _, rel := range []string{"ui/main.rml", "level.obj", "level.mtl", "level.navmesh", "models/hero.glb"} {
+		if _, err := os.Stat(filepath.Join(assets, filepath.FromSlash(rel))); err != nil {
+			t.Errorf("%s must stay loose: %v", rel, err)
+		}
 	}
 	if _, err := os.Stat(filepath.Join(assets, "sprites")); !os.IsNotExist(err) {
-		t.Errorf("packed assets must be removed, sprites/ still there (err=%v)", err)
+		t.Errorf("an emptied dir must be removed, sprites/ still there (err=%v)", err)
+	}
+	if _, err := os.Stat(filepath.Join(assets, "models", "hero.png")); !os.IsNotExist(err) {
+		t.Errorf("packed models/hero.png must be removed (err=%v)", err)
 	}
 }

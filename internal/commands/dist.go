@@ -2,8 +2,6 @@ package commands
 
 import (
 	"archive/zip"
-	"bytes"
-	"encoding/binary"
 	"fmt"
 	"io"
 	"os"
@@ -22,6 +20,10 @@ var (
 	distBat  bool
 	distPack bool
 	distOne  bool
+	// distDebug は Debug ビルドを配る (テスト機で落ちた所を追うため)。Debug 版ランタイムは再頒布できない
+	distDebug bool
+	// distCheck は作った配布物を一時フォルダへ写し、素の PC に近い環境で headless に走らせて確かめる
+	distCheck bool
 )
 
 // distShipExe は top-level で配布してよい exe (host と、CEF 世代の engine の helper)。他のツール exe
@@ -31,8 +33,11 @@ var distShipExe = map[string]bool{
 	"mitiru_host.exe": true, "MitiruCefHelper.exe": true,
 }
 
-// distJunkExt は配布物に含めない build linker 中間物。
-var distJunkExt = map[string]bool{".ilk": true, ".pdb": true, ".exp": true, ".lib": true}
+// distRuntimeDirs は exe の隣のうち、ゲームの dir 以外で配布物に入れる dir。
+var distRuntimeDirs = map[string]bool{"locales": true, "assets": true, "dxc": true, "slang": true}
+
+// distJunkExt は配布物に含めない build linker 中間物と、書きかけの一時ファイル。
+var distJunkExt = map[string]bool{".ilk": true, ".pdb": true, ".exp": true, ".lib": true, ".tmp": true}
 
 // isDistRuntimeJunk は ゲーム dir 配下の相対パス (スラッシュ区切り) が
 // 開発専用ファイルかを判定する。engine の web runtime は HUD の実行に使う
@@ -63,7 +68,7 @@ func isDistDropTopLevel(base string) bool {
 	low := strings.ToLower(base)
 	ext := strings.ToLower(filepath.Ext(base))
 	switch {
-	case distJunkExt[ext]: // .ilk/.pdb/.exp/.lib
+	case distJunkExt[ext]: // .ilk/.pdb/.exp/.lib/.tmp
 		return true
 	case base == "CMakeCache.txt", base == "build.ninja", base == "cmake_install.cmake":
 		return true
@@ -73,6 +78,8 @@ func isDistDropTopLevel(base string) bool {
 		return true
 	case strings.HasSuffix(low, ".ninja_log"), low == ".ninja_deps":
 		return true // build log
+	case ext == ".stamp", low == "compile_commands.json", low == "mitiru_build.json":
+		return true // ビルドの印と記録。compile_commands.json はビルドした機械の絶対パスを持つ
 	case base == "mitiru_start.exe":
 		return true // ランチャ stub は data/ ではなくトップに置く (別途コピー)
 	case ext == ".exe" && !distShipExe[base]:
@@ -120,6 +127,10 @@ Examples:
 		"embed assets/ into a single assets.mtpak (default on; --pack=false to keep loose files)")
 	cmd.Flags().BoolVar(&distOne, "onefile", false,
 		"fold the whole bundle into a single self-extracting <name>.exe (Windows)")
+	cmd.Flags().BoolVar(&distDebug, "debug", false,
+		"ship Debug binaries (bundles the non-redistributable Debug CRT; for your own test machines only)")
+	cmd.Flags().BoolVar(&distCheck, "check", false,
+		"after packaging, run the bundle headless from a temp copy with a clean environment and fail on missing files")
 	cmd.Flags().StringVar(&buildGenerator, "generator", "",
 		"explicit CMake generator (default Ninja)")
 	return cmd
@@ -134,8 +145,13 @@ func runDist() error {
 
 	// dist 専用ビルド: コンソール窓を出さない GUI host にする。dev の build/out を
 	// 汚さないよう別 out dir (configure-time オプションの thrash 回避)。
-	buildRelease = true
+	// 既定は Release。Debug は別の out dir にして、Release の配布物へ Debug 版ランタイムが混ざらないようにする
+	buildRelease = !distDebug
 	buildOutDir = filepath.Join(projectRoot, "build", "dist-out")
+	if distDebug {
+		buildOutDir += "-debug"
+		fmt.Println("dist --debug: Debug ビルドを配る。Debug 版ランタイムは再頒布できないので、自分のテスト機だけで使う")
+	}
 	buildExtraDefines = []string{"MITIRU_HOST_GUI=ON"}
 	defer func() { buildOutDir = ""; buildExtraDefines = nil }() // 後続コマンドへ漏らさない
 
@@ -171,7 +187,9 @@ func runDist() error {
 		return err
 	}
 
-	hostArgs := hostArgsFromConfig(cfg)
+	// セーブと設定は %APPDATA%/<name>/ に置く。指定しないと data/save/ に書くので、
+	// Program Files に入れると書けず、onefile では展開し直すたびに消える。
+	hostArgs := append(hostArgsFromConfig(cfg), "--game-name", name)
 
 	// 顔つき: window title は project.name。project root に icon.ico があれば
 	// data/ へ同梱し --icon で window icon にも使う (無ければ既定のまま = 正当)。
@@ -217,6 +235,18 @@ func runDist() error {
 		n += 2
 	}
 
+	// 依存 DLL を確かめ、VC ランタイムを data/ に置く。欠けたまま配ると、遊ぶ側の PC で起動前に落ちる。
+	runtimeDLLs, err := ensureDistRuntime(dataDir, distDebug)
+	if err != nil {
+		return err
+	}
+	n += runtimeDLLs
+	if stubUsed {
+		if err := checkStandaloneExe(filepath.Join(bundleRoot, name+".exe")); err != nil {
+			return err
+		}
+	}
+
 	// stub が無い (古い engine / 非 Windows) ときは .bat にフォールバック。
 	batName := name + ".bat"
 	writeBat := distBat || !stubUsed
@@ -238,18 +268,23 @@ func runDist() error {
 	if distPack {
 		// <gameDir>/assets/ を <gameDir>/assets.mtpak に畳んで、バラ置きを除去する。
 		// キーは host / native loader が要求する cwd 相対パス "<gameDir>/assets/..."。
-		// assets/ui/ だけはバラ置きのまま残す。RmlUi は文書と RCSS をファイルから直に読み、pack を見ない。
+		// assets/ui/ と、ディスクから直に読まれる種類 (keepLooseInDist) はバラ置きのまま残す。
 		assetsDir := filepath.Join(dataDir, gameDir, "assets")
 		if _, statErr := os.Stat(assetsDir); statErr == nil {
 			packOut := filepath.Join(dataDir, gameDir, "assets.mtpak")
-			cnt, perr := packAssets(assetsDir, packOut, gameDir+"/assets")
+			packed, loose, perr := packAssets(assetsDir, packOut, gameDir+"/assets")
 			if perr != nil {
 				return fmt.Errorf("dist --pack: %w", perr)
 			}
-			if rmErr := removePackedAssets(assetsDir); rmErr != nil {
+			if rmErr := removePackedAssets(assetsDir, packed); rmErr != nil {
 				return fmt.Errorf("dist --pack: remove loose assets: %w", rmErr)
 			}
-			fmt.Printf("Packed %d assets → %s (loose assets/ removed, assets/ui/ kept)\n", cnt, packOut)
+			if len(packed) == 0 {
+				fmt.Printf("dist --pack: pack に畳むアセットが無い (バラ置き %d 個)\n", loose)
+			} else {
+				fmt.Printf("Packed %d assets → %s (assets/ui/ と、ディスクから読む %d 個はバラ置き)\n",
+					len(packed), packOut, loose)
+			}
 		} else {
 			fmt.Println("dist --pack: no assets/ to pack (skipped)")
 		}
@@ -284,6 +319,13 @@ func runDist() error {
 		return err
 	}
 	n++
+
+	if distCheck {
+		shot := filepath.Join(projectRoot, "build", "dist-check", name+".png")
+		if err := checkDistBundle(bundleRoot, shot); err != nil {
+			return err
+		}
+	}
 
 	// zip は README を書いたあとに作る。頒布セットは
 	//   dist/README.txt      ← アップロード先で zip の隣に並べる
@@ -461,8 +503,8 @@ func copyDeploy(src, dst, gameDir string) (int, error) {
 			if strings.HasPrefix(base, "cef_cache_") || base == "CMakeFiles" || base == "__pycache__" {
 				return filepath.SkipDir
 			}
-			// top-level dir は gameDir と locales と assets だけ降りる。
-			if !strings.Contains(rel, "/") && rel != gameDir && rel != "locales" && rel != "assets" {
+			// top-level dir は gameDir と locales と assets と、exe の隣の dxc/・slang/ (engine が置く DLL) だけ降りる。
+			if !strings.Contains(rel, "/") && rel != gameDir && !distRuntimeDirs[rel] {
 				return filepath.SkipDir
 			}
 			return nil
@@ -481,6 +523,7 @@ func copyDeploy(src, dst, gameDir string) (int, error) {
 			if !isDistEngineAsset(rel) {
 				return nil
 			}
+		case first == "dxc", first == "slang":
 		case !strings.Contains(rel, "/"): // top-level ファイル: drop ルールに当たるものだけ除外
 			if isDistDropTopLevel(base) {
 				return nil
@@ -616,104 +659,4 @@ func isDistEngineAsset(rel string) bool {
 	default:
 		return false
 	}
-}
-
-// packSkipDir は pack に入れずバラ置きで残す assets/ 直下のディレクトリ。
-const packSkipDir = "ui"
-
-// removePackedAssets は pack に畳んだバラ置きを消し、assets/ui/ だけ残す。
-func removePackedAssets(assetsDir string) error {
-	entries, err := os.ReadDir(assetsDir)
-	if err != nil {
-		return err
-	}
-	for _, e := range entries {
-		if e.IsDir() && e.Name() == packSkipDir {
-			continue
-		}
-		if err := os.RemoveAll(filepath.Join(assetsDir, e.Name())); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-// packAssets は assetsDir 以下 (assets/ui/ を除く) を再帰的に読み、keyPrefix を前置したキーで
-// .mtpak に書き出す。キーは host / native loader が要求する cwd 相対パスに一致させる。
-func packAssets(assetsDir, outFile, keyPrefix string) (int, error) {
-	var keys []string
-	var datas [][]byte
-	err := filepath.Walk(assetsDir, func(path string, info os.FileInfo, werr error) error {
-		if werr != nil {
-			return werr
-		}
-		if info.IsDir() {
-			if info.Name() == packSkipDir && filepath.Dir(path) == filepath.Clean(assetsDir) {
-				return filepath.SkipDir
-			}
-			return nil
-		}
-		rel, rerr := filepath.Rel(assetsDir, path)
-		if rerr != nil {
-			return rerr
-		}
-		data, rerr := os.ReadFile(path)
-		if rerr != nil {
-			return rerr
-		}
-		keys = append(keys, keyPrefix+"/"+filepath.ToSlash(rel))
-		datas = append(datas, data)
-		return nil
-	})
-	if err != nil {
-		return 0, err
-	}
-	if err := writeAssetPack(outFile, keys, datas, true); err != nil {
-		return 0, err
-	}
-	return len(keys), nil
-}
-
-// writeAssetPack は AssetPack.hpp (ADR 0016) と **バイト互換**の .mtpak を書く。
-// 形式: magic"MTPAK\0" | version u16 | flags u16 | count u32 |
-//
-//	[count] keyLen u16, key, offset u64, size u64 | blob region (scramble 時 XOR)。
-//
-// C++ 側 (mitiru::vfs::AssetPack::open/read) がこれを読むので、両者の形式は一致必須。
-func writeAssetPack(outFile string, keys []string, datas [][]byte, scramble bool) error {
-	blobStart := uint64(6 + 2 + 2 + 4)
-	for _, k := range keys {
-		blobStart += uint64(2 + len(k) + 8 + 8)
-	}
-	var buf bytes.Buffer
-	buf.WriteString("MTPAK\x00")
-	_ = binary.Write(&buf, binary.LittleEndian, uint16(1)) // version
-	var flags uint16
-	if scramble {
-		flags = 1
-	}
-	_ = binary.Write(&buf, binary.LittleEndian, flags)
-	_ = binary.Write(&buf, binary.LittleEndian, uint32(len(keys)))
-	off := blobStart
-	offsets := make([]uint64, len(keys))
-	for i, k := range keys {
-		_ = binary.Write(&buf, binary.LittleEndian, uint16(len(k)))
-		buf.WriteString(k)
-		_ = binary.Write(&buf, binary.LittleEndian, off)
-		_ = binary.Write(&buf, binary.LittleEndian, uint64(len(datas[i])))
-		offsets[i] = off
-		off += uint64(len(datas[i]))
-	}
-	for i := range keys {
-		d := datas[i]
-		if scramble {
-			d = make([]byte, len(datas[i]))
-			copy(d, datas[i])
-			for j := range d {
-				d[j] ^= byte(0x5A + ((offsets[i] + uint64(j)) & 0xFF))
-			}
-		}
-		buf.Write(d)
-	}
-	return os.WriteFile(outFile, buf.Bytes(), 0o644)
 }
