@@ -1,0 +1,94 @@
+# engine-pad-guard — CLI が作る consumer build で、パッドの経路 (SDL3) が生きていることを守る。
+#
+# engine 0.35 以降はパッドを SDL3 で読む。SDL3 は engine の configure が自分で取りに行き、
+# CLI の生成した CMake が SDL3.dll を host の隣へ置く。どちらかが壊れると host は起動するが
+# パッドが黙って効かなくなる (SDL3.dll は遅延読み込み)。通常の CI では気づけないので、
+# 空キャッシュから consumer build を実行し、SDL3 でコンパイルされたことと SDL3.dll の
+# 配置を確かめる。publish 前の dispatch と週次 schedule で engine 側の退行も拾う。
+name: engine-pad-guard
+
+on:
+  workflow_dispatch:
+    inputs:
+      engine_version:
+        description: 'engine version to test (X.Y.Z). 空なら scaffold default を使う。publish 直後の tag 検証に使う。'
+        required: false
+        default: ''
+  schedule:
+    # 週 1 (engine 側だけの退行を cli commit 無しでも拾う)。
+    - cron: '17 4 * * 1'
+  push:
+    branches: [main]
+    paths:
+      - 'internal/build/**'
+      - 'internal/engine/**'
+      - '.github/workflows/engine-pad-guard.yml'
+  pull_request:
+    paths:
+      - 'internal/build/**'
+      - 'internal/engine/**'
+      - '.github/workflows/engine-pad-guard.yml'
+
+concurrency:
+  group: pad-guard-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: pwsh
+
+jobs:
+  pad-host-build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Build mitiru CLI
+        run: |
+          go build -o mitiru.exe ./cmd/mitiru
+          "$PWD" | Out-File -FilePath $env:GITHUB_PATH -Append -Encoding utf8
+
+      - name: Scaffold a consumer project (clean engine cache)
+        run: |
+          $ErrorActionPreference = 'Stop'
+          # 空キャッシュを強制し、公開済みの engine source を取り直させる。
+          $cache = Join-Path $env:RUNNER_TEMP 'mitiru-cache'
+          if (Test-Path $cache) { Remove-Item -Recurse -Force $cache }
+          "MITIRU_CACHE_DIR=$cache" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+
+          mitiru new guard_game
+          # dispatch で版が指定されたら mitiru.toml の pin を上書きする (publish 直後の tag の確認用)。
+          $v = "${{ github.event.inputs.engine_version }}"
+          if ($v) {
+            $toml = 'guard_game/mitiru.toml'
+            (Get-Content $toml) -replace '^engine\s*=.*$', "engine = `"$v`"" | Set-Content $toml
+            Write-Host "pinned engine = $v"
+          }
+
+      - name: Build the host and check the SDL3 pad path (the guard)
+        run: |
+          $ErrorActionPreference = 'Stop'
+          Push-Location guard_game
+          mitiru build 2>&1 | Tee-Object -FilePath "$env:RUNNER_TEMP\build.log"
+          $code = $LASTEXITCODE
+          Pop-Location
+          if ($code -ne 0) { throw "mitiru build failed (exit $code)" }
+
+          # mitiru build は configure の出力を出さないので、build.ninja の define で SDL3 経路を確かめる。
+          $ninja = Get-ChildItem -Recurse -Filter build.ninja -Path guard_game/build
+          if (-not $ninja) { throw "build.ninja not found under guard_game/build — generator changed?" }
+          $hit = $ninja | Select-String -Pattern 'MITIRU_HAS_SDL3=1' -List | Select-Object -First 1
+          if (-not $hit) { throw "SDL3 was NOT detected during configure — pads would be silently off." }
+
+          $hostExe = Get-ChildItem -Recurse -Filter mitiru_host.exe -Path guard_game/build | Select-Object -First 1
+          if (-not $hostExe) { throw "mitiru_host.exe not produced — link likely failed." }
+          $dll = Join-Path $hostExe.DirectoryName 'SDL3.dll'
+          if (-not (Test-Path $dll)) { throw "SDL3.dll is not next to mitiru_host.exe — pads would be silently off." }
+          Write-Host "OK: SDL3 detected, mitiru_host.exe linked and SDL3.dll deployed at $($hostExe.DirectoryName)"
