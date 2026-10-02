@@ -52,11 +52,6 @@ func hostArgsFromConfig(pc *config.ProjectConfig) []string {
 	if atlas := strings.TrimSpace(pc.Font.Atlas); atlas != "" && atlas != "none" {
 		extra = append(extra, "--font", atlas)
 	}
-	// [cef] enabled = false: 完全ネイティブ描画の game で Chromium を起動しない。
-	// 未指定 (nil) は既定 ON なので何も渡さない。
-	if pc.CEF.Enabled != nil && !*pc.CEF.Enabled {
-		extra = append(extra, "--no-cef")
-	}
 	// [lofi]: enabled がマスタースイッチ。低解像+量子化+ディザ (#10 の host フラグへ)。
 	if pc.Lofi.Enabled {
 		extra = append(extra, "--lofi")
@@ -141,11 +136,11 @@ of mitiru_host; arguments after -- go to that exe:
 // learnInspectPage は --inspect 解決済み page と --learn を合成する。page が
 // 未指定 (窓なし) かつ --learn 指定なら "scene" を返す。C++ には実行時
 // リフレクションが無いため独自機構を新設せず、既存の GameMemory reflect JSON
-// (scene.html の「game memory」タブ) をそのまま初見導線に使い回す。
+// (scene 窓の「game memory」タブ) をそのまま初見導線に使い回す。
 // page が既に何か指定されていれば --learn は何もしない (明示指定を優先)。
 func learnInspectPage(page string, learn bool) string {
 	if page == "" && learn {
-		return "scene?tab=memory" // mitiru_tool_cef は ? 以降をページのクエリとして URL に付ける
+		return "scene?tab=memory" // mitiru_tool は ? 以降をページへの問い合わせとして渡す
 	}
 	return page
 }
@@ -300,8 +295,8 @@ func runStandalone(exeArgs []string) error {
 	return nil
 }
 
-// startInspectorChild は汎用 CEF ツールホスト mitiru_tool_cef.exe を `--page <page>`
-// で起動し、動作中ゲームの pid を指す child process にする (全ツール窓は tool_cef に統一)。
+// startInspectorChild はツール窓のホスト mitiru_tool.exe を `--page <page>` で起動し、
+// 動作中ゲームの pid を指す child process にする。
 // launch 前にゲームの snapshot file を短時間 poll し、即「waiting」表示を避ける。
 func startInspectorChild(gamePid int, page string) (*exec.Cmd, error) {
 	if runtime.GOOS != "windows" {
@@ -311,21 +306,10 @@ func startInspectorChild(gamePid int, page string) (*exec.Cmd, error) {
 	if err != nil {
 		return nil, fmt.Errorf("locate engine source: %w", err)
 	}
-	// 現行 layout は build/apps/、旧 engine snapshot は build/examples/。
-	exePath := ""
-	for _, c := range []string{
-		filepath.Join(engineRoot, "build", "apps", "mitiru_tool_cef", "mitiru_tool_cef.exe"),
-		filepath.Join(engineRoot, "build", "apps", "mitiru_tool_cef", "Debug", "mitiru_tool_cef.exe"),
-		filepath.Join(engineRoot, "build", "examples", "mitiru_tool_cef", "mitiru_tool_cef.exe"),
-		filepath.Join(engineRoot, "build", "examples", "mitiru_tool_cef", "Debug", "mitiru_tool_cef.exe"),
-	} {
-		if _, err := os.Stat(c); err == nil {
-			exePath = c
-			break
-		}
-	}
+	exePath := findToolExe(engineRoot)
 	if exePath == "" {
-		return nil, fmt.Errorf("mitiru_tool_cef.exe not found — run `cmake --build <engine>/build --target mitiru_tool_cef` once")
+		return nil, fmt.Errorf("%s.exe not found — run `cmake --build <engine>/build --target %s` once",
+			toolExeTarget, toolExeTarget)
 	}
 
 	// producer が最初の snapshot file を書くのを短時間待つ (ファイル名は IPC 規約上 inspector_)。

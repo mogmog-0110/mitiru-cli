@@ -24,7 +24,7 @@ var (
 	distOne  bool
 )
 
-// distShipExe は top-level で配布してよい exe (host + CEF helper のみ)。他のツール exe
+// distShipExe は top-level で配布してよい exe (host と、CEF 世代の engine の helper)。他のツール exe
 // (mitiru_inspector / mitiru_perf / mitiru_mixer / mitiru_replay / mitiru_scene_tree 等)
 // は配布物に含めない。
 var distShipExe = map[string]bool{
@@ -57,7 +57,7 @@ func isDistRuntimeJunk(rel string) bool {
 // isDistDropTopLevel は top-level ファイル (rel に "/" なし) を配布から外すか判定する。
 // DeployDir は cmake 出力 dir なので CMakeCache.txt / build.ninja / *.cmake / 他ツール exe /
 // build log 等が同居する。drop ルールに当たらないものは全て KEEP — 特に host が実際に
-// import 依存する全 *.dll (vcpkg SDL2.dll 等) と CEF data (*.pak/*.dat/*.bin/*.json) を
+// import 依存する全 *.dll (vcpkg SDL2.dll 等) と runtime data (*.pak/*.dat/*.bin/*.json) を
 // allowlist で取りこぼさないため、deny 方式に倒す。
 func isDistDropTopLevel(base string) bool {
 	low := strings.ToLower(base)
@@ -76,7 +76,7 @@ func isDistDropTopLevel(base string) bool {
 	case base == "mitiru_start.exe":
 		return true // ランチャ stub は data/ ではなくトップに置く (別途コピー)
 	case ext == ".exe" && !distShipExe[base]:
-		return true // host / CEF helper 以外の exe は配布しない
+		return true // host 以外の exe は配布しない
 	default:
 		return false
 	}
@@ -91,8 +91,8 @@ bundle — the host, the engine runtime, your game DLL and assets, plus a
 double-clickable launcher .bat.
 
 The top level holds a double-clickable <name>.exe launcher (a tiny GUI stub
-that shows NO console window) plus README.txt; all runtime (host, DLLs, CEF,
-your game, assets) lives in data/. Move/copy the whole folder as one unit.
+that shows NO console window) plus README.txt; all runtime (host, DLLs, UI
+stylesheets and fonts, your game, assets) lives in data/. Move/copy the whole folder as one unit.
 
 Use --bat to also emit a console-visible <name>.bat (useful for reading logs
 while debugging). --exe additionally drops a Steam-style data/<name>.exe.
@@ -126,28 +126,17 @@ Examples:
 }
 
 func runDist() error {
-	// 配布物の性質を build 前に知るため manifest を先読みする (cef.enabled で no-cef ビルド)。
 	cwd, _ := os.Getwd()
-	mp, projectRoot, ferr := config.FindManifest(cwd)
+	_, projectRoot, ferr := config.FindManifest(cwd)
 	if ferr != nil {
 		return ferr
 	}
-	pc, lerr := config.Load(mp)
-	if lerr != nil {
-		return lerr
-	}
-	noCef := pc.CEF.Enabled != nil && !*pc.CEF.Enabled
 
 	// dist 専用ビルド: コンソール窓を出さない GUI host にする。dev の build/out を
 	// 汚さないよう別 out dir (configure-time オプションの thrash 回避)。
 	buildRelease = true
 	buildOutDir = filepath.Join(projectRoot, "build", "dist-out")
 	buildExtraDefines = []string{"MITIRU_HOST_GUI=ON"}
-	if noCef {
-		// native ([cef] enabled=false) は Chromium を一切 link / 同梱しない。
-		// host は NullCefContext path でビルドされ libcef.dll を要求しない。
-		buildExtraDefines = append(buildExtraDefines, "MITIRU_DISABLE_CEF=ON")
-	}
 	defer func() { buildOutDir = ""; buildExtraDefines = nil }() // 後続コマンドへ漏らさない
 
 	result, err := runBuild()
@@ -170,7 +159,7 @@ func runDist() error {
 
 	gameDir := strings.SplitN(filepath.ToSlash(art.DllRel), "/", 2)[0]
 
-	// ランタイム一式 (host + 全 DLL + CEF + ゲーム) は data/ サブフォルダに隔離し、
+	// ランタイム一式 (host + 全 DLL + UI の RCSS と書体 + ゲーム) は data/ サブフォルダに隔離し、
 	// トップ階層はランチャーだけにする (DLL の散らかりを隠す)。host は自分の exe dir
 	// (= data/) を cwd に固定するので、data/ 内で全パスが完結する。
 	dataDir := filepath.Join(bundleRoot, "data")
@@ -248,7 +237,8 @@ func runDist() error {
 
 	if distPack {
 		// <gameDir>/assets/ を <gameDir>/assets.mtpak に畳んで、バラ置きを除去する。
-		// キーは host / native loader / CEF が要求する cwd 相対パス "<gameDir>/assets/..."。
+		// キーは host / native loader が要求する cwd 相対パス "<gameDir>/assets/..."。
+		// assets/ui/ だけはバラ置きのまま残す。RmlUi は文書と RCSS をファイルから直に読み、pack を見ない。
 		assetsDir := filepath.Join(dataDir, gameDir, "assets")
 		if _, statErr := os.Stat(assetsDir); statErr == nil {
 			packOut := filepath.Join(dataDir, gameDir, "assets.mtpak")
@@ -256,10 +246,10 @@ func runDist() error {
 			if perr != nil {
 				return fmt.Errorf("dist --pack: %w", perr)
 			}
-			if rmErr := os.RemoveAll(assetsDir); rmErr != nil {
+			if rmErr := removePackedAssets(assetsDir); rmErr != nil {
 				return fmt.Errorf("dist --pack: remove loose assets: %w", rmErr)
 			}
-			fmt.Printf("Packed %d assets → %s (loose assets/ removed)\n", cnt, packOut)
+			fmt.Printf("Packed %d assets → %s (loose assets/ removed, assets/ui/ kept)\n", cnt, packOut)
 		} else {
 			fmt.Println("dist --pack: no assets/ to pack (skipped)")
 		}
@@ -281,8 +271,8 @@ func runDist() error {
 	if custom, rerr := os.ReadFile(filepath.Join(projectRoot, "README.dist.txt")); rerr == nil {
 		readme = string(custom)
 	}
-	// 第三者ライセンスの表記。CEF (BSD) はバイナリ再配布にライセンス文書の同梱が
-	// 要件なので、プロジェクトに THIRD_PARTY_NOTICES.txt があれば bundle に入れる。
+	// 第三者ライセンスの表記 (RmlUi・同梱書体など)。プロジェクトに THIRD_PARTY_NOTICES.txt が
+	// あれば bundle に入れる。
 	if notices, nerr := os.ReadFile(filepath.Join(projectRoot, "THIRD_PARTY_NOTICES.txt")); nerr == nil {
 		if err := os.WriteFile(filepath.Join(bundleRoot, "THIRD_PARTY_NOTICES.txt"),
 			notices, 0o644); err != nil {
@@ -303,8 +293,7 @@ func runDist() error {
 	// ── 単一 exe 化 (--onefile) ────────────────────────────────────────
 	// bundle 一式を selfrun (自己展開ランチャ) の末尾へ連結し、dist/<name>.exe
 	// 1 つにする。配布先にアセットや DLL が生のフォルダとして現れない。
-	// CEF のランタイムは exe から直接は動かせないので、初回起動でローカルへ
-	// 展開する器になる。
+	// host と DLL は exe から直接は動かせないので、初回起動でローカルへ展開する器になる。
 	onefileExe := ""
 	if distOne {
 		selfrun := filepath.Join(art.DeployDir, "mitiru_selfrun.exe")
@@ -390,10 +379,7 @@ func runDist() error {
 		fmt.Printf("Zipped: %s (README.txt は zip の外)\n", zipPath)
 	}
 
-	mode := "HTML UI (CEF) 同梱"
-	if noCef {
-		mode = "native 描画 (Chromium 非同梱)"
-	}
+	mode := "UI は RmlUi (assets/ui/)"
 	launch := primary
 	if stubUsed {
 		launch = primary + " (コンソール窓なし)"
@@ -451,12 +437,9 @@ func distBundleName(name string) string {
 }
 
 // copyDeploy は DeployDir から配布に必要なものだけを bundle へコピーする。
-// ゲーム dir (gameDir) と locales/ は丸ごと、top-level は deny 方式 (isDistDropTopLevel
-// に当たらないものは全て KEEP) で全 runtime dll / CEF data を取りこぼさない。
-//
-// 注: `[cef] enabled=false` の場合、dist は MITIRU_DISABLE_CEF=ON で host を再ビルド
-// する (runDist 冒頭) ため deploy dir に CEF runtime がそもそも現れない。ここの deny
-// 方式は「ビルド出力に在るものは要る」前提でよく、CEF の有無をここで判定しない。
+// ゲーム dir (gameDir) と locales/ (CEF 世代の engine) は丸ごと、host の隣の assets/ は
+// RmlUi が読む RCSS と書体だけ (isDistEngineAsset)、top-level は deny 方式 (isDistDropTopLevel
+// に当たらないものは全て KEEP) で全 runtime dll / data を取りこぼさない。
 func copyDeploy(src, dst, gameDir string) (int, error) {
 	count := 0
 	err := filepath.Walk(src, func(path string, info os.FileInfo, err error) error {
@@ -478,8 +461,8 @@ func copyDeploy(src, dst, gameDir string) (int, error) {
 			if strings.HasPrefix(base, "cef_cache_") || base == "CMakeFiles" || base == "__pycache__" {
 				return filepath.SkipDir
 			}
-			// top-level dir は gameDir と locales だけ降りる。
-			if !strings.Contains(rel, "/") && rel != gameDir && rel != "locales" {
+			// top-level dir は gameDir と locales と assets だけ降りる。
+			if !strings.Contains(rel, "/") && rel != gameDir && rel != "locales" && rel != "assets" {
 				return filepath.SkipDir
 			}
 			return nil
@@ -492,6 +475,10 @@ func copyDeploy(src, dst, gameDir string) (int, error) {
 		case first == gameDir, first == "locales":
 			// ゲーム dir 配下 / locales は入れる。ただし開発専用の runtime は落とす。
 			if isDistRuntimeJunk(rel) {
+				return nil
+			}
+		case first == "assets":
+			if !isDistEngineAsset(rel) {
 				return nil
 			}
 		case !strings.Contains(rel, "/"): // top-level ファイル: drop ルールに当たるものだけ除外
@@ -615,8 +602,44 @@ func zipDir(root, base, zipPath string, skip ...string) error {
 	})
 }
 
-// packAssets は assetsDir 以下を再帰的に読み、keyPrefix を前置したキーで .mtpak に
-// 書き出す。キーは host / native loader / CEF が要求する cwd 相対パスに一致させる。
+// isDistEngineAsset は host の隣の assets/ (engine の同梱物) のうち、配布に要るものかを返す。
+// RML の mitiru:*.rcss と、UI の既定書体 (M PLUS Rounded 1c) とそのライセンスだけを配る。
+func isDistEngineAsset(rel string) bool {
+	low := strings.ToLower(filepath.ToSlash(rel))
+	switch {
+	case strings.HasPrefix(low, "assets/ui/") && strings.HasSuffix(low, ".rcss"):
+		return true
+	case strings.HasPrefix(low, "assets/fonts/mplusrounded1c-") && strings.HasSuffix(low, ".ttf"):
+		return true
+	case low == "assets/fonts/ofl.txt":
+		return true
+	default:
+		return false
+	}
+}
+
+// packSkipDir は pack に入れずバラ置きで残す assets/ 直下のディレクトリ。
+const packSkipDir = "ui"
+
+// removePackedAssets は pack に畳んだバラ置きを消し、assets/ui/ だけ残す。
+func removePackedAssets(assetsDir string) error {
+	entries, err := os.ReadDir(assetsDir)
+	if err != nil {
+		return err
+	}
+	for _, e := range entries {
+		if e.IsDir() && e.Name() == packSkipDir {
+			continue
+		}
+		if err := os.RemoveAll(filepath.Join(assetsDir, e.Name())); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// packAssets は assetsDir 以下 (assets/ui/ を除く) を再帰的に読み、keyPrefix を前置したキーで
+// .mtpak に書き出す。キーは host / native loader が要求する cwd 相対パスに一致させる。
 func packAssets(assetsDir, outFile, keyPrefix string) (int, error) {
 	var keys []string
 	var datas [][]byte
@@ -625,6 +648,9 @@ func packAssets(assetsDir, outFile, keyPrefix string) (int, error) {
 			return werr
 		}
 		if info.IsDir() {
+			if info.Name() == packSkipDir && filepath.Dir(path) == filepath.Clean(assetsDir) {
+				return filepath.SkipDir
+			}
 			return nil
 		}
 		rel, rerr := filepath.Rel(assetsDir, path)

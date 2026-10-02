@@ -21,21 +21,22 @@ mitiru watch
 ## 構成
 
 - `src/main.cpp` — ゲームコード (C++、DLL としてビルドされる)。画像・図形・アニメ・マウス入力を draw で描く
-- `assets/scene.html` — 画面 UI (HTML/CSS のみ。タイトル・説明・ボタン/チェック/スライダー)
+- `assets/ui/main.rml` — 画面 UI (RML / RCSS のみ。タイトル・説明・ボタン/チェック/スライダー)
 - `assets/sprites/wave.png` — 画像スプライト (北斎「神奈川沖浪裏」、パブリックドメイン)。自分の絵に差し替え可
 - `mitiru.toml` — プロジェクト設定 (ウィンドウサイズ・使用エンジン版など)
 
 `CMakeLists.txt` を編集する必要はありません。`mitiru` CLI が裏で生成します。
 
-## UI は JavaScript ゼロ
+## UI はスクリプトなし
 
-`assets/scene.html` は素の HTML/CSS。C++ から `hud.set` で名前付きの値を push し、
-HTML 側は `data-m-*` 属性を書くだけで表示が同期します (宣言的バインダ、ADR 0007)。
-JS グルー (`onStateChange` の購読や DOM 操作) は一切書きません。
+`assets/ui/main.rml` は RML / RCSS (HTML / CSS の方言) で、エンジンがゲームの絵の上に重ねて描きます。
+C++ から `hud.set` で名前付きの値を送り、RML 側は `{{"{{ }}"}}` と `data-*` 属性を書くだけで表示が同期します。
+スクリプト (購読や DOM 操作) は一切書きません。
 
-- `hud.set("view.count", ...)` (C++) ↔ `data-m-text="view.count"` (HTML)
-- ボタン/チェック/スライダーの値は `data-m-action` で C++ の `in.action(...)` に届く (HTML→C++→HTML の往復)
-- 属性の一覧と作例は [画面を作る](https://mogmog-0110.github.io/MitiruEngine/ui.html)
+- `hud.set("view.count", ...)` (C++) ↔ `{{"{{ count }}"}}` (RML、`data-model="view"` の中)
+- ボタン・チェック・スライダーは `data-event-click="dispatch('count')"` で C++ の `in.action("count")` に届く (UI→C++→UI の往復)
+- `mitiru watch` 中に main.rml を保存すると、走っているゲームの UI がその場で読み直される
+- 書き方の一覧と作例は [画面を作る](https://mogmog-0110.github.io/MitiruEngine/ui.html)
 
 ## どう動くのか
 

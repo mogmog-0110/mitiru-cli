@@ -1,7 +1,7 @@
 // assets.go — build 成功後に <project>/assets/ を deploy 先へ常時同期する。
 //
 // CMake の asset copy は DLL link ターゲットの POST_BUILD に紐付いており、
-// C++ 無変更だと "ninja: no work to do" で走らない (scene.html だけ直しても
+// C++ 無変更だと "ninja: no work to do" で走らない (main.rml だけ直しても
 // 反映されない)。Go 側で build 後段に毎回同期して papercut を消す。
 // 新規/更新ファイルのみ copy し、削除追従はしない。
 package build

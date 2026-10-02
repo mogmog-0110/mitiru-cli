@@ -29,7 +29,7 @@ func TestMtargsJoin(t *testing.T) {
 		in   []string
 		want string
 	}{
-		{[]string{"--no-cef", "--size", "800x600"}, "--no-cef --size 800x600"},
+		{[]string{"--fixed-size", "--size", "800x600"}, "--fixed-size --size 800x600"},
 		{[]string{"--title", "My Game"}, `--title "My Game"`},          // 空白 token は quote
 		{[]string{"--title", ""}, `--title ""`},                        // 空 token も quote
 		{[]string{"--title", "Tab\there"}, "--title \"Tab\there\""},    // タブも quote

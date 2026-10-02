@@ -12,21 +12,60 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// bind lint は、緩い C↔HTML 境界 (ADR 0005) が生む silent-failure クラスを捕捉する:
-// scene.html の data-m-* binding が、C++ が一度も push しない state key を参照する
-// (typo は fallback を表示するだけでエラーにならない)。構造的に壊れた data-m-* markup
-// も flag する。best-effort な静的 check であり、デフォルトは warning、`--strict` で失敗。
+// bind lint は、C++ と UI の緩い境界 (ADR 0005) が生む「エラーにならない失敗」を拾う。
+// RML の data model は未定義の変数を空として描くので、hud.set のキーの打ち間違いは
+// 画面が空になるだけで何も言わない。main.rml が引く変数と、C++ が hud.set("view.x") で
+// 送るキーを突き合わせる。静的な best-effort の検査で、既定は warning、--strict で失敗にする。
 
-// dottedPath は "view.hud.hp" のような state-key path (ドット区切り 2 segment 以上) に
-// match する。data-m-repeat 内の item-scope な裸 field (例 "name") はドットを持たず、
-// 意図的に match しない。
-var dottedPath = regexp.MustCompile(`[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z0-9_]+)+`)
+// uiModelName は engine が hud.set の値を写す data model の名前。キーは "view.<変数>"。
+const uiModelName = "view"
 
-// dataMAttr は行中の data-m-<verb>="<value>" 属性に match する。
-var dataMAttr = regexp.MustCompile(`data-m-([a-z]+)\s*=\s*"([^"]*)"`)
+// rmlExprAttr は値が data 式になる属性 (data-if、data-class-x、data-event-click など)。
+var rmlExprAttr = regexp.MustCompile(`\bdata-(if|visible|for|value|checked|rml|(?:class|style|attr|event)-[A-Za-z0-9_-]+)\s*=\s*"([^"]*)"`)
+
+// rmlInterp は {{ 式 }} を拾う。
+var rmlInterp = regexp.MustCompile(`\{\{(.*?)\}\}`)
+
+// rmlModelAttr は data-model="名前" を拾う。
+var rmlModelAttr = regexp.MustCompile(`\bdata-model\s*=\s*"([^"]*)"`)
+
+// legacyBinderAttr は CEF 世代の HTML binder の属性。RmlUi は読まない。
+var legacyBinderAttr = regexp.MustCompile(`\bdata-m-[a-z]+\s*=`)
+
+// rmlQuoted は式の中の文字列リテラル。中の語を変数と取り違えないよう先に消す。
+var rmlQuoted = regexp.MustCompile(`'[^']*'|"[^"]*"`)
+
+// rmlEntity は &lt; などの文字参照。lt を変数と取り違えないよう先に消す。
+var rmlEntity = regexp.MustCompile(`&[A-Za-z]+;`)
+
+// rmlIdent は式の中の識別子。直前の文字で「.の後ろ」(メンバー) を、直後で関数呼び出しを見分ける。
+var rmlIdent = regexp.MustCompile(`[A-Za-z_][A-Za-z0-9_]*`)
+
+// rmlForAttr は data-for の "v : arr" / "v, i : arr" を分ける。
+var rmlForAttr = regexp.MustCompile(`^\s*([A-Za-z_][A-Za-z0-9_]*)\s*(?:,\s*([A-Za-z_][A-Za-z0-9_]*))?\s*:\s*(.+)$`)
+
+// rmlDispatchEmpty は名前の無い dispatch を拾う。
+var rmlDispatchEmpty = regexp.MustCompile(`\bdispatch\(\s*(?:''|"")?\s*[,)]`)
+
+// rmlBuiltins は式の中で C++ が送る変数ではない語。ev はイベント、it / it_index は data-for の既定名、
+// ui_confirm_* / ui_prompt_* は engine が confirm() / prompt() のダイアログ用に持つ変数。
+var rmlBuiltins = map[string]bool{
+	"true": true, "false": true, "ev": true, "it": true, "it_index": true,
+	"ui_confirm_open": true, "ui_confirm_title": true, "ui_confirm_text": true,
+	"ui_prompt_open": true, "ui_prompt_title": true, "ui_prompt_text": true, "ui_prompt_value": true,
+}
+
+// rmlComment は <!-- --> の注釈。中の {{ }} や属性の例を検査しないよう、行数を保ったまま消す。
+var rmlComment = regexp.MustCompile(`(?s)<!--.*?-->`)
+
+func blankComments(doc string) string {
+	return rmlComment.ReplaceAllStringFunc(doc, func(c string) string {
+		return strings.Repeat("\n", strings.Count(c, "\n"))
+	})
+}
 
 // quotedDotted は C++ の文字列リテラル内に現れる dotted path に match する。
-// 例 w.set("view.hp", ...) や pushStr(it, "view.hp", ...)。
+// 例 hud.set("view.hp", ...) や pushStr(it, "view.hp", ...)。
 var quotedDotted = regexp.MustCompile(`"([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z0-9_]+)+)"`)
 
 type bindFinding struct {
@@ -39,13 +78,15 @@ func newLintCommand() *cobra.Command {
 	var strict bool
 	cmd := &cobra.Command{
 		Use:   "lint",
-		Short: "Check scene.html data-m-* bindings against the C++ state keys",
-		Long: `Statically cross-checks the project's HTML bindings and its C++ pushes.
+		Short: "Check assets/ui/main.rml bindings against the keys the C++ pushes",
+		Long: `Statically cross-checks the project's RML UI and its C++ pushes.
 
-Catches the silent failures the C↔HTML boundary allows:
-  - a data-m-* key bound in scene.html that the C++ never pushes (typo)
-  - structurally broken markup (unbalanced data-m-tpl braces, empty
-    data-m-action, data-m-repeat without a <template>, missing binder script)
+Catches the silent failures the C++/UI boundary allows:
+  - a variable used in main.rml ({{ x }}, data-if, data-class-*, ...) that
+    the C++ never pushes as hud.set("view.x", ...) (typo)
+  - a hud.set key with a dot after "view." (RML cannot reach it)
+  - structural slips: no data-model="view", unbalanced {{ }}, a dispatch
+    without an action name, leftover data-m-* attributes from the HTML HUD
 
 Warnings only by default. Use --strict to exit non-zero when findings exist
 (for CI).`,
@@ -66,120 +107,179 @@ func runLint(strict bool) error {
 	if err != nil {
 		return err
 	}
-	cfg, err := config.Load(manifestPath)
-	if err != nil {
+	if _, err := config.Load(manifestPath); err != nil {
 		return err
 	}
 
-	scenePath := filepath.Join(projectRoot, filepath.FromSlash(sceneRelPath(cfg)))
-	html, err := os.ReadFile(scenePath)
-	if err != nil {
-		fmt.Printf("\n  --- bind lint ---\n  no scene found at %s (nothing to check)\n", scenePath)
+	docPath := filepath.Join(projectRoot, filepath.FromSlash(uiDocRel))
+	doc, err := os.ReadFile(docPath)
+	var findings []bindFinding
+	report := filepath.Base(docPath)
+	switch {
+	case err == nil:
+		findings = lintRML(string(doc), scanProducedKeys(filepath.Join(projectRoot, "src")))
+	case fileExists(filepath.Join(projectRoot, filepath.FromSlash(legacySceneRel))):
+		report = legacySceneRel
+		findings = []bindFinding{{kind: "legacy-html",
+			detail: fmt.Sprintf("the engine no longer reads %s; rewrite it as %s", legacySceneRel, uiDocRel)}}
+	default:
+		fmt.Printf("\n  --- bind lint ---\n  no UI document at %s (nothing to check)\n", docPath)
 		return nil
 	}
 
-	consumed, structural := analyzeScene(string(html))
-	produced := scanProducedKeys(filepath.Join(projectRoot, "src"))
-
-	var missing []bindFinding
-	for key, line := range consumed {
-		if !producedCovers(produced, key) {
-			missing = append(missing, bindFinding{
-				line: line, kind: "unpushed",
-				detail: fmt.Sprintf("%q is bound in scene.html but never pushed from C++ (typo?)", key),
-			})
-		}
-	}
-
-	total := printBindReport(filepath.Base(scenePath), structural, missing)
+	total := printBindReport(report, findings)
 	if strict && total > 0 {
 		return fmt.Errorf("bind lint: %d finding(s)", total)
 	}
 	return nil
 }
 
-// sceneRelPath は manifest から project 相対の scene path を解決する。
-// デフォルトは assets/scene.html。
-func sceneRelPath(cfg *config.ProjectConfig) string {
-	if cfg.CEF.StartURL != "" {
-		return cfg.CEF.StartURL
-	}
-	return "assets/scene.html"
-}
+// lintRML は main.rml の本文と C++ が送るキーの集合から finding を作る。
+func lintRML(doc string, produced map[string]bool) []bindFinding {
+	consumed, structural := analyzeRML(doc)
+	vars, nested := producedViewVars(produced)
 
-// analyzeScene は data-m-* binding が consume する dotted state key の集合
-// (key -> 最初に見た行) と、構造的 finding を抽出する。
-func analyzeScene(html string) (map[string]int, []bindFinding) {
-	consumed := map[string]int{}
-	var structural []bindFinding
-
-	sawBinding := false
-	sawRepeat := false
-	hasTemplate := strings.Contains(html, "<template")
-	hasBinder := false
-
-	lines := strings.Split(html, "\n")
-	for i, raw := range lines {
-		lineNum := i + 1
-		if strings.Contains(raw, "mitiru_bind.js") {
-			hasBinder = true
-		}
-		for _, m := range dataMAttr.FindAllStringSubmatch(raw, -1) {
-			verb, value := m[1], m[2]
-			sawBinding = true
-			if verb == "repeat" {
-				sawRepeat = true
-			}
-			structural = append(structural, structuralChecks(verb, value, lineNum)...)
-			for _, p := range dottedPath.FindAllString(value, -1) {
-				if _, seen := consumed[p]; !seen {
-					consumed[p] = lineNum
-				}
-			}
+	findings := append([]bindFinding{}, structural...)
+	for name, line := range consumed {
+		if !vars[name] {
+			findings = append(findings, bindFinding{
+				line: line, kind: "unpushed",
+				detail: fmt.Sprintf("%q is used in main.rml but the C++ never pushes %q (typo?)",
+					name, uiModelName+"."+name),
+			})
 		}
 	}
-
-	if sawBinding && !hasBinder {
-		structural = append(structural, bindFinding{
-			kind: "no-binder",
-			detail: "scene uses data-m-* but does not load mitiru_runtime/mitiru_bind.js",
+	for _, key := range nested {
+		findings = append(findings, bindFinding{
+			kind: "nested-key",
+			detail: fmt.Sprintf("C++ pushes %q; RML cannot reach a name with a dot after %q — push it flat",
+				key, uiModelName+"."),
 		})
 	}
-	if sawRepeat && !hasTemplate {
+	return findings
+}
+
+// analyzeRML は RML が引く data model の変数 (名前 -> 最初に見た行) と、構造の finding を返す。
+// data-for のループ変数は配列の要素なので、C++ のキーとは突き合わせない。
+func analyzeRML(doc string) (map[string]int, []bindFinding) {
+	consumed := map[string]int{}
+	loopVars := map[string]bool{}
+	var structural []bindFinding
+	sawBinding, sawModel := false, false
+
+	record := func(expr string, line int) {
+		for _, name := range exprVars(expr) {
+			if _, seen := consumed[name]; !seen {
+				consumed[name] = line
+			}
+		}
+	}
+
+	for i, raw := range strings.Split(blankComments(doc), "\n") {
+		line := i + 1
+		structural = append(structural, lineChecks(raw, line, &sawModel)...)
+		for _, m := range rmlInterp.FindAllStringSubmatch(raw, -1) {
+			sawBinding = true
+			record(stripFormatters(m[1]), line)
+		}
+		for _, m := range rmlExprAttr.FindAllStringSubmatch(raw, -1) {
+			sawBinding = true
+			record(forSource(m[1], m[2], loopVars), line)
+		}
+	}
+
+	for name := range loopVars {
+		delete(consumed, name)
+	}
+	if sawBinding && !sawModel {
 		structural = append(structural, bindFinding{
-			kind: "repeat-no-template",
-			detail: "data-m-repeat present but no <template> child to clone per item",
+			kind:   "no-model",
+			detail: fmt.Sprintf("bindings are used but no element has data-model=%q", uiModelName),
 		})
 	}
 	return consumed, structural
 }
 
-// structuralChecks は単一の data-m-<verb>="value" 属性を検証する。
-func structuralChecks(verb, value string, line int) []bindFinding {
+// forSource は data-for の "v : arr" からループ変数を loopVars に足し、配列の式だけを返す。
+// data-for 以外の属性は式をそのまま返す。
+func forSource(attr, expr string, loopVars map[string]bool) string {
+	if attr != "for" {
+		return expr
+	}
+	fm := rmlForAttr.FindStringSubmatch(expr)
+	if fm == nil {
+		return expr
+	}
+	loopVars[fm[1]] = true
+	if fm[2] != "" {
+		loopVars[fm[2]] = true
+	}
+	return fm[3]
+}
+
+// lineChecks は 1 行に閉じた構造の検査 (model 名、{{ }} の対、名前の無い dispatch、HTML binder の残り)。
+func lineChecks(raw string, line int, sawModel *bool) []bindFinding {
 	var out []bindFinding
-	switch verb {
-	case "tpl":
-		if strings.Count(value, "{") != strings.Count(value, "}") {
-			out = append(out, bindFinding{line: line, kind: "tpl-braces",
-				detail: fmt.Sprintf("data-m-tpl has unbalanced { } braces: %q", value)})
+	for _, m := range rmlModelAttr.FindAllStringSubmatch(raw, -1) {
+		*sawModel = true
+		if m[1] != uiModelName {
+			out = append(out, bindFinding{line: line, kind: "model-name",
+				detail: fmt.Sprintf("data-model=%q: the engine pushes hud.set values into the model %q", m[1], uiModelName)})
 		}
-	case "action":
-		if strings.TrimSpace(value) == "" {
-			out = append(out, bindFinding{line: line, kind: "empty-action",
-				detail: "data-m-action has no action name"})
+	}
+	if strings.Count(raw, "{{") != strings.Count(raw, "}}") {
+		out = append(out, bindFinding{line: line, kind: "braces",
+			detail: "unbalanced {{ }} on this line"})
+	}
+	if rmlDispatchEmpty.MatchString(raw) {
+		out = append(out, bindFinding{line: line, kind: "empty-action",
+			detail: "dispatch() has no action name"})
+	}
+	if legacyBinderAttr.MatchString(raw) {
+		out = append(out, bindFinding{line: line, kind: "legacy-binder",
+			detail: "data-m-* belongs to the old HTML binder; use {{ }} / data-class-* / data-event-click=\"dispatch(...)\""})
+	}
+	return out
+}
+
+// stripFormatters は {{ x | int }} の | より後ろ (書式の名前) を落とす。|| は論理和なので残す。
+func stripFormatters(expr string) string {
+	for i := 0; i < len(expr); i++ {
+		if expr[i] != '|' {
+			continue
 		}
-	case "arg":
-		if strings.TrimSpace(value) == "" {
-			out = append(out, bindFinding{line: line, kind: "empty-arg",
-				detail: "data-m-arg has no value"})
+		if i+1 < len(expr) && expr[i+1] == '|' {
+			i++
+			continue
 		}
+		return expr[:i]
+	}
+	return expr
+}
+
+// exprVars は data 式が引く data model の変数名 (根の名前) を返す。メンバー (a.b の b)、
+// 関数名 (dispatch( 等)、文字列リテラルの中、組み込みの名前、数字に続く単位 (10px) は除く。
+func exprVars(expr string) []string {
+	clean := rmlEntity.ReplaceAllString(rmlQuoted.ReplaceAllString(expr, "''"), " ")
+	var out []string
+	for _, loc := range rmlIdent.FindAllStringIndex(clean, -1) {
+		name := clean[loc[0]:loc[1]]
+		prev := byte(' ')
+		if loc[0] > 0 {
+			prev = clean[loc[0]-1]
+		}
+		next := strings.TrimLeft(clean[loc[1]:], " \t")
+		switch {
+		case rmlBuiltins[name], prev == '.', prev >= '0' && prev <= '9', strings.HasPrefix(next, "("):
+			continue
+		}
+		out = append(out, name)
 	}
 	return out
 }
 
 // scanProducedKeys は srcDir 配下の C++ 文字列リテラル内に現れる全 dotted path を
-// 収集する。key は常に quoted literal なので、StateWriter set/array/object/list の
-// key も自前 push helper も捕捉できる。
+// 収集する。key は常に quoted literal なので、hud.set の key も自前 push helper も捕捉できる。
 // ここでの過剰捕捉は安全: produced key が多いほど false な "unpushed" flag が減る。
 func scanProducedKeys(srcDir string) map[string]bool {
 	produced := map[string]bool{}
@@ -203,54 +303,45 @@ func scanProducedKeys(srcDir string) map[string]bool {
 	return produced
 }
 
-// producedCovers は、いずれかの produced key が consumed key を segment-prefix
-// (どちらの向きでも) または完全一致で cover するかを返す。push 済み object
-// "view.shop" は "view.shop.b0.cost" (JSON object の sub-field) を cover する一方、
-// "view.eintent" に対する誤記 "view.eintnet" は依然として flag される。
-func producedCovers(produced map[string]bool, key string) bool {
-	ks := strings.Split(key, ".")
-	for p := range produced {
-		if segmentPrefix(strings.Split(p, "."), ks) {
-			return true
+// producedViewVars は "view.x" のキーから RML の変数名 x の集合を作る。"view.a.b" のように
+// view. の後ろにも点があるキーは、model の中で点を含む名前になり式から引けないので別に返す。
+func producedViewVars(produced map[string]bool) (map[string]bool, []string) {
+	vars := map[string]bool{}
+	var nested []string
+	prefix := uiModelName + "."
+	for key := range produced {
+		if !strings.HasPrefix(key, prefix) {
+			continue
 		}
+		rest := key[len(prefix):]
+		if strings.Contains(rest, ".") {
+			nested = append(nested, key)
+			continue
+		}
+		vars[rest] = true
 	}
-	return false
+	sort.Strings(nested)
+	return vars, nested
 }
 
-// segmentPrefix は a/b の短い方が長い方の先頭 segment prefix かを返す
-// (長さが等しい場合も prefix とみなす)。
-func segmentPrefix(a, b []string) bool {
-	if len(a) > len(b) {
-		a, b = b, a
-	}
-	for i := range a {
-		if a[i] != b[i] {
-			return false
-		}
-	}
-	return true
-}
-
-func printBindReport(scene string, structural, missing []bindFinding) int {
+func printBindReport(doc string, findings []bindFinding) int {
 	fmt.Println()
 	fmt.Println("  --- bind lint ---")
 
-	all := append([]bindFinding{}, structural...)
-	all = append(all, missing...)
-	if len(all) == 0 {
-		fmt.Printf("  ok: %s bindings all resolve to pushed C++ keys.\n", scene)
+	if len(findings) == 0 {
+		fmt.Printf("  ok: every variable in %s is pushed from C++.\n", doc)
 		return 0
 	}
 
-	sort.SliceStable(all, func(i, j int) bool { return all[i].line < all[j].line })
-	for _, f := range all {
+	sort.SliceStable(findings, func(i, j int) bool { return findings[i].line < findings[j].line })
+	for _, f := range findings {
 		if f.line > 0 {
-			fmt.Printf("  %s:%d  %s\n", scene, f.line, f.detail)
+			fmt.Printf("  %s:%d  %s\n", doc, f.line, f.detail)
 		} else {
-			fmt.Printf("  %s  %s\n", scene, f.detail)
+			fmt.Printf("  %s  %s\n", doc, f.detail)
 		}
 	}
 	fmt.Println()
-	fmt.Printf("  %d finding(s). A bound key with no C++ push renders the HTML fallback silently.\n", len(all))
-	return len(all)
+	fmt.Printf("  %d finding(s). A variable the C++ never pushes renders empty, without an error.\n", len(findings))
+	return len(findings)
 }

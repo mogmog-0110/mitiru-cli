@@ -19,6 +19,25 @@ const (
 	cefTimeout   = httpTimeout // cache.go の 5 分上限を再利用
 )
 
+// UsesLegacyCEF は engine が CEF で HTML の UI を描く世代 (0.33 以前) かを返す。
+// 今の engine は RmlUi で描き、cmake/MitiruCef.cmake を持たない。
+func UsesLegacyCEF(engineRoot string) bool {
+	_, err := os.Stat(filepath.Join(engineRoot, "cmake", "MitiruCef.cmake"))
+	return err == nil
+}
+
+// EnsureLegacyCEF は CEF 世代の engine を pin したプロジェクトだけ CEF を取りに行く。
+// 今の engine では何もしない。
+func EnsureLegacyCEF(engineRoot string, progress io.Writer) error {
+	if !UsesLegacyCEF(engineRoot) {
+		return nil
+	}
+	if err := EnsureCEF(engineRoot, progress); err != nil {
+		return fmt.Errorf("CEF setup failed (engine 0.33 以前): %w", err)
+	}
+	return nil
+}
+
 // cefArchiveName は pin した CEF build の .tar.bz2 ファイル名を返す。
 func cefArchiveName() string {
 	return fmt.Sprintf("cef_binary_%s_%s_%s.tar.bz2", cefVersion, cefPlatform, cefDistType)

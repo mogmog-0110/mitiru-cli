@@ -21,7 +21,7 @@ mitiru watch
 ## 構成
 
 - `src/main.cpp` — ゲームコード (C++、DLL としてビルドされる)
-- `assets/scene.html` — UI (HTML/CSS、CEF オーバーレイ)
+- `assets/ui/main.rml` — HUD (RML / RCSS。スコア・残機・パワーアップ・ボスの体力・終わりの表示)
 - `mitiru.toml` — プロジェクト設定 (ウィンドウサイズなど)
 
 ## どう動くのか
@@ -29,14 +29,15 @@ mitiru watch
 - `src/main.cpp` は `<project>.dll` としてビルドされ、`mitiru_host.exe` にロードされる (ADR 0005)
 - gameplay state は `GameMemory` 構造体に集約。ホットリロード時もポインタが保持される
 - DLL ↔ ホスト間は C-only signal flow (InputSnapshot / FrameIntents) しか通らない
-- 全エンティティ (自機・弾・敵・ボス) は毎フレーム 1 本の文字列で push し、HTML 側の `data-m-repeat` がプール再利用で描画する
+- 場 (自機・弾・敵・ボス・星) は C++ の `draw` が描き、HUD の値だけを `hud.set("view.score", ...)` で RML へ送る
 
 ## カスタマイズのヒント
 
 - `kWaves[]` を編集して敵の出現スケジュール (時刻・種類・隊形) を変える
 - `kBossTime` / `kBossHp` でボスの出現タイミングと固さを調整
 - 敵の種類や移動は `updateEnemies` の `kind` 分岐を増やせば追加できる
-- `scene.html` の CSS を変えて見た目を変更 (C++ を触らずに可能)
+- HUD の見た目は `main.rml` の RCSS で変える (C++ を触らずに可能。`mitiru watch` 中は保存でその場に反映)
+- 敵や弾の形と色は `drawEnemy` / `drawEntities` で変える
 
 ## ライセンス
 

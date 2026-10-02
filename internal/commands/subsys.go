@@ -78,11 +78,9 @@ func resolveEngineRoot() (string, error) {
 	return root, nil
 }
 
-// findOrBuildEngineExe は engine の実行ファイル (例 mitiru_subsys_renderer、
-// mitiru_tool_cef) への path を返す。まだ存在しない場合は cache 済み engine source
-// から build する。出力 dir は build/apps/ (製品・インフラ) と build/examples/
-// (subsystem / 旧 engine snapshot) の両方を見る。
-func findOrBuildEngineExe(engineRoot, target, exeName string) (string, error) {
+// engineExeCandidates は engine の build tree で target の exe が置かれうる場所を並べる。
+// build/apps/ (製品・インフラ) と build/examples/ (subsystem / 旧 engine snapshot) の両方を見る。
+func engineExeCandidates(engineRoot, target, exeName string) []string {
 	var candidates []string
 	for _, parent := range []string{"apps", "examples"} {
 		dir := filepath.Join(engineRoot, "build", parent, target)
@@ -92,10 +90,26 @@ func findOrBuildEngineExe(engineRoot, target, exeName string) (string, error) {
 			filepath.Join(dir, "Release", exeName),
 		)
 	}
-	for _, c := range candidates {
+	return candidates
+}
+
+// firstExisting は paths のうち最初に存在するものを返す。無ければ空文字。
+func firstExisting(paths []string) string {
+	for _, c := range paths {
 		if _, err := os.Stat(c); err == nil {
-			return c, nil
+			return c
 		}
+	}
+	return ""
+}
+
+// findOrBuildEngineExe は engine の実行ファイル (例 mitiru_subsys_renderer、
+// mitiru_tool) への path を返す。まだ存在しない場合は cache 済み engine source
+// から build する。
+func findOrBuildEngineExe(engineRoot, target, exeName string) (string, error) {
+	candidates := engineExeCandidates(engineRoot, target, exeName)
+	if c := firstExisting(candidates); c != "" {
+		return c, nil
 	}
 
 	if err := ensureEngineConfigured(engineRoot); err != nil {
@@ -104,25 +118,23 @@ func findOrBuildEngineExe(engineRoot, target, exeName string) (string, error) {
 	if err := buildEngineTarget(filepath.Join(engineRoot, "build"), target); err != nil {
 		return "", err
 	}
-	for _, c := range candidates {
-		if _, err := os.Stat(c); err == nil {
-			return c, nil
-		}
+	if c := firstExisting(candidates); c != "" {
+		return c, nil
 	}
 	return "", fmt.Errorf("built %s but no executable appeared under %s",
 		target, filepath.Join(engineRoot, "build", "{apps,examples}", target))
 }
 
 // ensureEngineConfigured は cache 済み engine が configure 済みの build/ tree
-// (CEF 取得 + cmake configure 済み) を持つことを保証し、個別 target を build できる
+// (cmake configure 済み) を持つことを保証し、個別 target を build できる
 // ようにする。CMakeCache.txt が存在すれば no-op。
 func ensureEngineConfigured(engineRoot string) error {
 	buildDir := filepath.Join(engineRoot, "build")
 	if _, err := os.Stat(filepath.Join(buildDir, "CMakeCache.txt")); err == nil {
 		return nil
 	}
-	if err := engine.EnsureCEF(engineRoot, os.Stdout); err != nil {
-		return fmt.Errorf("CEF setup failed: %w", err)
+	if err := engine.EnsureLegacyCEF(engineRoot, os.Stdout); err != nil {
+		return err
 	}
 	vcvars, err := build.FindVcvars64()
 	if err != nil {

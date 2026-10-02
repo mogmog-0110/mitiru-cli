@@ -170,7 +170,7 @@ func runReplay() error {
 		return c.Run()
 	}
 
-	// --test モード: headless、window なし、CEF なし。
+	// --test モード: headless、window なし。
 	abs, err := filepath.Abs(replayTestFile)
 	if err != nil {
 		return fmt.Errorf("replay: resolve %q: %w", replayTestFile, err)

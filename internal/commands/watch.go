@@ -19,8 +19,8 @@ import (
 )
 
 // 変更されたら DLL rebuild を trigger すべき file 拡張子。
-// それ以外 (例 assets/ 配下の .html, .css, .js) は engine 自身の asset hot reload が
-// 拾うので、何も bounce する必要はない。
+// それ以外 (例 assets/ 配下の .rml, .rcss, .png) は deploy へ同期すれば走行中の engine が
+// 読み直すので、rebuild しない。
 var cppExts = map[string]bool{
 	".cpp": true, ".cc": true, ".cxx": true,
 	".h": true, ".hpp": true, ".hxx": true,
@@ -37,7 +37,7 @@ host detects the new DLL by mtime and reloads it in place — gameplay
 state survives the swap.
 
   src/**/*.{cpp,h,hpp,...} change → rebuild DLL → host hot-reloads
-  assets/**/*.{html,css,js}      → engine's own hot reload picks it up
+  assets/**/*.{rml,rcss,png,...}  → synced to the deploy dir; the engine reloads it
 
 Press Ctrl-C to stop watching (also closes the game window). Saves
 during a rebuild are coalesced so a burst of writes only triggers one

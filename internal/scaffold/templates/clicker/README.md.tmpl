@@ -2,7 +2,7 @@
 
 MitiruEngine プロジェクト — クリッカーテンプレート (game-as-DLL)。
 
-クリックでカウンタを増やす最小構成。マウス入力 (`in.mousePressed()`) と HUD 連携 (`hud.set` → `data-m-text`) の出発点です。
+クリックでカウンタを増やす最小構成。マウス入力 (`in.mousePressed()`) と HUD 連携 (`hud.set` → `assets/ui/main.rml`) の出発点です。
 
 ## 動かしかた
 
@@ -21,7 +21,7 @@ mitiru watch
 ## 構成
 
 - `src/main.cpp` — ゲームコード (C++、DLL としてビルドされる)
-- `assets/scene.html` — UI (HTML/CSS、CEF オーバーレイ)
+- `assets/ui/main.rml` — UI (RML / RCSS。エンジンがゲームの絵の上に重ねて描く)
 - `mitiru.toml` — プロジェクト設定 (ウィンドウサイズなど)
 
 ## どう動くのか
@@ -29,13 +29,13 @@ mitiru watch
 - `src/main.cpp` は `<project>.dll` としてビルドされ、`mitiru_host.exe` にロードされる (ADR 0005)
 - gameplay state はゲーム struct のメンバ変数に集約 (flat POD)。ホットリロード時もホストがポインタを保持する
 - DLL ↔ ホスト間は C-only signal flow (InputSnapshot / FrameIntents) しか通らない
-- C++ の `hud.set("hud.count", ...)` を HTML の `data-m-text="hud.count"` が表示する (JS ゼロ)
+- C++ の `hud.set("view.count", ...)` を RML の `count` が表示する (スクリプトなし)
 
 ## カスタマイズのヒント
 
 - カウンタを `float` の所持金に変えて自動生成 (`+= rate * dt`) を足すと放置ゲームになる
-- HTML のボタン (`data-m-action="buy"`) → C++ の `in.action("buy")` でショップが作れる
-- `scene.html` の CSS を変えて見た目を変更 (C++ を触らずに可能)
+- RML のボタン (`data-event-click="dispatch('buy')"`) → C++ の `in.action("buy")` でショップが作れる
+- `main.rml` の RCSS を変えて見た目を変更 (C++ を触らずに可能。`mitiru watch` 中は保存でその場に反映)
 
 ## ライセンス
 

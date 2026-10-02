@@ -85,13 +85,34 @@ func TestConfigure_TemplateDeploysSDL2(t *testing.T) {
 	}
 }
 
-// CEF deploy (mitiru_add_cef_game) が引き続き存在すること。
-func TestConfigure_TemplateDeploysCEF(t *testing.T) {
+// 今の engine (RmlUi) では CEF を deploy せず、RML が引く engine の RCSS を host の隣へ置くこと。
+func TestConfigure_TemplateDeploysRmlUiNotCEF(t *testing.T) {
 	projectRoot, engineRoot := fakeProject(t)
 	cmake := generatedCMake(t, projectRoot, engineRoot)
 
+	for _, banned := range []string{"MitiruCef.cmake", "mitiru_add_cef_game", "mitiru_runtime"} {
+		if strings.Contains(cmake, banned) {
+			t.Errorf("generated CMakeLists.txt must not mention %q for a CEF-free engine", banned)
+		}
+	}
+	if !strings.Contains(cmake, `"${MITIRU_ENGINE_ROOT}/assets/ui"`) {
+		t.Error("generated CMakeLists.txt does not deploy the engine RCSS (assets/ui)")
+	}
+}
+
+// CEF 世代の engine (cmake/MitiruCef.cmake がある) を pin したプロジェクトは、これまでどおり CEF を deploy すること。
+func TestConfigure_TemplateKeepsCEFForLegacyEngine(t *testing.T) {
+	projectRoot, engineRoot := fakeProject(t)
+	legacy := filepath.Join(engineRoot, "cmake", "MitiruCef.cmake")
+	if err := os.MkdirAll(filepath.Dir(legacy), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(legacy, []byte("# cef\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cmake := generatedCMake(t, projectRoot, engineRoot)
 	if !strings.Contains(cmake, "mitiru_add_cef_game(mitiru_host)") {
-		t.Error("generated CMakeLists.txt missing mitiru_add_cef_game(mitiru_host)")
+		t.Error("legacy engine: generated CMakeLists.txt missing mitiru_add_cef_game(mitiru_host)")
 	}
 }
 

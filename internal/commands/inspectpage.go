@@ -5,7 +5,15 @@ import (
 	"strings"
 )
 
-// inspectPageAliases は --inspect の窓名 → mitiru_tool_cef --page 名の対応。
+// toolExeTarget はツール窓のホスト (engine の apps/mitiru_tool)。全ツール窓はこの exe の --page で開く。
+const toolExeTarget = "mitiru_tool"
+
+// findToolExe は engine の build tree から mitiru_tool.exe を探す。無ければ空文字。
+func findToolExe(engineRoot string) string {
+	return firstExisting(engineExeCandidates(engineRoot, toolExeTarget, toolExeTarget+".exe"))
+}
+
+// inspectPageAliases は --inspect の窓名 → mitiru_tool --page 名の対応。
 // ページ集合は engine の ToolRegistry.hpp kToolTable と同一 (+ 自然な別名)。
 var inspectPageAliases = map[string]string{
 	"inspect":    "inspect",

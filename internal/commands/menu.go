@@ -97,8 +97,8 @@ func menuEntriesForContext() (entries []menuEntry, header string) {
 			{"debug    debug build & run", []string{"debug"}, ""},
 			{"build    build only", []string{"build"}, ""},
 			{"dist     package for release (self-contained folder, double-click exe)", []string{"dist"}, ""},
-			{"ui       preview HTML/CSS UI in browser", []string{"ui"}, ""},
-			{"lint     check data-m-* bindings", []string{"lint"}, ""},
+			{"ui       capture the game + RML UI to a PNG (no window)", []string{"ui"}, ""},
+			{"lint     check main.rml bindings", []string{"lint"}, ""},
 			{"clean    remove build/", []string{"clean"}, ""},
 			{"doctor   check toolchain", []string{"doctor"}, ""},
 			{"version  version info", []string{"version"}, ""},
@@ -108,7 +108,6 @@ func menuEntriesForContext() (entries []menuEntry, header string) {
 	header = "mitiru — (no project in this directory)"
 	entries = []menuEntry{
 		{"new      create a new project", []string{"new"}, "project name: "},
-		{"ui       preview an HTML/CSS file", []string{"ui"}, ""},
 		{"doctor   check toolchain", []string{"doctor"}, ""},
 		{"version  version info", []string{"version"}, ""},
 	}

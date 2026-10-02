@@ -1,6 +1,8 @@
 package commands
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -51,28 +53,19 @@ func TestHostArgs_FontNoneOmitted(t *testing.T) {
 	}
 }
 
-func TestHostArgs_CefDefaultOmitsNoCef(t *testing.T) {
-	pc := &config.ProjectConfig{} // CEF.Enabled 未指定 (nil) → 既定 ON → --no-cef を渡さない
-	if strings.Contains(argsStr(pc), "--no-cef") {
-		t.Errorf("unspecified [cef] must default to CEF on (no --no-cef): %q", argsStr(pc))
+// CEF を外した engine では [cef] を読み捨てる。古い manifest も読め、host に CEF のフラグを渡さない。
+func TestHostArgs_LegacyCefSectionIsIgnored(t *testing.T) {
+	path := filepath.Join(t.TempDir(), config.ManifestFilename)
+	body := "[project]\nname = \"g\"\nengine = \"0.33.0\"\n\n[cef]\nenabled = false\nstart_url = \"assets/scene.html\"\n"
+	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
 	}
-}
-
-func TestHostArgs_CefDisabledEmitsNoCef(t *testing.T) {
-	off := false
-	pc := &config.ProjectConfig{}
-	pc.CEF.Enabled = &off
-	if !strings.Contains(argsStr(pc), "--no-cef") {
-		t.Errorf("[cef] enabled=false must emit --no-cef: %q", argsStr(pc))
+	pc, err := config.Load(path)
+	if err != nil {
+		t.Fatalf("a manifest with [cef] must still load: %v", err)
 	}
-}
-
-func TestHostArgs_CefEnabledExplicitOmitsNoCef(t *testing.T) {
-	on := true
-	pc := &config.ProjectConfig{}
-	pc.CEF.Enabled = &on
-	if strings.Contains(argsStr(pc), "--no-cef") {
-		t.Errorf("[cef] enabled=true must not emit --no-cef: %q", argsStr(pc))
+	if got := argsStr(pc); strings.Contains(got, "cef") {
+		t.Errorf("host args must not carry CEF flags: %q", got)
 	}
 }
 

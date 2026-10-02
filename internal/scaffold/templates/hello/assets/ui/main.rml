@@ -1,0 +1,78 @@
+<rml>
+<head>
+<title>main</title>
+<link type="text/rcss" href="mitiru:base.rcss"/>
+<style>
+  /* 画面 (タイトル・説明・操作 UI) は RML / RCSS。C++ が hud.set した値を {{ }} で受け、
+     ボタン・チェック・スライダーは dispatch(...) でその値を C++ (in.action) へ送る。スクリプトは書かない。
+     背景は透明で、下に C++ の draw() の絵 (画像・図形・円) が透ける。 */
+  body { pointer-events: none; color: #1c2433; }
+
+  /* タイトルと説明 (画像の下)。RCSS は文字をグラデーションで塗れないので、グラデーションの中ほどの色 1 色で塗る */
+  .title { position: absolute; left: 44px; top: 408px; font-size: 46px; font-weight: bold; color: #4256e8; }
+  .lead { position: absolute; left: 46px; top: 474px; width: 520px;
+          font-size: 16px; line-height: 1.85; color: #44506a; }
+  .lead b { color: #1c2433; }
+
+  /* 操作パネル (右下) */
+  .panel { position: absolute; right: 40px; bottom: 56px; width: 300px; pointer-events: auto;
+           background-color: #ffffff; border: 1px #d7deea; border-radius: 14px;
+           padding: 16px 18px; box-shadow: #283c6429 0px 10px 30px; }
+  .row { display: flex; align-items: center; gap: 12px; margin: 6px 0px; }
+  .btn { cursor: pointer; font-size: 15px; font-weight: bold; color: #ffffff;
+         decorator: linear-gradient(180deg, #4a86ff, #2f6df0);
+         border-radius: 9px; padding: 9px 16px; box-shadow: #2f6df052 0px 3px 10px; }
+  .btn:active { transform: translateY(1px); }
+  .btn-pop { flex: 1; decorator: linear-gradient(180deg, #ff8a5b, #f4632f); box-shadow: #f4632f61 0px 3px 12px; }
+
+  /* Lock のチェック。印が付いているかは C++ が送る locked で決まる */
+  .check { display: flex; align-items: center; gap: 6px; font-size: 15px; font-weight: bold; color: #334444;
+           cursor: pointer; padding: 0px; background-color: transparent; }
+  .check .box { width: 17px; height: 17px; border-radius: 4px; border: 2px #b8c2d3; background-color: #ffffff;
+                text-align: center; font-size: 12px; line-height: 13px; color: #ffffff; }
+  .check.on .box { border-color: #2f6df0; background-color: #2f6df0; }
+
+  /* 重力のスライダー。溝は細い線だけを描き、つまみの左側は sliderprogress で塗る */
+  .slider { margin-top: 4px; }
+  .slider .k { font-size: 14px; color: #6b7790; width: 44px; }
+  .slider .v { font-weight: bold; width: 38px; text-align: right; }
+  input.range { display: block; flex: 1; height: 20px; cursor: pointer; }
+  input.range slidertrack { height: 20px;
+                            decorator: linear-gradient(to bottom, #d8dee900 40%, #d8dee9 40%, #d8dee9 60%, #d8dee900 60%); }
+  input.range sliderprogress { height: 4px; margin-top: 8px; border-radius: 2px; background-color: #2f6df0; }
+  input.range sliderbar { width: 16px; height: 16px; margin-top: 2px; margin-left: -8px; margin-right: -8px;
+                          border-radius: 8px; background-color: #2f6df0; }
+  input.range sliderarrowdec, input.range sliderarrowinc { width: 0px; height: 0px; }
+
+  .hint { position: absolute; left: 46px; bottom: 18px; font-size: 13px; color: #7a86a0; }
+</style>
+</head>
+<!-- C++ が draw() で描く絵の上に、この RML / RCSS が重なる -->
+<body data-model="view">
+  <div class="title">Hello, MitiruEngine!</div>
+  <p class="lead"><b>C++</b> で絵を描き、<b>RML / RCSS</b> (HTML / CSS の方言) で画面 (UI) を作るフレームワークです。
+     浮世絵・図形・跳ねるボール・パーティクル・追従する赤い円は C++、右下の UI は RML。
+     つなぎのスクリプトは 1 行も書いていません。</p>
+
+  <!-- 操作 UI: 値は UI→C++→UI と往復する -->
+  <div class="panel">
+    <div class="row">
+      <button class="btn" data-event-click="dispatch('count')">count: {{ count }}</button>
+      <button class="check" data-class-on="locked" data-event-click="dispatch('lock', !locked)">
+        <span class="box" data-if="locked">✓</span><span class="box" data-if="!locked"></span><span>Lock</span>
+      </button>
+    </div>
+    <div class="row slider">
+      <span class="k">重力</span>
+      <input class="range" type="range" min="0" max="600" step="1"
+             data-attr-value="speed" data-event-change="dispatch('speed', ev.value)"/>
+      <span class="v">{{ speed }}</span>
+    </div>
+    <div class="row">
+      <button class="btn btn-pop" data-event-click="dispatch('pop')">ポン！(落とす + 音)</button>
+    </div>
+  </div>
+
+  <div class="hint">ポンでボールを上から落として音が鳴る · 重力スライダー · Lock で物理停止 · ESC で終了</div>
+</body>
+</rml>

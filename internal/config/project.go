@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sync"
 
 	"github.com/BurntSushi/toml"
 )
@@ -18,7 +19,6 @@ const ManifestFilename = "mitiru.toml"
 type ProjectConfig struct {
 	Project ProjectSection `toml:"project"`
 	Window  WindowSection  `toml:"window"`
-	CEF     CEFSection     `toml:"cef"`
 	Build   BuildSection   `toml:"build"`
 	Font    FontSection    `toml:"font"`
 	Lofi    LofiSection    `toml:"lofi"`
@@ -44,16 +44,6 @@ type WindowSection struct {
 	Height    int    `toml:"height"`
 	Vsync     bool   `toml:"vsync"`
 	FixedSize bool   `toml:"fixed_size"` // true なら host へ --fixed-size を渡す (#50)
-}
-
-type CEFSection struct {
-	StartURL        string `toml:"start_url"`
-	SkipDefaultFont bool   `toml:"skip_default_font"`
-	// Enabled は CEF (Chromium) を起動するか。未指定 (nil) は既定 ON。
-	// 完全ネイティブ描画の game (HTML UI 不使用) で false にすると mitiru_host に
-	// --no-cef を渡し、Chromium コールドブート + GPU/renderer 常駐を回避できる。
-	// ポインタで「未指定」と「明示 false」を区別する。
-	Enabled *bool `toml:"enabled"`
 }
 
 type BuildSection struct {
@@ -133,8 +123,12 @@ func Load(path string) (*ProjectConfig, error) {
 	}
 
 	cfg := &ProjectConfig{}
-	if _, err := toml.Decode(string(body), cfg); err != nil {
+	md, err := toml.Decode(string(body), cfg)
+	if err != nil {
 		return nil, fmt.Errorf("%s: parse: %w", path, err)
+	}
+	if md.IsDefined("cef") {
+		warnCEFSection(path)
 	}
 
 	if err := cfg.validate(path); err != nil {
@@ -142,6 +136,15 @@ func Load(path string) (*ProjectConfig, error) {
 	}
 	cfg.applyDefaults()
 	return cfg, nil
+}
+
+var cefWarnOnce sync.Once
+
+// 古い mitiru.toml の [cef] は読み捨てる。Load は 1 コマンドで何度も呼ばれるので、知らせるのは 1 回だけ。
+func warnCEFSection(path string) {
+	cefWarnOnce.Do(func() {
+		fmt.Fprintf(os.Stderr, "%s: [cef] は使われなくなった (UI は assets/ui/main.rml)。この節は消してよい\n", path)
+	})
 }
 
 func (c *ProjectConfig) validate(path string) error {
@@ -176,9 +179,6 @@ func (c *ProjectConfig) applyDefaults() {
 	}
 	if c.Window.Height == 0 {
 		c.Window.Height = 720
-	}
-	if c.CEF.StartURL == "" {
-		c.CEF.StartURL = "assets/scene.html"
 	}
 	if c.Build.Backend == "" {
 		c.Build.Backend = "auto"

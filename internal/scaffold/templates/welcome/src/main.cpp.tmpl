@@ -1,11 +1,11 @@
 // {{.ProjectName}} — MitiruEngine のスタートプロジェクト。
 // 左は C++ が描く絵 (額装した赤富士・ロゴ・歩く赤べこ・マウスを追う蛍・舞う桜)、
-// 右の操作パネル (図形・スライダー・チェック・ボタン・ゲージ) は HTML/CSS (assets/scene.html)。
-// 値は HTML→C++→HTML と往復し、つなぎの JavaScript は 1 行も書かない。
+// 右の操作パネル (図形・スライダー・チェック・ボタン・ゲージ) は RML / RCSS (assets/ui/main.rml)。
+// 値は UI→C++→UI と往復し、つなぎのスクリプトは 1 行も書かない。
 // mitiru watch 中に数値や色を書き換えて保存すると、止めずにその場で反映されます。
 //
 // native draw は日本語フォントを積まない (mitiru.toml の atlas=none で高速起動) 方針なので、
-// 文字はすべて HTML 側に置く。C++ は「絵」だけを描く。
+// 文字はすべて UI 側に置く。C++ は「絵」だけを描く。
 
 #include <mitiru.hpp>
 #include <mitiru/module/AutoReflect.hpp>
@@ -62,9 +62,9 @@ struct {{.ProjectIdent}}Game
     Ripple ripples[5] = {};
     bool  prevClick = false;
 
-    float speed    = 120.0f;   // 赤べこの歩く速さ (HTML スライダー、20..300)
+    float speed    = 120.0f;   // 赤べこの歩く速さ (UI のスライダー、20..300)
     int   count    = 0;        // ボタンを押した回数
-    bool  petalsOn = true;     // 桜を降らせるか (HTML チェック)
+    bool  petalsOn = true;     // 桜を降らせるか (UI のチェック)
     float gauge    = 0.0f;     // ゲージ (0..1)
     bool  draining = false;    // 満タン後、0 へ減っている最中か
     float holdT    = 0.0f;     // 満タンの静止時間
@@ -80,7 +80,7 @@ struct {{.ProjectIdent}}Game
     {
         t += dt;
 
-        // ── HTML の UI から C++ へ (data-m-action → in.action) ──
+        // ── UI から C++ へ (dispatch → in.action) ──
         if (in.action("count"))                     // ボタン: 回数を数え、ゲージを溜める
         {
             hud.play("pop");
@@ -106,7 +106,7 @@ struct {{.ProjectIdent}}Game
             }
         }
 
-        // ── 矢印キー・WASD・パッドで赤べこを歩かせる (速さは HTML スライダー) ──
+        // ── 矢印キー・WASD・パッドで赤べこを歩かせる (速さは UI のスライダー) ──
         const Stick m = in.move();
         bekoX += m.x * speed * dt;
         bekoY += m.y * speed * dt;
@@ -122,7 +122,7 @@ struct {{.ProjectIdent}}Game
         fx += (mx - fx) * k;
         fy += (my - fy) * k;
 
-        // ── クリックで広がる波紋 (UI 部品の上では CEF がクリックを拾うのでここには来ない) ──
+        // ── クリックで広がる波紋 (UI とゲームは同じマウスを受けるので、パネルの上を押しても出る) ──
         const bool down = in.mouseDown(0);
         if (down && !prevClick)
         {
@@ -133,10 +133,11 @@ struct {{.ProjectIdent}}Game
         prevClick = down;
         for (Ripple& r : ripples) { if (r.age < kRippleLife) { r.age += dt; } }
 
-        // ── C++ から HTML へ (hud.set → data-m-text / data-m-style) ──
+        // ── C++ から UI へ (hud.set → main.rml の data-model="view") ──
         hud.set("view.count", count);
         hud.set("view.speed", (int)speed);
-        hud.set("view.gauge", (int)(gauge * 100.0f));   // ゲージ幅 % (data-m-style)
+        hud.set("view.sakura", petalsOn);                 // チェックの印 (状態は C++ が持つ)
+        hud.set("view.gauge", (int)(gauge * 100.0f));   // ゲージ幅 % (data-style-width)
     }
 
     // 舞い落ちる控えめな桜。位置は t と番号 i だけから決まる (状態を持たない)。
@@ -179,7 +180,7 @@ struct {{.ProjectIdent}}Game
         s.drawGradientRect(Rect{0.0f, 0.0f, kScreenW, kScreenH}, kBgTop, kBgBottom);
         if (petalsOn) { petals(s); }
 
-        // 左: 額装した赤富士 → (キャプションは HTML) → ロゴ画像。
+        // 左: 額装した赤富士 → (キャプションは UI) → ロゴ画像。
         framedArt(s);
         const float artH  = kFujiH * kArtScale;
         const float logoX = kArtX + kFujiW * kArtScale * 0.5f - kLogoW * 0.5f;

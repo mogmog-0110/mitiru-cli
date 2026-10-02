@@ -1,5 +1,5 @@
 // {{.ProjectName}} — クリックで数を稼ぐ最小ゲーム。
-// ロジックは C++ (このファイル)、表示は HTML/CSS (assets/scene.html)。JS は書かない。
+// ロジックは C++ (このファイル)、表示は RML / RCSS (assets/ui/main.rml)。スクリプトは書かない。
 
 #include <mitiru/module/Game.hpp>
 #include <mitiru/module/AutoReflect.hpp>
@@ -13,7 +13,7 @@ struct {{.ProjectIdent}}Game
     {
         if (in.mousePressed()) { ++count; }   // 左クリックした瞬間だけ
         if (in.cancelPressed()) { hud.quit(); }
-        hud.set("hud.count", count);          // assets/scene.html の data-m-text="hud.count" へ
+        hud.set("view.count", count);         // assets/ui/main.rml の count へ
     }
 
     void draw(Screen& s)

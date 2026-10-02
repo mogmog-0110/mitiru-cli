@@ -26,7 +26,7 @@ func newNewCommand() *cobra.Command {
 The scaffolded project is built as a SHARED library (DLL) and run via the
 mitiru_host launcher.
 
-Templates: welcome (C++ art + HTML/CSS UI, the default), hello (minimal),
+Templates: welcome (C++ art + RML/RCSS UI, the default), hello (minimal),
 clicker (incremental loop), shooter (vertical STG),
 objects (classes + virtual components via MITIRU_GAME_OBJECTS; engine >= 0.33).
 

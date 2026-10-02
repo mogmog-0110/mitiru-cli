@@ -1,5 +1,6 @@
 // {{.ProjectName}} — 縦スクロール・シューティング (グラディウス風)。
-// ロジックは C++ (このファイル)、見た目はすべて HTML/CSS (assets/scene.html)。
+// ロジックと場の絵は C++ (このファイル)、スコア・残機・ボスの体力・終わりの表示は
+// RML / RCSS (assets/ui/main.rml)。
 //
 // 敵の出現は完全にスクリプト化したタイムライン (ランダム無し＝毎回同じ)。
 // パワーアップ (スピード / 連射 / 拡散) を拾って自機を強化し、最後はボス戦。
@@ -7,10 +8,6 @@
 // `MITIRU_GAME` (Game.hpp) 経由の update(Input,Hud,float) / draw(Screen&)。
 // 弾・敵・アイテムは `mitiru::Pool<T,N>` (世代付き index、取り違え防止) で管理し、
 // 撃破イベントは `mitiru::MsgQueue<int,N>` で「衝突判定」と「加点」を分離する。
-// HTML への entity 転送は `Hud::set(key, const char*)` に、`data-m-repeat` が読む
-// 素の wire format ("field,field,...;field,...;" — engine 内部の
-// `mitiru::bridge::StateWriter::list()` と同じ形) を直接組み立てて渡す
-// (Hud は FrameIntents を公開しないため StateWriter 自体は使えない)。
 
 #include <mitiru/module/Game.hpp>
 #include <mitiru/module/AutoReflect.hpp>
@@ -28,6 +25,10 @@ namespace
 
 constexpr float kFieldW = 420.0f;
 constexpr float kFieldH = 640.0f;
+// 場の画面上の左上。main.rml の .field と同じ位置 (1280x720 の中央、上に HUD の 2 段)。
+constexpr float kFieldX = 430.0f;
+constexpr float kFieldY = 72.0f;
+constexpr int   kStars  = 70;
 
 constexpr int kMaxBullets  = 64;
 constexpr int kMaxEnemies  = 40;
@@ -69,11 +70,10 @@ constexpr int kNumWaves = (int)(sizeof(kWaves) / sizeof(kWaves[0]));
 
 // ── 小物 ────────────────────────────────────────────────────────────────
 float clampf(float v, float lo, float hi) { return v < lo ? lo : (v > hi ? hi : v); }
-int   ri(float v) { return (int)std::lround(v); }   // compact 列用に丸め
 int   hpFor(int kind)    { return kind == 2 ? 2 : 1; }
 int   scoreFor(int kind) { static const int s[4] = {10, 15, 25, 30}; return s[kind & 3]; }
 
-// ── 表示用ヘルパー (整形は C++ 側。HTML は値を出すだけ) ──────────────────────
+// ── 表示用ヘルパー (整形は C++ 側。UI は値を出すだけ) ──────────────────────
 void appendPips(char* out, std::size_t cap, int lv, int max)   // ●●○ のピップ
 {
     std::size_t pos = 0;
@@ -92,27 +92,13 @@ void appendLives(char* out, std::size_t cap, int n)
     out[pos] = '\0';
 }
 
-// ── entity wire builder ───────────────────────────────────────────────────
-// `data-m-repeat="view.scene" data-m-fields="t,x,y,v" data-m-type="t"` (assets/scene.html)
-// が読む素の行形式 "t,x,y,v;t,x,y,v;..." をここで直接組み立てる。engine 内部の
-// StateWriter::list() と同じ wire だが、Hud は FrameIntents を公開しないため
-// 文字列として自前で組む。統計値 (score 等) は個別に Hud::set するので十分小さく、
-// ここは「多数」のエンティティだけをまとめて 1 statePush にする経路。
-class SceneList
+// 星の位置は番号から決まる (状態を持たない)。毎回同じ並びになる。
+float starHash(int i, int salt)
 {
-public:
-    void row(int t, int x, int y, int v)
-    {
-        if (m_pos >= sizeof(m_buf) - 32) { return; }   // 3968B の statePush 上限に対する安全マージン
-        const int n = std::snprintf(m_buf + m_pos, sizeof(m_buf) - m_pos, "%d,%d,%d,%d;", t, x, y, v);
-        if (n > 0) { m_pos += static_cast<std::size_t>(n); }
-    }
-    const char* c_str() const { return m_buf; }
-
-private:
-    char        m_buf[4096] = {};
-    std::size_t m_pos       = 0;
-};
+    std::uint32_t h = static_cast<std::uint32_t>(i) * 2654435761u + static_cast<std::uint32_t>(salt) * 40503u;
+    h ^= h >> 15; h *= 2246822519u; h ^= h >> 13;
+    return static_cast<float>(h & 0xFFFF) / 65535.0f;
+}
 
 }  // namespace
 
@@ -162,13 +148,17 @@ struct {{.ProjectIdent}}Game
             applyKillQueue();
         }
 
-        pushScene(hud);
-        if (tick % 4 == 0) { pushStats(hud); }
+        if (tick % 4 == 1) { pushStats(hud); }   // 最初の update でも送る (UI が空の値で描かないように)
     }
 
     void draw(Screen& s)
     {
-        s.fillScreen(hex(0x0B0E17));   // 背後の宇宙色 (見た目は HTML)
+        s.fillScreen(hex(0x0E1320));
+        s.drawGradientRect(Rect{kFieldX, kFieldY, kFieldW, kFieldH}, hex(0x0C1024), hex(0x141A33));
+        s.pushTransform(kFieldX, kFieldY);
+        drawStars(s);
+        drawEntities(s);
+        s.popTransform();
     }
 
 private:
@@ -386,19 +376,70 @@ private:
         });
     }
 
-    // ── HTML への push ───────────────────────────────────────────────────
-    void pushScene(Hud& hud)
+    // ── 場の絵 (座標は場の左上が原点) ─────────────────────────────────────
+    void drawStars(Screen& s) const
     {
-        SceneList list;
-        list.row(0, ri(px), ri(py), invuln > 0.0f ? 1 : 0);
-        bullets.forEachAlive([&](const Bullet& b, Ref)  { list.row(1, ri(b.x), ri(b.y), 0); });
-        enemies.forEachAlive([&](const Enemy& e, Ref)   { list.row(2, ri(e.x), ri(e.y), e.kind); });
-        ebullets.forEachAlive([&](const Bullet& b, Ref) { list.row(3, ri(b.x), ri(b.y), 0); });
-        powerups.forEachAlive([&](const Powerup& p, Ref){ list.row(4, ri(p.x), ri(p.y), p.kind); });
-        if (boss.active) { list.row(5, ri(boss.x), ri(boss.y), 0); }
-        hud.set("view.scene", list.c_str());
+        for (int i = 0; i < kStars; ++i)
+        {
+            const float depth = 0.3f + 0.7f * starHash(i, 3);   // 奥の星ほど遅く暗い
+            const float x = starHash(i, 1) * kFieldW;
+            const float y = std::fmod(starHash(i, 2) * kFieldH + elapsed * 40.0f * depth, kFieldH);
+            s.fillCircle(x, y, 1.0f, color::White.withAlpha(0.2f + 0.3f * depth));
+        }
     }
 
+    void drawEnemy(Screen& s, const Enemy& e) const
+    {
+        const Rect body{e.x - 11.0f, e.y - 11.0f, 22.0f, 22.0f};
+        switch (e.kind)
+        {
+        case 0:   // ひし形 (22px 角の正方形を 45 度回した形) を三角形 2 枚で描く
+            s.drawTriangle(Vec2{e.x - 15.5f, e.y}, Vec2{e.x, e.y - 15.5f}, Vec2{e.x + 15.5f, e.y}, hex(0xC8CCD6));
+            s.drawTriangle(Vec2{e.x - 15.5f, e.y}, Vec2{e.x + 15.5f, e.y}, Vec2{e.x, e.y + 15.5f}, hex(0xC8CCD6));
+            break;
+        case 1: s.drawRoundedRect(body, hex(0x33B6C8), 4.0f); break;
+        case 2: s.drawTriangle(Vec2{e.x - 13.0f, e.y - 13.0f}, Vec2{e.x + 13.0f, e.y - 13.0f},
+                               Vec2{e.x, e.y + 11.0f}, hex(0xE0405A)); break;
+        default: s.drawRoundedRect(body, (tick / 15) % 2 ? hex(0xFFE27A) : hex(0xF2C23A), 4.0f); break;   // キャリアは点滅
+        }
+    }
+
+    void drawPowerup(Screen& s, const Powerup& p) const
+    {
+        static const std::uint32_t kColors[3] = {0x46C8E0, 0xFFD24A, 0xFF5A78};
+        static const char* const   kLetters[3] = {"S", "R", "W"};
+        const Rect box{p.x - 12.0f, p.y - 12.0f, 24.0f, 24.0f};
+        s.drawRoundedRect(box, hex(kColors[p.kind % 3]), 6.0f);
+        s.drawTextInRect(box, kLetters[p.kind % 3], hex(0x15202B), 14.0f,
+                         Screen::TextAlignH::Center, Screen::TextAlignV::Middle, 0.0f, 0.0f);
+    }
+
+    // 場に収まっているか (half は中心から端までの大きさ)。2D の描画は図形の種類ごとにまとめて描かれ、
+    // 後から背景色で塗っても隠せないことがあるので、場からはみ出す物は描かない。
+    static bool inField(float x, float y, float half)
+    {
+        return x >= half && x <= kFieldW - half && y >= half && y <= kFieldH - half;
+    }
+
+    void drawEntities(Screen& s)
+    {
+        bullets.forEachAlive([&](const Bullet& b, Ref) {
+            if (inField(b.x, b.y, 7.0f)) { s.drawRoundedRect(Rect{b.x - 2.0f, b.y - 7.0f, 4.0f, 14.0f}, hex(0xFFD0D8), 2.0f); }
+        });
+        enemies.forEachAlive([&](const Enemy& e, Ref) { if (inField(e.x, e.y, 16.0f)) { drawEnemy(s, e); } });
+        ebullets.forEachAlive([&](const Bullet& b, Ref) { if (inField(b.x, b.y, 5.0f)) { s.fillCircle(b.x, b.y, 4.5f, hex(0xFFB030)); } });
+        powerups.forEachAlive([&](const Powerup& p, Ref) { if (inField(p.x, p.y, 12.0f)) { drawPowerup(s, p); } });
+        const float bossTop = std::fmax(boss.y - 30.0f, 0.0f);   // 上から降りてくる間は場の中の部分だけ描く
+        if (boss.active && boss.y + 30.0f > bossTop)
+        {
+            s.drawGradientRect(Rect{boss.x - 46.0f, bossTop, 92.0f, boss.y + 30.0f - bossTop}, hex(0x9AA0B4), hex(0x5A6076));
+        }
+        const bool blink = invuln > 0.0f && (tick / 4) % 2 == 1;   // 被弾後の無敵中は点滅
+        s.drawTriangle(Vec2{px, py - 13.0f}, Vec2{px - 14.0f, py + 13.0f}, Vec2{px + 14.0f, py + 13.0f},
+                       hex(0xFF4D6A).withAlpha(blink ? 0.25f : 1.0f));
+    }
+
+    // ── UI への push (main.rml の data-model="view") ─────────────────────
     void pushStats(Hud& hud)
     {
         char buf[32];
@@ -407,8 +448,8 @@ private:
         appendPips(buf, sizeof(buf), speedLv, 3);     hud.set("view.spd", buf);
         appendPips(buf, sizeof(buf), rapidLv, 3);     hud.set("view.rpd", buf);
         appendPips(buf, sizeof(buf), spreadLv, 2);    hud.set("view.wid", buf);
-        hud.set("view.boss.active", boss.active);
-        hud.set("view.boss.pct", boss.active ? boss.hp * 100 / kBossHp : 0);
+        hud.set("view.boss_active", boss.active);
+        hud.set("view.boss_pct", boss.active ? boss.hp * 100 / kBossHp : 0);
         hud.set("view.state", won ? "clear" : (gameOver ? "over" : ""));
     }
 };

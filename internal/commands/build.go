@@ -137,7 +137,7 @@ func buildProject(stdout, stderr io.Writer, allowStandalone bool) (*buildResult,
 		EngineRoot:   engineRoot,
 		Config:       cfgName,
 		Generator:    buildGenerator,
-		ExtraDefines: buildExtraDefines, // dist が GUI/no-cef フラグを注入 (通常は空)
+		ExtraDefines: buildExtraDefines, // dist が GUI subsystem のフラグを注入 (通常は空)
 		OutDir:       buildOutDir,       // dist は別 out dir (通常は空 = build/out)
 		Stdout:       stdout,
 		Stderr:       stderr,

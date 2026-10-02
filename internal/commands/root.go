@@ -40,10 +40,10 @@ Manage MitiruEngine game projects without touching CMakeLists.txt:
   mitiru input           launch the input subsystem standalone
   mitiru scene           launch the scene subsystem standalone
   mitiru replay          record / play back an input replay
-  mitiru ui [scene.html] preview HTML/CSS UI in the browser with mock state, no build needed
+  mitiru ui              capture the game with its RML UI to a PNG, no window
   mitiru inspect <pid>   open a sub-window inspector for a running game
   mitiru dist            build a redistributable folder (no-console launcher)
-  mitiru lint            check project layout / manifest / HTML bindings
+  mitiru lint            check main.rml bindings against the C++ hud.set keys
   mitiru verify          build+run without a window, screenshot, optional golden compare
   mitiru mcp             run a stdio MCP server for AI tool access
   mitiru install         bootstrap MSVC + mitiru.exe + PATH (Windows)

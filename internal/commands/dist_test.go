@@ -31,7 +31,7 @@ func TestDistBundleName(t *testing.T) {
 func TestWriteLauncher(t *testing.T) {
 	dir := t.TempDir()
 	p := filepath.Join(dir, "g.bat")
-	if err := writeLauncher(p, filepath.Join("g", "g.dll"), []string{"--no-cef", "--size", "800x600"}); err != nil {
+	if err := writeLauncher(p, filepath.Join("g", "g.dll"), []string{"--fixed-size", "--size", "800x600"}); err != nil {
 		t.Fatal(err)
 	}
 	b, err := os.ReadFile(p)
@@ -39,7 +39,7 @@ func TestWriteLauncher(t *testing.T) {
 		t.Fatal(err)
 	}
 	s := string(b)
-	if !strings.Contains(s, "mitiru_host.exe g") || !strings.Contains(s, "g.dll --no-cef --size 800x600") {
+	if !strings.Contains(s, "mitiru_host.exe g") || !strings.Contains(s, "g.dll --fixed-size --size 800x600") {
 		t.Errorf("launcher missing expected command line:\n%s", s)
 	}
 	if !strings.Contains(s, `cd /d "%~dp0data"`) {
@@ -50,10 +50,10 @@ func TestWriteLauncher(t *testing.T) {
 	}
 }
 
-func TestCopyDeployFiltersCefAndJunk(t *testing.T) {
+func TestCopyDeployFiltersJunk(t *testing.T) {
 	src := t.TempDir()
 	dst := t.TempDir()
-	// deploy を模す: host + CEF + game subdir + junk。
+	// deploy を模す: host + UI の RCSS と書体 + game subdir + junk。
 	write := func(rel string) {
 		p := filepath.Join(src, rel)
 		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
@@ -64,12 +64,14 @@ func TestCopyDeployFiltersCefAndJunk(t *testing.T) {
 		}
 	}
 	write("mitiru_host.exe")
-	write("libcef.dll")
 	write("d3dcompiler_47.dll")
 	write("SDL2.dll") // vcpkg SDL2: host が import 依存。KEEP 必須
-	write(filepath.Join("locales", "ja.pak"))
+	write(filepath.Join("assets", "ui", "base.rcss"))
+	write(filepath.Join("assets", "fonts", "MPLUSRounded1c-Regular.ttf"))
+	write(filepath.Join("assets", "fonts", "OFL.txt"))
+	write(filepath.Join("assets", "fonts", "Pacifico-Regular.ttf")) // UI が使わない書体
 	write(filepath.Join("my_game", "my_game.dll"))
-	write(filepath.Join("my_game", "assets", "scene.html"))
+	write(filepath.Join("my_game", "assets", "ui", "main.rml"))
 	write("mitiru_host.pdb")                                // junk
 	write("CMakeCache.txt")                                 // build 産物 (allowlist 外)
 	write("build.ninja")                                    // build 産物
@@ -83,12 +85,14 @@ func TestCopyDeployFiltersCefAndJunk(t *testing.T) {
 		_, err := os.Stat(filepath.Join(dst, rel))
 		return err == nil
 	}
-	// host + CEF runtime + locales + game dir は残る (CEF は --no-cef でも host が要る)。
+	// host + runtime DLL + RmlUi の RCSS と既定書体 + game dir は残る。
 	for _, keep := range []string{
-		"mitiru_host.exe", "libcef.dll", "d3dcompiler_47.dll", "SDL2.dll",
-		filepath.Join("locales", "ja.pak"),
+		"mitiru_host.exe", "d3dcompiler_47.dll", "SDL2.dll",
+		filepath.Join("assets", "ui", "base.rcss"),
+		filepath.Join("assets", "fonts", "MPLUSRounded1c-Regular.ttf"),
+		filepath.Join("assets", "fonts", "OFL.txt"),
 		filepath.Join("my_game", "my_game.dll"),
-		filepath.Join("my_game", "assets", "scene.html"),
+		filepath.Join("my_game", "assets", "ui", "main.rml"),
 	} {
 		if !exists(keep) {
 			t.Errorf("%s should be kept", keep)
@@ -98,6 +102,7 @@ func TestCopyDeployFiltersCefAndJunk(t *testing.T) {
 	for _, drop := range []string{
 		"mitiru_host.pdb", "CMakeCache.txt", "build.ninja", "mitiru_inspector.exe",
 		filepath.Join("mitiru-engine", "CMakeLists.txt"),
+		filepath.Join("assets", "fonts", "Pacifico-Regular.ttf"),
 	} {
 		if exists(drop) {
 			t.Errorf("%s should be dropped", drop)
@@ -110,7 +115,7 @@ func TestWriteExeLauncher(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "mitiru_host.exe"), []byte("HOST"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := writeExeLauncher(dir, "my-game", filepath.Join("my_game", "my_game.dll"), []string{"--no-cef"}); err != nil {
+	if err := writeExeLauncher(dir, "my-game", filepath.Join("my_game", "my_game.dll"), []string{"--fixed-size"}); err != nil {
 		t.Fatal(err)
 	}
 	// exe は host のコピー。
@@ -120,7 +125,37 @@ func TestWriteExeLauncher(t *testing.T) {
 	}
 	// sidecar は dll(スラッシュ) + 引数。
 	m, _ := os.ReadFile(filepath.Join(dir, "my-game.mtargs"))
-	if got := strings.TrimSpace(string(m)); got != "my_game/my_game.dll --no-cef" {
-		t.Errorf("mtargs = %q, want %q", got, "my_game/my_game.dll --no-cef")
+	if got := strings.TrimSpace(string(m)); got != "my_game/my_game.dll --fixed-size" {
+		t.Errorf("mtargs = %q, want %q", got, "my_game/my_game.dll --fixed-size")
+	}
+}
+
+// RmlUi は pack を読まないので、--pack でも assets/ui/ はバラ置きで残り、pack にも入らない。
+func TestPackKeepsUIDirLoose(t *testing.T) {
+	assets := filepath.Join(t.TempDir(), "assets")
+	for _, rel := range []string{"ui/main.rml", "ui/hud.rcss", "sprites/a.png", "audio/pop.wav"} {
+		p := filepath.Join(assets, filepath.FromSlash(rel))
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, []byte("x"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	n, err := packAssets(assets, filepath.Join(filepath.Dir(assets), "assets.mtpak"), "g/assets")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n != 2 {
+		t.Errorf("packed %d files, want 2 (sprites + audio, not ui/)", n)
+	}
+	if err := removePackedAssets(assets); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(assets, "ui", "main.rml")); err != nil {
+		t.Errorf("assets/ui/main.rml must stay loose: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(assets, "sprites")); !os.IsNotExist(err) {
+		t.Errorf("packed assets must be removed, sprites/ still there (err=%v)", err)
 	}
 }

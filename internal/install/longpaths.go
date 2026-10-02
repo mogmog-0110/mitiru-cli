@@ -10,7 +10,7 @@ import (
 
 // enableLongPaths は HKLM\SYSTEM\CurrentControlSet\Control\FileSystem\
 // LongPathsEnabled = 1 を設定し、build 中に MAX_PATH (260) を超える
-// CEF / engine のパスで破綻しないようにする。
+// engine のパスで破綻しないようにする。
 //
 // admin が必要。書き込みを試み、error は caller に伝える
 // (orchestrator が warning に格下げする)。

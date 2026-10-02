@@ -33,12 +33,13 @@ mitiru run
 | `mitiru test` | `tests/*.cpp` を `cl /std:c++20 /utf-8` で 1 本ずつビルド・実行し、exit code で合否集計。`--filter` / `--release` / `--include` に対応 |
 | `mitiru run` | ビルドして実行。stdin、stdout、exit code を転送 |
 | `mitiru watch` | ビルドして起動し、`src/` の保存時に state を維持したまま hot reload |
-| `mitiru dist` | 配布フォルダを生成。ランタイムを `data/` に分離し、コンソールなしの `<name>.exe` を出力。`--bat` でログ用 `.bat`、`--pack` でアセットを埋め込み、`--zip` で zip を追加。`--onefile` で配布物全体を自己展開の単一 exe に畳む (ファイル名は `[dist] exe_name`、既定は `project.name`)。`[cef] enabled=false` の場合は Chromium を同梱しない |
+| `mitiru dist` | 配布フォルダを生成。ランタイムを `data/` に分離し、コンソールなしの `<name>.exe` を出力。`--bat` でログ用 `.bat`、`--pack` でアセットを埋め込み、`--zip` で zip を追加。`--onefile` で配布物全体を自己展開の単一 exe に畳む (ファイル名は `[dist] exe_name`、既定は `project.name`)。`assets/ui/` は pack に入れずバラ置きで残す (RmlUi はファイルから直に読む) |
 | `mitiru debug` | Debug 構成でビルドし、engine debug helper（`MITIRU_DEBUG=1` / `MITIRU_INSPECTOR=1`）を有効にして実行 |
 | `mitiru inspect [pid]` | 実行中の game を別の OS window に表示したツール画面で観察。`--inspectable input\|timetravel`、`--all` に対応 |
 | `mitiru replay <file>` | 記録済みの入力を決定論的に再生。`--test` で回帰判定、`--suite <dir>` で `*.mtrr` を一括判定 |
 | `mitiru renderer` / `audio` / `input` / `scene` | 各 subsystem を単独で起動 |
-| `mitiru ui` / `lint` | HTML/CSS UI をブラウザで preview / `data-m-*` バインディングを検査 |
+| `mitiru ui` | ゲームを窓なしで回し、RML の UI ごと最後のフレームを PNG に撮る (`--frames` / `--input-script` / `--out`) |
+| `mitiru lint` | `assets/ui/main.rml` が引く変数を、C++ の `hud.set("view.x", ...)` と突き合わせる |
 | `mitiru bisect` | どのビルドから決定論が壊れたかを二分探索で特定 |
 | `mitiru fuzz` | ランダム入力でクラッシュ・非決定・不変条件違反を探す |
 | `mitiru ai-playtest` | 状態 API 経由でゲームを自動プレイし、仕様違反を判定 (`--driver sweep\|claude-code`) |
@@ -58,16 +59,17 @@ mitiru run
 
 ## テンプレート
 
-`mitiru new -t <template>` で選べる 4 種類。機能の重なりは無く、それぞれ違う API の入口を見せる出発点です。
+`mitiru new -t <template>` で選べる 5 種類。UI はどれも `assets/ui/main.rml` (RmlUi の RML / RCSS) で、C++ の `hud.set("view.x", ...)` が `{{ x }}` に届く。機能の重なりは無く、それぞれ違う API の入口を見せる出発点です。
 
 | テンプレート | 内容 | 使う API | アセット |
 | --- | --- | --- | --- |
 | `welcome`（既定） | 額装した絵・ロゴ・歩くキャラ・マウス追従・舞う桜 + 右側の操作パネル | `MITIRU_GAME`、`s.sprite`、`in.mouse*` | 画像スプライト複数、効果音 |
 | `hello` | 図形・物理（跳ねるボール）・パーティクル・マウス入力を 1 画面で試すショーケース | `MITIRU_GAME`、`s.fillCircle` 等の図形 API、簡易物理 | 画像スプライト、効果音 |
 | `clicker` | クリックでカウンタを増やす最小構成 | `MITIRU_GAME`、`in.mousePressed()`、`hud.set` | なし（`s.fillCircle` のみ） |
-| `shooter` | 縦スクロール STG。固定タイムラインの敵出現、パワーアップ、ボス戦 | 生 `ModuleApi`（`on_init`/`on_update`/`on_draw`）+ `mitiru::bridge::StateWriter` | なし（HTML 側で描画） |
+| `shooter` | 縦スクロール STG。固定タイムラインの敵出現、パワーアップ、ボス戦 | `MITIRU_GAME`、`Pool<T,N>`、`MsgQueue` | なし（場は C++ の図形、HUD は RML） |
+| `objects` | クラスと仮想関数で書く場面 + flat POD の進行データ | `MITIRU_GAME_OBJECTS`、`hud.save` / `hud.load` | なし |
 
-`welcome` / `hello` / `clicker` は `Game.hpp` の `MITIRU_GAME` マクロ (`struct { update(Input,Hud,dt); draw(Screen&); }`) から始まる最小 API 経由。`shooter` だけは `MITIRU_GAME` を使わず `ModuleApi` を直接実装しており、複数エンティティ配列を 1 本の `view.scene` 文字列で HTML へ push する手法のサンプルになっています（`MITIRU_REFLECT_AUTO` 併用の書き直しは TODO、`docs` 未整備）。
+`objects` 以外は `Game.hpp` の `MITIRU_GAME` マクロ (`struct { update(Input,Hud,dt); draw(Screen&); }`) から始まる最小 API 経由。
 
 ## プロジェクト構成
 
@@ -81,7 +83,7 @@ my-game/
 ├── src/
 │   └── main.cpp        # ゲーム本体
 └── assets/
-    └── scene.html      # Mode B (CEF) 用の初期 HTML
+    └── ui/main.rml     # 画面 UI (RmlUi の RML / RCSS)。C++ の絵の上に重なる
 ```
 
 ビルド時には、次のディレクトリとファイルが生成されます。いずれも `.gitignore` に登録されています。
@@ -94,7 +96,7 @@ my-game/
 
 ## `mitiru.toml`
 
-ゲームのウィンドウサイズ、CEF の初期 URL、グラフィクス backend を設定します。C++ に直接記述する必要はありません。
+ゲームのウィンドウサイズ、フォントアトラス、グラフィクス backend を設定します。C++ に直接記述する必要はありません。
 
 ```toml
 [project]
@@ -108,15 +110,13 @@ width = 1280
 height = 720
 vsync = true
 
-[cef]
-start_url = "assets/scene.html"
-skip_default_font = true
-
 [build]
 backend = "auto"        # auto / dx11 / dx12 / vulkan / opengl / webgl2 / null
 ```
 
-`mitiru build` はこの TOML を読み込み、設定を C++ ヘッダへ埋め込みます。`src/main.cpp` で `mitiru::EngineConfig` の `title`、`windowWidth`、`windowHeight`、`cefStartUrl` を設定する必要はありません。
+`mitiru build` はこの TOML を読み込み、設定を C++ ヘッダへ埋め込みます。`src/main.cpp` で `mitiru::EngineConfig` の `title`、`windowWidth`、`windowHeight` を設定する必要はありません。
+
+古い `mitiru.toml` の `[cef]` は読み捨てます (警告を 1 行出す)。UI は DLL の隣の `assets/ui/main.rml` があれば host が自動で重ねます。
 
 ### 自前の CMakeLists.txt を持つプロジェクト
 

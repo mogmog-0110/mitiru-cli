@@ -1,0 +1,92 @@
+<rml>
+<head>
+<title>main</title>
+<link type="text/rcss" href="mitiru:base.rcss"/>
+<style>
+  /* 画面の文字と操作 UI は RML / RCSS。C++ が hud.set した値を {{ }} と data-style で受け、
+     スライダー・チェック・ボタンは dispatch(...) で C++ (in.action) へ送る。スクリプトは書かない。
+     背景は透明で、下に C++ の draw() の絵 (赤富士・赤べこ・蛍・桜) が透ける。
+     半透明色は #rrggbbaa で書く (RCSS の rgba() のアルファは 0〜255 で数える)。 */
+  body { pointer-events: none; color: #1d1d1f; }
+
+  /* 額の下のキャプション (美術館の解説札のように) */
+  .caption { position: absolute; left: 45px; top: 404px; width: 512px;
+             text-align: center; font-size: 15px; color: #6b7280; letter-spacing: 0.3px; }
+
+  /* 右の「触って試す」カード */
+  .panel { position: absolute; left: 672px; top: 48px; width: 536px; box-sizing: border-box; pointer-events: auto;
+           padding: 30px 40px 34px 40px; background-color: #ffffff; border-radius: 18px;
+           box-shadow: #1c202c24 0px 12px 30px; }
+
+  /* 1 段目: 基本図形 4 つ。さんかくは左右 2 枚の斜めのグラデーションで作る */
+  .shapes { display: flex; align-items: flex-end; justify-content: space-around; height: 76px; }
+  .sq  { width: 60px; height: 60px; border-radius: 15px; background-color: #0a84ff; }
+  .ci  { width: 62px; height: 62px; border-radius: 31px; background-color: #1fa654; }
+  .cap { width: 42px; height: 66px; border-radius: 21px; background-color: #ff9500; }
+  .tri { display: flex; width: 66px; height: 58px; }
+  .tri-l, .tri-r { width: 33px; height: 58px; }
+  .tri-l { decorator: linear-gradient(to top left, #e8338a 50%, #e8338a00 50%); }
+  .tri-r { decorator: linear-gradient(to top right, #e8338a 50%, #e8338a00 50%); }
+
+  /* 2 段目: スライダー。溝 (slidertrack) は押せる高さのまま細い線だけを描き、つまみの左側は sliderprogress で塗る */
+  .slider-row { display: flex; align-items: flex-end; justify-content: space-between; margin-top: 30px; }
+  .slider-row .label { font-size: 18px; }
+  .slider-row .value { font-size: 20px; font-weight: bold; color: #0a84ff; }
+  input.range { display: block; width: 100%; height: 24px; margin-top: 10px; cursor: pointer; }
+  input.range slidertrack { height: 24px;
+                            decorator: linear-gradient(to bottom, #d8dee900 41.6%, #d8dee9 41.6%, #d8dee9 58.4%, #d8dee900 58.4%); }
+  input.range sliderprogress { height: 4px; margin-top: 10px; border-radius: 2px; background-color: #0a84ff; }
+  input.range sliderbar { box-sizing: border-box; width: 22px; height: 22px; margin-top: 1px; margin-left: -11px; margin-right: -11px;
+                          border-radius: 11px; border: 2px #0a84ff; background-color: #ffffff; }
+  input.range sliderarrowdec, input.range sliderarrowinc { width: 0px; height: 0px; }
+
+  /* 3 段目: チェック。印が付いているかは C++ が送る sakura で決まる */
+  .check { display: flex; align-items: center; gap: 12px; margin-top: 24px; font-size: 18px;
+           cursor: pointer; text-align: left; padding: 0px; background-color: transparent; }
+  .check .box { width: 22px; height: 22px; border-radius: 5px; border: 2px #c4ccd8; background-color: #ffffff;
+                text-align: center; font-size: 16px; line-height: 18px; font-weight: bold; color: #ffffff; }
+  .check.on .box { border-color: #0a84ff; background-color: #0a84ff; }
+
+  /* 4 段目: ボタン + ゲージ (1 組) */
+  .set-label { margin-top: 28px; font-size: 18px; }
+  .btn { display: block; width: 100%; margin-top: 10px; cursor: pointer;
+         font-size: 22px; font-weight: bold; color: #ffffff; background-color: #0a84ff;
+         border-radius: 12px; padding: 14px 0px; box-shadow: #0a84ff4d 0px 4px 12px; }
+  .btn:active { transform: translateY(2px); background-color: #0060d8; }
+  .gauge { margin-top: 14px; height: 14px; background-color: #d8dee9; border-radius: 7px; overflow: hidden; }
+  .gauge-fill { height: 100%; width: 0px; background-color: #ff9500; border-radius: 7px; transition: width 0.08s linear-in-out; }
+
+  /* 下部の案内 */
+  .hint { position: absolute; left: 0px; bottom: 0px; width: 100%;
+          background-color: #e2e7f0e0; color: #3a4048; font-size: 18px; text-align: center; padding: 7px 0px; }
+</style>
+</head>
+<!-- C++ が draw() で描く絵の上に、この RML / RCSS が重なる -->
+<body data-model="view">
+  <div class="caption">葛飾北斎「凱風快晴」冨嶽三十六景</div>
+
+  <div class="panel">
+    <div class="shapes">
+      <div class="sq"></div><div class="ci"></div><div class="cap"></div>
+      <div class="tri"><div class="tri-l"></div><div class="tri-r"></div></div>
+    </div>
+
+    <div class="slider-row">
+      <span class="label">赤べこの速さ</span>
+      <span class="value">{{ speed }}</span>
+    </div>
+    <input class="range" type="range" min="20" max="300" step="1"
+           data-attr-value="speed" data-event-change="dispatch('speed', ev.value)"/>
+
+    <button class="check" data-class-on="sakura" data-event-click="dispatch('sakura', !sakura)">
+      <span class="box" data-if="sakura">✓</span><span class="box" data-if="!sakura"></span><span>桜を降らせる</span>
+    </button>
+
+    <div class="set-label">おすと たまる（満タンで戻る）</div>
+    <button class="btn" data-event-click="dispatch('count')">count: {{ count }}</button>
+    <div class="gauge"><div class="gauge-fill" data-style-width="gauge + '%'"></div></div>
+  </div>
+
+  <div class="hint">矢印キーで赤べこが歩く　　右のスライダーとボタンは触って動かせる</div>
+</body>
+</rml>

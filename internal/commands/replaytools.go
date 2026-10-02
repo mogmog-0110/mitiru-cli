@@ -27,7 +27,7 @@ var (
 
 // runHostCaptured は host を deployDir を cwd に起動し、combined output と exit code を返す。
 // timeout 秒を超えたら kill して timedOut=true。fuzz/bisect は headless record/replay-test
-// しか叩かないので CEF は出ず taskkill 不要。
+// しか叩かないので子プロセスは残らず taskkill 不要。
 func runHostCaptured(hostExe, deployDir string, timeoutSec int, args ...string) (out string, exitCode int, timedOut bool) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(timeoutSec)*time.Second)
 	defer cancel()

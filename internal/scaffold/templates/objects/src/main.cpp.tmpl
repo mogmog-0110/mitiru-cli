@@ -1,7 +1,7 @@
 // {{.ProjectName}} — クラスとコンポーネントで書く game の出発点 (MITIRU_GAME_OBJECTS)。
 // 進行データ (Progress) だけが flat POD で、セーブ・ロード・録画の対象になる。
 // 場面 (Scene) は普通の C++ で、仮想関数も std::vector も使ってよい。進行データから組み立て直せること。
-// ロジックは C++ (このファイル)、表示は HTML/CSS (assets/scene.html)。JS は書かない。
+// ロジックは C++ (このファイル)、表示は RML / RCSS (assets/ui/main.rml)。スクリプトは書かない。
 
 #include <memory>
 #include <vector>
@@ -73,8 +73,8 @@ struct {{.ProjectIdent}}Scene
         if (in.cancelPressed()) { hud.quit(); }
 
         for (auto& object : objects) { object->update(progress, dt); }
-        hud.set("hud.score", progress.score);
-        hud.set("hud.stage", progress.stage);
+        hud.set("view.score", progress.score);
+        hud.set("view.stage", progress.stage);
     }
 
     void draw(const {{.ProjectIdent}}Progress&, Screen& s)

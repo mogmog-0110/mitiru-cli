@@ -47,8 +47,7 @@ Usage:
 This is the modular sub-window architecture showcase tool —
 gameplay stays in its own window, the inspector lives in another window
 that can be dragged to a different monitor. With --all, three observer
-windows open side by side, each watching the same game process. No CEF
-multi-process required.`,
+windows open side by side, each watching the same game process.`,
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if inspectAll && inspectInspectable != "" {
@@ -164,11 +163,11 @@ func locateInspectorExe() (string, error) {
 			return "", fmt.Errorf("inspect: %w", err)
 		}
 	}
-	return findOrBuildEngineExe(engineRoot, "mitiru_tool_cef", "mitiru_tool_cef.exe")
+	return findOrBuildEngineExe(engineRoot, toolExeTarget, toolExeTarget+".exe")
 }
 
-// pageFor は inspect の inspectable 名を tool_cef の --page 名に対応づける。
-// 全ツール窓は mitiru_tool_cef の HTML ページに統一済み (ToolRegistry の kToolTable と同じ)。
+// pageFor は inspect の inspectable 名を mitiru_tool の --page 名に対応づける
+// (ToolRegistry の kToolTable と同じ)。
 func pageFor(inspectable string) string {
 	switch inspectable {
 	case "", "gameplay", "state":
@@ -178,7 +177,7 @@ func pageFor(inspectable string) string {
 	case "rewind", "timetravel":
 		return "rewind"
 	default:
-		return inspectable // 未知名はそのまま page として渡す (assets/<name>.html)
+		return inspectable // 未知名はそのまま page として渡す (assets/<name>.rml)
 	}
 }
 

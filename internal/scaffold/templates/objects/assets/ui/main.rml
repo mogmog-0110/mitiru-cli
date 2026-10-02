@@ -1,0 +1,22 @@
+<rml>
+<head>
+<title>main</title>
+<link type="text/rcss" href="mitiru:base.rcss"/>
+<style>
+  /* HUD は C++ 描画の上に重なる透明な層。値は C++ の hud.set("view.score", ...) が届ける。
+     スクリプトは書かない。 */
+  body { pointer-events: none; color: #ffffff; }
+
+  .bar { position: absolute; left: 24px; top: 20px; display: flex; gap: 28px;
+         font-size: 28px; font-weight: bold; font-effect: shadow(0px 2px #00000099); }
+  .hint { position: absolute; left: 24px; bottom: 16px; font-size: 15px; opacity: 0.8; }
+</style>
+</head>
+<body data-model="view">
+  <div class="bar">
+    <span>ステージ {{ stage }}</span>
+    <span>スコア {{ score }}</span>
+  </div>
+  <div class="hint">クリック: スコア / ↑: ステージを進める / S: セーブ / L: ロード / Esc: 終了</div>
+</body>
+</rml>

@@ -1,9 +1,9 @@
 // {{.ProjectName}} — MitiruEngine のショーケース。
 // 1 画面でいろいろ試せます: 画像スプライト・図形・物理(跳ねるボール)・パーティクル・
-// マウス入力、そして HTML / CSS の UI (ボタン・チェック・スライダー)。
+// マウス入力、そして RML / RCSS (HTML / CSS の方言) の UI (ボタン・チェック・スライダー)。
 //
 // ゲームは「状態の struct + update + draw」だけ。絵は C++ (draw)、画面 UI は
-// HTML / CSS (assets/scene.html)。値は HTML→C++→HTML と往復します。
+// RML / RCSS (assets/ui/main.rml)。値は UI→C++→UI と往復します。
 // mitiru watch 中に数値や色を書き換えて保存すると、止めずにその場で反映されます。
 
 #include <mitiru.hpp>
@@ -88,7 +88,7 @@ struct {{.ProjectIdent}}Game
         if (!ready) { spawnBalls(); }
         t += dt;
 
-        // ── HTML の UI から C++ へ (data-m-action → in.action) ──
+        // ── UI から C++ へ (dispatch → in.action) ──
         if (in.action("count")) { ++count; }
         if (in.action("lock"))  { const char* p = in.actionPayload("lock");  locked = (p && p[0] == 't'); }
         if (in.action("speed")) { const char* p = in.actionPayload("speed"); if (p) { speed = (float)std::atof(p); } }
@@ -138,7 +138,7 @@ struct {{.ProjectIdent}}Game
         curX += (in.mouseX() - curX) * ease;
         curY += (in.mouseY() - curY) * ease;
 
-        // ── C++ から HTML へ (hud.set → data-m-text) ──
+        // ── C++ から UI へ (hud.set → main.rml の data-model="view") ──
         hud.set("view.count", count);
         hud.set("view.speed", (int)speed);
         hud.set("view.locked", locked);

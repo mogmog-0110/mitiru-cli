@@ -1,229 +1,165 @@
 package commands
 
 import (
-	"encoding/json"
 	"fmt"
-	"net/http"
 	"os"
 	"os/exec"
-	"os/signal"
 	"path/filepath"
-	"strings"
-	"syscall"
+	"sort"
+	"strconv"
 
-	"github.com/mogmog-0110/mitiru-cli/internal/config"
-	"github.com/mogmog-0110/mitiru-cli/internal/engine"
+	"github.com/mogmog-0110/mitiru-cli/internal/build"
 	"github.com/spf13/cobra"
 )
 
-const mockCEFStateTemplate = `(function(global){
-'use strict';
-var _initialState = %s;
-var mitiru = global.mitiru = global.mitiru || {};
-var _state = mitiru._state = mitiru._state || {};
-var _stateListeners = Object.create(null);
-var _eventListeners = Object.create(null);
-var _retained = Object.create(null);
-Object.keys(_initialState).forEach(function(k){ _retained[k] = _initialState[k]; });
-_state._onChange = function(key, value){
-  _retained[key] = value;
-  var arr = _stateListeners[key];
-  if(!arr) return;
-  var copy = arr.slice();
-  for(var i=0;i<copy.length;i++){
-    try{ copy[i](value); }catch(e){ console.error('[mitiru.mock._onChange]',e); }
-  }
-};
-_state._onEvent = function(name, payload){
-  var arr = _eventListeners[name];
-  if(!arr) return;
-  var copy = arr.slice();
-  for(var i=0;i<copy.length;i++){
-    try{ copy[i](payload); }catch(e){ console.error('[mitiru.mock._onEvent]',e); }
-  }
-};
-mitiru.onStateChange = function(key, fn){
-  if(typeof key!=='string'||typeof fn!=='function')
-    throw new Error('mitiru.onStateChange: (string, function) required');
-  if(!_stateListeners[key]){ _stateListeners[key]=[]; }
-  _stateListeners[key].push(fn);
-  if(Object.prototype.hasOwnProperty.call(_retained,key)){
-    try{ fn(_retained[key]); }catch(e){ console.error('[mitiru.mock] initial fire threw:',e); }
-  }
-  return function(){ mitiru.offStateChange(key,fn); };
-};
-mitiru.offStateChange = function(key, fn){
-  var arr = _stateListeners[key];
-  if(!arr) return;
-  var i = arr.indexOf(fn);
-  if(i>=0) arr.splice(i,1);
-};
-mitiru.on = function(name, fn){
-  if(typeof name!=='string'||typeof fn!=='function')
-    throw new Error('mitiru.on: (string, function) required');
-  if(!_eventListeners[name]){ _eventListeners[name]=[]; }
-  _eventListeners[name].push(fn);
-  return function(){ mitiru.off(name,fn); };
-};
-mitiru.off = function(name, fn){
-  var arr = _eventListeners[name];
-  if(!arr) return;
-  var i = arr.indexOf(fn);
-  if(i>=0) arr.splice(i,1);
-};
-mitiru.getState = function(key){ return _retained[key]; };
-mitiru.dispatch = function(action, payload){
-  if(typeof action!=='string')
-    return Promise.reject(new Error('mitiru.dispatch: action must be string'));
-  console.log('[mitiru.mock.dispatch]', action, payload);
-  return Promise.resolve(null);
-};
-})(typeof window!=='undefined'?window:globalThis);
-`
+// uiDocRel は host が DLL の隣で探す UI 文書 (RmlUi)。
+const uiDocRel = "assets/ui/main.rml"
 
-const cefStateURLPath = "/mitiru_runtime/mitiru_cef_state.js"
+// legacySceneRel は CEF 世代の HTML の HUD。今の engine は読まない。
+const legacySceneRel = "assets/scene.html"
 
 func newUICommand() *cobra.Command {
-	var stateFile string
-	var port int
+	var frames int
+	var outPath string
+	var inputScript string
 
 	cmd := &cobra.Command{
-		Use:   "ui [scene.html]",
-		Short: "Preview HTML/CSS game UI in the browser instantly, no build needed",
-		Long: `Start a local HTTP server serving the project's assets/ directory and
-open the scene in your default browser with a mock window.mitiru bridge.
-The mock implements the full onStateChange / offStateChange / on / off /
-getState / dispatch API so mitiru_bind.js renders against mock state without
-running the C++ engine.
+		Use:   "ui",
+		Short: "Capture the game with its RML UI to a PNG, without opening a window",
+		Long: `Build the project, run it headless on the GPU for a number of frames, and
+save the last frame (the C++ drawing with assets/ui/main.rml on top) as a PNG.
+The UI shows the values the game pushes with hud.set, so what you see is what
+the player sees.
 
-  mitiru ui                         serve assets/scene.html on :8137
-  mitiru ui assets/hud.html         serve a specific scene
-  mitiru ui --state mock.json       seed retained state from a JSON file
-  mitiru ui --port 9000             use a custom port
+  mitiru ui                            capture after 90 frames to build/ui.png
+  mitiru ui --frames 300               let the game run longer first
+  mitiru ui --input-script clicks.txt  drive the UI with scripted clicks
+  mitiru ui --out shot.png             choose the output file
 
-The state JSON should be a flat object whose keys match the state keys your
-scene subscribes to, e.g. {"view.hp": 80, "view.score": 1200}.
-
-Press Ctrl+C to stop the server.`,
-		Args: cobra.MaximumNArgs(1),
+While editing the RML, ` + "`mitiru watch`" + ` is faster: saving main.rml or a .rcss
+reloads the document in the running game.`,
+		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runUI(args, stateFile, port)
+			return runUI(frames, outPath, inputScript)
 		},
 	}
 
-	cmd.Flags().StringVar(&stateFile, "state", "", "JSON file with initial mock state values")
-	cmd.Flags().IntVar(&port, "port", 8137, "local port to serve on")
+	cmd.Flags().IntVar(&frames, "frames", 90, "frames to run before the capture")
+	cmd.Flags().StringVar(&outPath, "out", "", "output PNG (default build/ui.png)")
+	cmd.Flags().StringVar(&inputScript, "input-script", "", "input script to replay before the capture")
 	return cmd
 }
 
-func runUI(args []string, stateFile string, port int) error {
-	// project root と assets dir を解決する。
-	cwd, err := os.Getwd()
+func runUI(frames int, outPath, inputScript string) error {
+	if frames < 1 {
+		return fmt.Errorf("ui: --frames must be at least 1")
+	}
+	scriptAbs, err := absOrEmpty(inputScript)
 	if err != nil {
-		return fmt.Errorf("getwd: %w", err)
+		return fmt.Errorf("ui: resolve --input-script %q: %w", inputScript, err)
 	}
 
-	manifestPath, projectRoot, err := config.FindManifest(cwd)
+	result, err := runBuild()
 	if err != nil {
-		return fmt.Errorf("not inside a mitiru project: %w", err)
+		return err
 	}
-
-	assetsDir := filepath.Join(projectRoot, "assets")
-	if st, statErr := os.Stat(assetsDir); statErr != nil || !st.IsDir() {
-		return fmt.Errorf("assets/ not found at %s — run 'mitiru build' once to populate it", assetsDir)
+	if err := checkUIDocument(result.ProjectRoot); err != nil {
+		return err
 	}
-
-	// scene は mitiru_runtime/*.js (declarative binder) を参照するが、これは
-	// プロジェクトの assets/ ではなく engine 側にある。pin した engine を解決し、
-	// preview が本物の binder を serve できるようにする (cef_state.js は下で mock のまま)。
-	cfg, cfgErr := config.Load(manifestPath)
-	if cfgErr != nil {
-		return fmt.Errorf("load %s: %w", manifestPath, cfgErr)
+	if outPath == "" {
+		outPath = filepath.Join(result.ProjectRoot, "build", "ui.png")
 	}
-	engineRoot, engErr := engine.EnsureSource(cfg.EngineTag(), os.Stdout)
-	if engErr != nil {
-		return fmt.Errorf("resolve engine %s: %w", cfg.EngineTag(), engErr)
-	}
-	runtimeDir := filepath.Join(engineRoot, "web", "mitiru_runtime")
-
-	// scene path を決める (assets/ からの URL 相対)。
-	sceneURL := "/scene.html"
-	if len(args) == 1 {
-		rel, relErr := filepath.Rel(assetsDir, filepath.Join(projectRoot, filepath.FromSlash(args[0])))
-		if relErr != nil {
-			// arg は既に assets/ 相対として扱う。
-			rel = filepath.ToSlash(args[0])
-		}
-		sceneURL = "/" + filepath.ToSlash(rel)
-	}
-
-	// 初期 mock state を読み込む。
-	initialState := map[string]interface{}{}
-	if stateFile != "" {
-		raw, readErr := os.ReadFile(stateFile)
-		if readErr != nil {
-			return fmt.Errorf("read --state %s: %w", stateFile, readErr)
-		}
-		if jsonErr := json.Unmarshal(raw, &initialState); jsonErr != nil {
-			return fmt.Errorf("parse --state %s: %w", stateFile, jsonErr)
-		}
-	}
-
-	stateJSON, err := json.Marshal(initialState)
+	outAbs, err := filepath.Abs(outPath)
 	if err != nil {
-		return fmt.Errorf("marshal state: %w", err)
+		return fmt.Errorf("ui: resolve --out %q: %w", outPath, err)
 	}
-	mockJS := fmt.Sprintf(mockCEFStateTemplate, string(stateJSON))
 
-	// HTTP handler を構築: mitiru_cef_state.js を intercept し、残りは assets/ から serve。
-	fileServer := http.FileServer(http.Dir(assetsDir))
-	mux := http.NewServeMux()
-	mux.HandleFunc(cefStateURLPath, func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/javascript; charset=utf-8")
-		w.Header().Set("Cache-Control", "no-store")
-		_, _ = w.Write([]byte(mockJS))
-	})
-	// engine runtime (mitiru_bind.js 等) を pin した engine から serve する。
-	// 上の cef_state.js route の方がより具体的なので、依然としてそちらが優先される。
-	mux.Handle("/mitiru_runtime/", http.StripPrefix("/mitiru_runtime/",
-		http.FileServer(http.Dir(runtimeDir))))
-	mux.Handle("/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// disk 上の本物の mitiru_cef_state.js を block する (上で既に処理済みだが、
-		// path の大文字小文字が異なる場合に備えた guard)。
-		if strings.EqualFold(r.URL.Path, cefStateURLPath) {
-			w.Header().Set("Content-Type", "application/javascript; charset=utf-8")
-			_, _ = w.Write([]byte(mockJS))
-			return
+	captureDir, err := os.MkdirTemp("", "mitiru_ui_")
+	if err != nil {
+		return fmt.Errorf("ui: create capture dir: %w", err)
+	}
+	defer os.RemoveAll(captureDir)
+
+	// host が撮った後に異常終了しても、撮れた絵は残してから終了の失敗を返す (絵と失敗の両方を見せる)。
+	runErr := runHeadlessCapture(result.Artifacts, captureDir, frames, scriptAbs)
+	shot, err := lastCapture(captureDir)
+	if err != nil {
+		if runErr != nil {
+			return runErr
 		}
-		fileServer.ServeHTTP(w, r)
-	}))
+		return err
+	}
+	if err := copyFile(shot, outAbs); err != nil {
+		return fmt.Errorf("ui: write %s: %w", outAbs, err)
+	}
+	fmt.Printf("UI capture → %s\n", outAbs)
+	if runErr != nil {
+		return fmt.Errorf("%w (the capture above was written before the host failed)", runErr)
+	}
+	return nil
+}
 
-	addr := fmt.Sprintf("127.0.0.1:%d", port)
-	url := fmt.Sprintf("http://%s%s", addr, sceneURL)
+func absOrEmpty(p string) (string, error) {
+	if p == "" {
+		return "", nil
+	}
+	return filepath.Abs(p)
+}
 
-	server := &http.Server{Addr: addr, Handler: mux}
+// runHeadlessCapture は host を窓なしの DX12 で frames だけ回し、最後のフレームを captureDir に撮らせる。
+// RmlUi は DX12 の描画先にしか重ならないので backend を固定する。host は 2 フレーム目に 1 枚目を撮り、
+// 以後 frames ごとに撮るので、frames 経った絵が撮れるまで 2 フレーム余分に回す。
+func runHeadlessCapture(art *build.Artifacts, captureDir string, frames int, inputScript string) error {
+	hostArgs := []string{art.DllRel, "--headless-3d", "--backend", "dx12",
+		"--capture-dir", captureDir, "--capture-every", strconv.Itoa(frames),
+		"--max-frames", strconv.Itoa(frames + 2)}
+	if inputScript != "" {
+		hostArgs = append(hostArgs, "--input-script", inputScript)
+	}
+	hostArgs = append(hostArgs, tomlHostArgs()...)
 
-	// browser を開く前に listener を起動し、page が ready な状態にする。
-	fmt.Printf("mitiru ui  →  %s\n", url)
-	fmt.Println("Ctrl+C to stop.")
-
-	errCh := make(chan error, 1)
-	go func() { errCh <- server.ListenAndServe() }()
-
-	// browser を開く (Windows)。
-	_ = exec.Command("cmd", "/c", "start", url).Start()
-
-	// Ctrl+C か server error まで block する。
-	sig := make(chan os.Signal, 1)
-	signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)
-	select {
-	case <-sig:
-		fmt.Println("\nStopping.")
-		return nil
-	case err := <-errCh:
-		if err != nil && err != http.ErrServerClosed {
-			return fmt.Errorf("server: %w", err)
+	c := exec.Command(art.HostExePath, hostArgs...)
+	c.Dir = art.DeployDir
+	c.Env = build.HostEnv()
+	c.Stdout = os.Stdout
+	c.Stderr = os.Stderr
+	if err := c.Run(); err != nil {
+		if exitErr, ok := err.(*exec.ExitError); ok {
+			return fmt.Errorf("ui: %s exited with status %d = %s",
+				filepath.Base(art.HostExePath), exitErr.ExitCode(), hostExitHint(exitErr.ExitCode()))
 		}
+		return fmt.Errorf("ui: run %s: %w", filepath.Base(art.HostExePath), err)
+	}
+	return nil
+}
+
+// checkUIDocument は UI 文書が無いときに、何を置けばよいかを言う。HTML の HUD だけが
+// 残っているプロジェクトには移し方を示す (撮っても UI が写らないため)。
+func checkUIDocument(projectRoot string) error {
+	if fileExists(filepath.Join(projectRoot, filepath.FromSlash(uiDocRel))) {
 		return nil
 	}
+	if fileExists(filepath.Join(projectRoot, filepath.FromSlash(legacySceneRel))) {
+		return fmt.Errorf("ui: %s is no longer read by the engine; rewrite it as %s "+
+			"(engine docs/UI_RMLUI.md explains how to move an HTML HUD)", legacySceneRel, uiDocRel)
+	}
+	return fmt.Errorf("ui: %s not found — the game has no UI layer to capture", uiDocRel)
+}
+
+func fileExists(p string) bool {
+	st, err := os.Stat(p)
+	return err == nil && !st.IsDir()
+}
+
+// lastCapture は host が --capture-dir に書いた連番 PNG の最後の 1 枚を返す。
+func lastCapture(dir string) (string, error) {
+	matches, err := filepath.Glob(filepath.Join(dir, "frame_*.png"))
+	if err != nil {
+		return "", fmt.Errorf("ui: list captures: %w", err)
+	}
+	if len(matches) == 0 {
+		return "", fmt.Errorf("ui: the host wrote no PNG to %s (did it exit before the first capture?)", dir)
+	}
+	sort.Strings(matches)
+	return matches[len(matches)-1], nil
 }

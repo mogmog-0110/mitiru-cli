@@ -119,18 +119,18 @@ func printSymptomTable() {
 	symptoms := []symptom{
 		{
 			what: "build が長い (初回 5〜10 分)",
-			why:  "初回 build はエンジン本体 (CEF 込み) を丸ごとコンパイルするため。2 回目以降は数秒〜数十秒",
+			why:  "初回 build はエンジン本体 (RmlUi と FreeType 込み) を丸ごとコンパイルするため。2 回目以降は数秒〜数十秒",
 			fix:  "初回は待つしかない。何度も長いなら CMake の並列度 (`cmake --build build -j N`) を確認する",
 		},
 		{
 			what: "DLL not found (host が起動直後に落ちる)",
-			why:  "`mitiru build` が失敗したか未実行で、host の隣に <game>.dll / SDL2.dll / libcef.dll が無い",
+			why:  "`mitiru build` が失敗したか未実行で、host の隣に <game>.dll / SDL2.dll が無い",
 			fix:  "`mitiru build` を通してから `mitiru run`。個別の欠落 DLL は上の Runtime checks を見る",
 		},
 		{
 			what: "窓が出ない (プロセスは起動するが画面が真っ黒/出ない)",
-			why:  "CEF の cold start に数秒かかる、または GPU backend の生成に失敗して NullDevice に fallback している",
-			fix:  "数秒待つ。stderr の `[mitiru] gfx.*.fallback` 行を確認し、GPU ドライバ/対応 backend を見直す",
+			why:  "GPU backend の生成に失敗して NullDevice に fallback している",
+			fix:  "stderr の `[mitiru] gfx.*.fallback` 行を確認し、GPU ドライバ/対応 backend を見直す",
 		},
 		{
 			what: "録画がずれる (`--record` の再生が元と違う動きをする)",
@@ -149,7 +149,7 @@ func printSymptomTable() {
 }
 
 // printRuntimeChecks は build 済み host の起動前提を診断する (R-02)。
-// host の隣に SDL2.dll / libcef.dll が居るか、Debug CRT が VS toolchain PATH で
+// host の隣に SDL2.dll と UI の RCSS が居るか、Debug CRT が VS toolchain PATH で
 // 解決できるかを表示する。host 未ビルドなら黙って skip。warn のみで fail させない。
 func printRuntimeChecks(projectRoot string) {
 	outDir := filepath.Join(projectRoot, "build", "out")
@@ -171,14 +171,20 @@ func printRuntimeChecks(projectRoot string) {
 	fmt.Println()
 	fmt.Printf("Runtime checks (%s):\n", hostExe)
 	hostDir := filepath.Dir(hostExe)
-	for _, dll := range []string{"SDL2.dll", "libcef.dll"} {
-		mark := "OK"
-		if _, err := os.Stat(filepath.Join(hostDir, dll)); err != nil {
-			mark = "MISSING"
+	// RCSS は host の隣か 1 つ上 (multi-config generator の Debug/ の親) にあれば RmlUi が見つける。
+	rcss := filepath.Join("assets", "ui", "base.rcss")
+	deps := []struct{ name, path, alt string }{
+		{"SDL2.dll", filepath.Join(hostDir, "SDL2.dll"), ""},
+		{"assets/ui/base.rcss", filepath.Join(hostDir, rcss), filepath.Join(filepath.Dir(hostDir), rcss)},
+	}
+	for _, d := range deps {
+		mark := "MISSING"
+		if fileExists(d.path) || (d.alt != "" && fileExists(d.alt)) {
+			mark = "OK"
 		}
-		fmt.Printf("  [%-7s] %s next to mitiru_host.exe\n", mark, dll)
+		fmt.Printf("  [%-7s] %s next to mitiru_host.exe\n", mark, d.name)
 		if mark == "MISSING" {
-			fmt.Println("            hint: re-run `mitiru build` (deploys runtime DLLs next to the host)")
+			fmt.Println("            hint: re-run `mitiru build` (deploys runtime files next to the host)")
 		}
 	}
 
