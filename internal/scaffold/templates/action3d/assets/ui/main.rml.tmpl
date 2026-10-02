@@ -1,0 +1,23 @@
+<rml>
+<head>
+<title>{{.ProjectName}}</title>
+<link type="text/rcss" href="mitiru:base.rcss"/>
+<style>
+  /* 3D の庭は C++ が描く。この文書は体力と敵の様子を重ねるだけ。値は C++ の hud.set("view.hp", ...) から届く */
+  body { pointer-events: none; color: #222831; }
+  .panel { position: absolute; left: 16px; top: 16px; padding: 8px 14px; border-radius: 8px;
+           background-color: #ffffffd9; font-size: 16px; }
+  .panel b { color: #e0405a; }
+  .state { font-size: 20px; font-weight: bold; margin-top: 4px; }
+  .hint { position: absolute; left: 16px; bottom: 14px; font-size: 15px; color: #ffffff;
+          font-effect: shadow(0px 1px #000000b3); }
+</style>
+</head>
+<body data-model="view">
+  <div class="panel">
+    <div>体力 <b>{{"{{ hp }}"}}</b>　敵 <b>{{"{{ enemy_hp }}"}}</b></div>
+    <div class="state">{{"{{ state }}"}}</div>
+  </div>
+  <div class="hint">矢印 / WASD: あるく　Space: 跳ぶ　J: 突く　Q / E: カメラを回す　Esc: おわる</div>
+</body>
+</rml>

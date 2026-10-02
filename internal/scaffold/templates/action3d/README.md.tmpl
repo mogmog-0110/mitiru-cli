@@ -1,0 +1,26 @@
+# {{.ProjectName}}
+
+MitiruEngine の 3D アクションのテンプレート。箱の庭をキャラが歩き、敵 1 体が見つけると追ってきて、構えてから突く。
+
+## 動かしかた
+
+```
+mitiru run
+```
+
+`mitiru watch` なら、`src/main.cpp` を保存するたびに DLL を作り直し、遊んでいる状態のまま差し替える。
+
+操作: 矢印 / WASD であるく、Space で跳ぶ、J で突く、Q / E でカメラを回す、R でやり直す、Esc でおわる。
+
+## 構成
+
+- `src/main.cpp`: ゲームのコード。キャラは `mitiru/action/` (当たり判定、キャラの移動、カメラ)、敵は `mitiru/gameai/` (視界、経路、攻撃の時間割) を使う
+- `assets/level.obj`: 地形。描画 (`drawModel`)、当たり判定 (`addMeshFile`)、敵の経路の 3 つが同じファイルを読む
+- `assets/ui/main.rml`: 体力と敵の様子を出す UI (RML / RCSS)
+- `mitiru.toml`: `[engine] features = ["nav"]` でナビメッシュの部品を DLL へ link し、`[nav] source` で `assets/level.navmesh` をビルドの時に焼く
+
+## 次に試すこと
+
+- `assets/level.obj` を Blender で作った地形に差し替える。ナビメッシュは次の `mitiru build` で焼き直される
+- 敵を配列にして数を増やす。同時に攻める数を絞るなら `mitiru/gameai/AttackTokens.hpp`
+- 敵の考えをビヘイビアツリー (`mitiru/gameai/BehaviorTreeJson.hpp`) に移す

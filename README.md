@@ -59,7 +59,7 @@ mitiru run
 
 ## テンプレート
 
-`mitiru new -t <template>` で選べる 5 種類。UI はどれも `assets/ui/main.rml` (RmlUi の RML / RCSS) で、C++ の `hud.set("view.x", ...)` が `{{ x }}` に届く。機能の重なりは無く、それぞれ違う API の入口を見せる出発点です。
+`mitiru new -t <template>` で選べる 6 種類。UI はどれも `assets/ui/main.rml` (RmlUi の RML / RCSS) で、C++ の `hud.set("view.x", ...)` が `{{ x }}` に届く。機能の重なりは無く、それぞれ違う API の入口を見せる出発点です。
 
 | テンプレート | 内容 | 使う API | アセット |
 | --- | --- | --- | --- |
@@ -68,8 +68,9 @@ mitiru run
 | `clicker` | クリックでカウンタを増やす最小構成 | `MITIRU_GAME`、`in.mousePressed()`、`hud.set` | なし（`s.fillCircle` のみ） |
 | `shooter` | 縦スクロール STG。固定タイムラインの敵出現、パワーアップ、ボス戦 | `MITIRU_GAME`、`Pool<T,N>`、`MsgQueue` | なし（場は C++ の図形、HUD は RML） |
 | `objects` | クラスと仮想関数で書く場面 + flat POD の進行データ | `MITIRU_GAME_OBJECTS`、`hud.save` / `hud.load` | なし |
+| `action3d` | 3D の庭をキャラが歩き、敵 1 体が見つけると経路をたどって追ってきて、構えてから突く | `mitiru/action/` (キャラ、カメラ、当たり判定)、`mitiru/gameai/` (視界、経路、攻撃の時間割) | `assets/level.obj` (描画・当たり判定・ナビメッシュが同じファイルを読む) |
 
-`objects` 以外は `Game.hpp` の `MITIRU_GAME` マクロ (`struct { update(Input,Hud,dt); draw(Screen&); }`) から始まる最小 API 経由。
+`action3d` は engine 0.35.0 以降で、`[engine] features = ["nav"]` と `[nav] source` が最初から入っている。`objects` 以外は `Game.hpp` の `MITIRU_GAME` マクロ (`struct { update(Input,Hud,dt); draw(Screen&); }`) から始まる最小 API 経由。
 
 ## プロジェクト構成
 
@@ -117,6 +118,29 @@ backend = "auto"        # auto / dx11 / dx12 / vulkan / opengl / webgl2 / null
 `mitiru build` はこの TOML を読み込み、設定を C++ ヘッダへ埋め込みます。`src/main.cpp` で `mitiru::EngineConfig` の `title`、`windowWidth`、`windowHeight` を設定する必要はありません。
 
 古い `mitiru.toml` の `[cef]` は読み捨てます (警告を 1 行出す)。UI は DLL の隣の `assets/ui/main.rml` があれば host が自動で重ねます。
+
+### engine の追加ライブラリ (`[engine]` と `[nav]`)
+
+生成される CMakeLists.txt は、ゲーム DLL に engine 本体 (`mitiru`) だけを link する。ナビメッシュのように engine 本体に入っていない部品を使うときは、`[engine] features` に名前を書く。
+
+```toml
+[engine]
+features = ["nav"]
+
+[nav]
+source = "assets/level.obj"         # .obj / .gltf / .glb
+# args = ["--radius", "0.4"]        # mitiru_navbake の option
+```
+
+| 名前 | DLL に足すもの | 使う場面 |
+| --- | --- | --- |
+| `nav` | `mitiru_nav` (Detour) | 焼いた `.navmesh` を読んで経路を引く。群衆 (`NavCrowd`) と動く障害物もここに入る |
+| `navbake` | `mitiru_nav_bake` (Recast、`nav` を含む) | DLL の中でメッシュからナビメッシュを焼く |
+| `jolt` | なし (engine が Jolt 付きなら本体に入っている) | Jolt を使う DLL で、engine が Jolt 付きかを configure の時点で確かめる |
+
+知らない名前を書くと `mitiru build` が使える名前の一覧を出して止まる。`crowd` や `fbx` のように間違えやすい名前には、代わりの書き方も出す。FBX の取り込みは engine 本体に入っているので、名前を書かなくても使える。engine がその target を持っていない (取得した engine に submodule が無い) ときは、CMake の configure が直し方を出して止まる。
+
+`[nav] source` を書くと、ビルドの一工程で engine の `mitiru_navbake` がそのメッシュを `.navmesh` に焼き、DLL の隣の同じ相対位置に置く。`assets/level.obj` なら `<DLL のフォルダ>/assets/level.navmesh` になり、ゲームは `"<プロジェクト名>/assets/level.navmesh"` を開く。焼き直すのはメッシュが変わったときだけ。`.navmesh` を読むには Detour が要るので、`[engine] features` に `nav` か `navbake` が無いとエラーにする。
 
 ### 自前の CMakeLists.txt を持つプロジェクト
 

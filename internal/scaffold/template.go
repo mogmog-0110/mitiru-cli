@@ -28,6 +28,11 @@ type Data struct {
 	// <UPPER>_DLL_EXPORT` のような macro guard の接頭辞に使う。
 	UpperIdent string
 
+	// TargetName は mitiru build が作る DLL の名前 (build.TargetName と同じ規則)。
+	// DLL は mitiru_host.exe の隣の <TargetName>/ に置かれるので、ゲームがファイルを
+	// 開くときのパスの頭になる。
+	TargetName string
+
 	// EngineVersion は scaffold したプロジェクトが mitiru.toml で pin する
 	// engine release (例 "0.5.0")。defaultEngineVersion を source とし、新規
 	// プロジェクトがテンプレートの要求より古い engine に当たらないようにする。

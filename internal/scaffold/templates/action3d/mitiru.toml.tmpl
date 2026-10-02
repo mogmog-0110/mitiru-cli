@@ -1,0 +1,27 @@
+[project]
+name = "{{.ProjectName}}"
+version = "0.1.0"
+engine = "{{.EngineVersion}}"
+
+[window]
+title = "{{.ProjectName}}"
+width = 1280
+height = 720
+vsync = true
+
+[font]
+atlas = "none"
+
+[build]
+backend = "auto"
+
+[engine]
+# engine 本体に入っていない部品のうち、ゲーム DLL へ link するもの。
+# nav = ナビメッシュを読んで経路を引く (NavCrowd も入る) / navbake = DLL の中でメッシュからナビメッシュを焼く /
+# jolt = Jolt Physics (engine が Jolt 付きで取得されているかを configure で確かめる)
+features = ["nav"]
+
+[nav]
+# ビルドの一工程で、このメッシュから assets/level.navmesh を焼いて DLL の隣に置く
+source = "assets/level.obj"
+# args = ["--radius", "0.4"]   # mitiru_navbake の option (半径・高さ・段差など)

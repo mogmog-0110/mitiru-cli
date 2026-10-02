@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"regexp"
 
+	"github.com/mogmog-0110/mitiru-cli/internal/build"
 	"github.com/mogmog-0110/mitiru-cli/internal/scaffold"
 	"github.com/spf13/cobra"
 )
@@ -28,7 +29,8 @@ mitiru_host launcher.
 
 Templates: welcome (C++ art + RML/RCSS UI, the default), hello (minimal),
 clicker (incremental loop), shooter (vertical STG),
-objects (classes + virtual components via MITIRU_GAME_OBJECTS; engine >= 0.33).
+objects (classes + virtual components via MITIRU_GAME_OBJECTS; engine >= 0.33),
+action3d (3D character + camera rig + one navmesh enemy; engine >= 0.35).
 
 Example:
   mitiru new myGame                create ./myGame/ from the 'welcome' template
@@ -41,7 +43,7 @@ Example:
 	}
 
 	cmd.Flags().StringVarP(&newTemplateName, "template", "t", "welcome",
-		"template to use: welcome | hello | clicker | shooter | objects")
+		"template to use: welcome | hello | clicker | shooter | objects | action3d")
 	cmd.Flags().BoolVar(&newForce, "force", false,
 		"overwrite the target directory if it already exists")
 
@@ -70,6 +72,7 @@ func runNew(name string) error {
 		ProjectName:   name,
 		ProjectIdent:  toLowerSnake(name),
 		UpperIdent:    toUpperSnake(name),
+		TargetName:    build.TargetName(name),
 		EngineVersion: defaultEngineVersion,
 	}
 

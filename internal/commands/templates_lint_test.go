@@ -11,11 +11,11 @@ import (
 // `mitiru new` の全テンプレートが RmlUi の UI 文書を出し、HTML の HUD を出さず、
 // main.rml が引く変数をすべて C++ が hud.set で送っていること (mitiru lint が 0 件)。
 func TestTemplatesScaffoldLintCleanRML(t *testing.T) {
-	for _, name := range []string{"welcome", "hello", "clicker", "shooter", "objects"} {
+	for _, name := range []string{"welcome", "hello", "clicker", "shooter", "objects", "action3d"} {
 		t.Run(name, func(t *testing.T) {
 			dir := t.TempDir()
 			data := scaffold.Data{ProjectName: "lint-game", ProjectIdent: "lint_game",
-				UpperIdent: "LINT_GAME", EngineVersion: defaultEngineVersion}
+				UpperIdent: "LINT_GAME", TargetName: "lint_game", EngineVersion: defaultEngineVersion}
 			if err := scaffold.Expand(name, dir, data); err != nil {
 				t.Fatalf("expand: %v", err)
 			}

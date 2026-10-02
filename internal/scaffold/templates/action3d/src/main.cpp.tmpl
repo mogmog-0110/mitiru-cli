@@ -1,0 +1,150 @@
+// {{.ProjectName}} — 3D アクションの出発点。箱の庭を歩き、敵を 1 体倒す。
+// 地形は assets/level.obj 1 つで、描画・当たり判定・敵の経路 (ナビメッシュ) が同じファイルを読む。
+// ナビメッシュ (assets/level.navmesh) は mitiru build が焼く (mitiru.toml の [nav] source)。
+// 表示する数字は RML / RCSS (assets/ui/main.rml)。スクリプトは書かない。
+
+#include <mitiru/module/Game.hpp>
+#include <mitiru/action/CameraRig.hpp>
+#include <mitiru/action/CharacterController.hpp>
+#include <mitiru/action/CollisionLevelLoad.hpp>
+#include <mitiru/gameai/AttackTimeline.hpp>
+#include <mitiru/gameai/NavPath.hpp>
+#include <mitiru/gameai/Perception.hpp>
+#include <mitiru/nav/NavMesh.hpp>
+
+using namespace mitiru;
+namespace act = mitiru::action;
+namespace ai  = mitiru::gameai;
+
+// パスは mitiru_host.exe の隣からの相対 (DLL は {{.TargetName}}/ に置かれる)
+constexpr const char* kLevelPath = "{{.TargetName}}/assets/level.obj";
+constexpr const char* kNavPath   = "{{.TargetName}}/assets/level.navmesh";
+
+constexpr act::CharacterConfig kBody{};
+constexpr act::CameraRigConfig kCam{};
+constexpr ai::SightConfig      kSight{12.0f, 60.0f, 1.5f, act::kAllLayers};
+constexpr ai::AttackFrames     kSwing{30, 6, 30, 0};   // 構え 0.5 秒 (赤く光る)、突き、硬直
+constexpr act::Vec3            kEnemyHome{-6.0f, 0.0f, 5.0f};
+constexpr float kRunSpeed = 5.0f, kJumpSpeed = 8.0f, kReach = 1.8f;
+
+// 地形とナビメッシュは遊んでいる間に変わらないので、ゲームの状態に入れず DLL を読むたびに作る
+struct Level { act::CollisionLevel collision; nav::NavMesh nav; };
+Level& level()
+{
+    static Level L;
+    static const bool built = [] {
+        act::CollisionLevelBuilder b;
+        physics3d::MeshColliderLibrary meshes;
+        act::addMeshFile(b, meshes, kLevelPath, 0);
+        L.collision = b.build();
+        L.nav.loadFile(kNavPath);   // 無ければ敵はその場で待つ
+        return true;
+    }();
+    (void)built;
+    return L;
+}
+
+// 状態は数値だけ (まるごとコピーできる形)。巻き戻しと記録・再生がそのまま効く
+struct {{.ProjectIdent}}Game
+{
+    act::CharacterState hero{}, enemy{};
+    act::CameraRigState cam{};
+    act::CameraView     view{};
+    act::Vec3           facing{0, 0, 1}, enemyFacing{1, 0, 0};
+    ai::PathFollower<16> path{};
+    ai::AttackTimeline  swing{};
+    std::uint32_t       frame = 0, heroHitUntil = 0, enemyHitUntil = 0;
+    std::int32_t        heroHp = 5, enemyHp = 3;
+    std::uint8_t        enemySees = 0, pad[3]{};
+
+    void init()
+    {
+        (void)level();
+        *this = {{.ProjectIdent}}Game{};
+        hero.position  = {0.0f, kBody.skinWidth, -6.0f};
+        enemy.position = kEnemyHome + act::Vec3{0.0f, kBody.skinWidth, 0.0f};
+    }
+
+    void update(Input in, Hud hud, float dt)
+    {
+        if (in.cancelPressed()) { hud.quit(); }
+        if (in.pressed(Key::R)) { init(); }
+        ++frame;
+        const act::CollisionWorld world(&level().collision);
+
+        // あるく向きはカメラから見た前後左右 (move の y は下が正)
+        const Stick     m   = in.move();
+        const act::Vec3 fwd = act::cameraRigForward(cam.yaw, 0.0f), right = act::cameraRigRight(fwd);
+        const act::Vec3 run = (right * m.x - fwd * m.y) * (heroHp > 0 ? kRunSpeed : 0.0f);
+        if (act::lengthSq(run) > 0.01f) { facing = act::normalizeOr(run, facing); }
+        const bool jump = hero.grounded != 0 && in.pressed(Key::Space);
+        act::stepCharacter(hero, kBody, world, {run, jump ? kJumpSpeed : 0.0f}, dt);
+        if (in.pressed(Key::J) && enemyHp > 0 && ai::distanceXZ(hero.position, enemy.position) < kReach) { --enemyHp; enemyHitUntil = frame + 10; }
+
+        if (enemyHp > 0) { thinkEnemy(world, dt); }
+
+        act::CameraRigInput ci;
+        ci.follow = hero.position;
+        ci.orbitX = (in.down(Key::E) ? 1.0f : 0.0f) - (in.down(Key::Q) ? 1.0f : 0.0f) + in.rightStick().x;
+        ci.orbitY = in.rightStick().y;
+        view      = act::updateCameraRig(cam, kCam, ci, world, dt);
+
+        hud.set("view.hp", heroHp);
+        hud.set("view.enemy_hp", enemyHp);
+        hud.set("view.state", heroHp <= 0 ? "やられた (R でやり直す)" : enemyHp <= 0 ? "勝った (R でもう一度)"
+                            : swing.running != 0 ? "敵が構えている" : enemySees != 0 ? "見つかった" : "見回り中");
+    }
+
+    // 見えたら経路で追い、近づいたら構えてから突く。見失ったら持ち場へ戻る
+    void thinkEnemy(const act::CollisionWorld& world, float dt)
+    {
+        const act::Vec3 eye = enemy.position + act::Vec3{0, 1.6f, 0};
+        enemySees = ai::checkSight(world, eye, enemyFacing, hero.position + act::Vec3{0, 1.2f, 0}, kSight).visible;
+        act::Vec3 want{};
+        if (swing.running != 0)
+        {
+            const ai::AttackPhase p = swing.phase(frame, kSwing);
+            if (swing.entered(frame, kSwing, ai::AttackPhase::Active) && ai::distanceXZ(hero.position, enemy.position) < kReach + 0.4f && heroHp > 0)
+            {
+                --heroHp;
+                heroHitUntil = frame + 12;
+            }
+            if (p == ai::AttackPhase::Done) { swing.cancel(); }
+        }
+        else if (enemySees != 0 && heroHp > 0 && ai::distanceXZ(hero.position, enemy.position) < kReach) { swing.begin(1, frame); }
+        else
+        {
+            const act::Vec3 goal = (enemySees != 0 && heroHp > 0) ? hero.position : kEnemyHome;
+            if (path.shouldRepath(goal, frame, 1.0f, 60)) { ai::requestPath(level().nav, path, enemy.position, goal, frame); }
+            want = ai::followPath(path, enemy.position, {});
+        }
+        act::stepCharacter(enemy, kBody, world, {want, 0.0f}, dt);
+        const act::Vec3 look = enemySees != 0 ? hero.position - enemy.position : want;
+        const act::Vec3 flat{look.x, 0.0f, look.z};
+        if (act::lengthSq(flat) > 0.01f) { enemyFacing = act::normalizeOr(flat, enemyFacing); }
+    }
+
+    void drawBody(Screen& s, const act::Vec3& p, const act::Vec3& face, Color c) const
+    {
+        s.drawMesh("cube", p + act::Vec3{0, 0.8f, 0}, {0.6f, 1.6f, 0.6f}, {0, 0, 0}, c);
+        s.drawMesh("cube", p + act::Vec3{0, 1.25f, 0} + face * 0.32f, {0.2f, 0.2f, 0.2f}, {0, 0, 0}, hex(0x1D1D1F));   // 顔の向き
+    }
+
+    void draw(Screen& s) const
+    {
+        s.clear(hex(0xEAF1F8));
+        s.camera3D(view.eye, view.target, view.up, view.fovDeg, 0.1f, 80.0f);
+        s.light3D({-0.5f, -1.0f, -0.35f}, hex(0xFFFBF2));
+        s.skybox3D(hex(0x63A5E8), hex(0xEAF3FB));
+        s.drawModel(kLevelPath, {0.0f, 0.0f, 0.0f});
+        drawBody(s, hero.position, facing, frame < heroHitUntil ? hex(0xFF3B30) : hex(0xFF9500));
+        if (enemyHp > 0)
+        {
+            const bool windup = swing.phase(frame, kSwing) == ai::AttackPhase::Windup;
+            drawBody(s, enemy.position, enemyFacing, frame < enemyHitUntil ? hex(0xFFFFFF) : windup ? hex(0xE0405A) : hex(0x4C73A0));
+        }
+    }
+};
+
+MITIRU_ASSERT_NO_PADDING({{.ProjectIdent}}Game);
+MITIRU_GAME({{.ProjectIdent}}Game)
