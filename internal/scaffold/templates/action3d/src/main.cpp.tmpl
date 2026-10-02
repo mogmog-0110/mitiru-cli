@@ -29,7 +29,7 @@ constexpr float kRunSpeed = 5.0f, kJumpSpeed = 8.0f, kReach = 1.8f;
 
 // 地形とナビメッシュは遊んでいる間に変わらないので、ゲームの状態に入れず DLL を読むたびに作る
 struct Level { act::CollisionLevel collision; nav::NavMesh nav; };
-Level& level()
+Level& stage()
 {
     static Level L;
     static const bool built = [] {
@@ -59,7 +59,7 @@ struct {{.ProjectIdent}}Game
 
     void init()
     {
-        (void)level();
+        (void)stage();
         *this = {{.ProjectIdent}}Game{};
         hero.position  = {0.0f, kBody.skinWidth, -6.0f};
         enemy.position = kEnemyHome + act::Vec3{0.0f, kBody.skinWidth, 0.0f};
@@ -70,7 +70,7 @@ struct {{.ProjectIdent}}Game
         if (in.cancelPressed()) { hud.quit(); }
         if (in.pressed(Key::R)) { init(); }
         ++frame;
-        const act::CollisionWorld world(&level().collision);
+        const act::CollisionWorld world(&stage().collision);
 
         // あるく向きはカメラから見た前後左右 (move の y は下が正)
         const Stick     m   = in.move();
@@ -115,7 +115,7 @@ struct {{.ProjectIdent}}Game
         else
         {
             const act::Vec3 goal = (enemySees != 0 && heroHp > 0) ? hero.position : kEnemyHome;
-            if (path.shouldRepath(goal, frame, 1.0f, 60)) { ai::requestPath(level().nav, path, enemy.position, goal, frame); }
+            if (path.shouldRepath(goal, frame, 1.0f, 60)) { ai::requestPath(stage().nav, path, enemy.position, goal, frame); }
             want = ai::followPath(path, enemy.position, {});
         }
         act::stepCharacter(enemy, kBody, world, {want, 0.0f}, dt);
