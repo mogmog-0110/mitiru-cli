@@ -183,9 +183,11 @@ if(WIN32)
 endif()
 {{if .LegacyCEF}}mitiru_add_cef_game(mitiru_host)
 {{end}}
-# パッドの DLL を host の隣へ deploy する。engine 0.35 以降は SDL3 (mitiru_deploy_sdl3 を engine が出す)、
-# それより前は SDL2。SDL3.dll は host が遅延読み込みするので、無くても host は起動し、パッドだけ止まる。
-if(COMMAND mitiru_deploy_sdl3)
+# host が実行時に読む DLL を host の隣へ deploy する。engine に mitiru_deploy_runtime があれば、何を置くか
+# (パッドの SDL3、ONNX Runtime と DirectML、DXC、Steam) は engine が決める。古い engine は SDL3 か SDL2 だけ。
+if(COMMAND mitiru_deploy_runtime)
+    mitiru_deploy_runtime(mitiru_host)
+elseif(COMMAND mitiru_deploy_sdl3)
     mitiru_deploy_sdl3(mitiru_host)
 elseif(WIN32 AND TARGET SDL2::SDL2)
     add_custom_command(TARGET mitiru_host POST_BUILD
@@ -205,6 +207,8 @@ endif()
     # engine には link しないが、純ヘッダ (platform/Utf8Args.hpp) だけ使う。
     target_include_directories(mitiru_start PRIVATE "{{.EngineRoot}}/include")
     target_link_options(mitiru_start PRIVATE /SUBSYSTEM:WINDOWS)
+    # data/ の外に単独で置くので、VC ランタイムの DLL を要らない形 (静的 CRT) にする
+    set_property(TARGET mitiru_start PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
     if(MSVC)
         target_compile_options(mitiru_start PRIVATE /utf-8)
     endif()
@@ -222,6 +226,8 @@ endif()
     target_compile_features(mitiru_selfrun PRIVATE cxx_std_20)
     target_include_directories(mitiru_selfrun PRIVATE "{{.EngineRoot}}/include")
     target_link_options(mitiru_selfrun PRIVATE /SUBSYSTEM:WINDOWS)
+    # 配る exe そのもの。VC ランタイムの無い PC でも展開まで進める
+    set_property(TARGET mitiru_selfrun PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
     if(MSVC)
         target_compile_options(mitiru_selfrun PRIVATE /utf-8)
     endif()

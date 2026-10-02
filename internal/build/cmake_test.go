@@ -75,7 +75,8 @@ func TestConfigure_TemplateDeploysGamepadDll(t *testing.T) {
 	cmake := generatedCMake(t, projectRoot, engineRoot)
 
 	for _, want := range []string{
-		"if(COMMAND mitiru_deploy_sdl3)",
+		"if(COMMAND mitiru_deploy_runtime)\n    mitiru_deploy_runtime(mitiru_host)",
+		"elseif(COMMAND mitiru_deploy_sdl3)",
 		"mitiru_deploy_sdl3(mitiru_host)",
 		"elseif(WIN32 AND TARGET SDL2::SDL2)",
 		"$<TARGET_FILE:SDL2::SDL2>",
@@ -137,5 +138,26 @@ func TestConfigure_TemplateIncludesPwshFixBeforeProject(t *testing.T) {
 	if idxInclude > idxProject {
 		t.Errorf("VcpkgPwshFix.cmake include must precede project() (#56): include@%d project@%d",
 			idxInclude, idxProject)
+	}
+}
+
+// 配布物のトップに単独で置くランチャと、単一 exe の器は VC ランタイムの DLL を読まない (静的 CRT)。
+func TestConfigure_LaunchersUseStaticCRT(t *testing.T) {
+	projectRoot, engineRoot := fakeProject(t)
+	for _, app := range []string{"mitiru_start", "mitiru_selfrun", "mitiru_selfpack"} {
+		p := filepath.Join(engineRoot, "apps", app, "main.cpp")
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, []byte("// app\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	cmake := generatedCMake(t, projectRoot, engineRoot)
+	for _, target := range []string{"mitiru_start", "mitiru_selfrun"} {
+		want := "set_property(TARGET " + target + ` PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")`
+		if !strings.Contains(cmake, want) {
+			t.Errorf("generated CMakeLists.txt missing %q", want)
+		}
 	}
 }
