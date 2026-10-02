@@ -35,7 +35,7 @@ var ninjaProgressLineRe = regexp.MustCompile(`^\[(\d+)/(\d+)\]\s+(.*)$`)
 type buildProgressFilter struct {
 	underlying io.Writer
 	// userDirMarker は progress 行の rest 部分に含まれれば "user" 側とみなす
-	// 目印 (通常は sanitiseTargetName されたターゲット名の .dir)。
+	// 目印 (通常は TargetName されたターゲット名の .dir)。
 	userDirMarker string
 
 	buf            bytes.Buffer

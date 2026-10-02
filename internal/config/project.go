@@ -23,6 +23,8 @@ type ProjectConfig struct {
 	Font    FontSection    `toml:"font"`
 	Lofi    LofiSection    `toml:"lofi"`
 	Dist    DistSection    `toml:"dist"`
+	Engine  EngineSection  `toml:"engine"`
+	Nav     NavSection     `toml:"nav"`
 }
 
 type ProjectSection struct {
@@ -167,7 +169,7 @@ func (c *ProjectConfig) validate(path string) error {
 	if c.Window.Width < 0 || c.Window.Height < 0 {
 		return fmt.Errorf("%s: window.width/height must not be negative", path)
 	}
-	return nil
+	return c.validateEngine(path)
 }
 
 func (c *ProjectConfig) applyDefaults() {

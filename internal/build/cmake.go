@@ -10,12 +10,14 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"path"
 	"path/filepath"
 	"regexp"
 	"runtime"
 	"strings"
 	"text/template"
 
+	"github.com/mogmog-0110/mitiru-cli/internal/config"
 	"github.com/mogmog-0110/mitiru-cli/internal/engine"
 )
 
@@ -51,6 +53,15 @@ type Options struct {
 	// exe だけを建てる。
 	Target string
 
+	// Features は mitiru.toml の [engine] features。名前は config.ResolveFeatures が引く。
+	Features []string
+
+	// NavSource は [nav] source (project root からの相対)。空ならナビメッシュを焼かない。
+	NavSource string
+
+	// NavArgs は [nav] args。mitiru_navbake にそのまま渡す。
+	NavArgs []string
+
 	// Stdout は progress と cmake の出力を受け取る。
 	Stdout io.Writer
 
@@ -77,6 +88,19 @@ type templateData struct {
 	// LegacyCEF は pin した engine が CEF 世代 (0.33 以前) のとき true。CEF の deploy と
 	// HTML 用の JS の同梱はその世代だけに出す。
 	LegacyCEF bool
+	// Features は [engine] features を引いたもの。DLL に link する target と、無いときの直し方。
+	Features []config.EngineFeature
+	// Nav は [nav] source があるときだけ非 nil。
+	Nav *navBake
+}
+
+// navBake はビルドの一工程でナビメッシュを焼くための値。
+type navBake struct {
+	SourceAbs string // レベルのメッシュ
+	OutRel    string // 焼いた .navmesh の、DLL の隣からの相対
+	OutDirRel string // OutRel の親 (make_directory 用)。DLL の隣そのものなら "."
+	Args      string // mitiru_navbake への追加 option (CMake の引用済み、先頭に空白)
+	ToolAbs   string // mitiru_navbake のソース。無い engine では空文字
 }
 
 // CMake template — project ごとに 2 つの target を生成する:
@@ -128,7 +152,18 @@ target_link_libraries({{.TargetName}} PRIVATE Mitiru::mitiru)
 if(MSVC)
     target_compile_options({{.TargetName}} PRIVATE /bigobj)
 endif()
-
+{{range .Features}}
+# [engine] features = "{{.Name}}"
+if(TARGET {{.Target}})
+{{- if .Link}}
+    target_link_libraries({{$.TargetName}} PRIVATE {{.Target}})
+{{- end}}
+else()
+    message(FATAL_ERROR "mitiru.toml: [engine] features has \"{{.Name}}\", but this engine has no CMake target {{.Target}}.\n"
+        "  {{.Missing}}\n"
+        "  engine: ${MITIRU_ENGINE_ROOT}")
+endif()
+{{end}}
 # ── Host launcher (compiled from engine reference impl) ───────────
 add_executable(mitiru_host "{{.HostMainAbs}}")
 target_link_libraries(mitiru_host PRIVATE Mitiru::mitiru)
@@ -265,6 +300,35 @@ if(EXISTS "${MITIRU_PROJECT_ROOT}/assets")
         COMMENT "mitiru-cli: copying assets/ next to {{.TargetName}}.dll")
 endif()
 
+{{with .Nav}}# ── ナビメッシュを焼く ([nav] source) ─────────────────────────────
+# レベルのメッシュを mitiru_navbake が .navmesh にして、DLL の隣の同じ相対位置へ置く。
+# 描画と焼きが同じファイルを読むので、見えている壁と避ける壁はずれない。
+if(NOT TARGET mitiru_nav_bake)
+    message(FATAL_ERROR "mitiru.toml: [nav] source needs Recast (CMake target mitiru_nav_bake), but this engine has none.\n"
+        "  the engine was fetched without external/recastnavigation (git submodule update --init external/recastnavigation)")
+endif()
+{{if .ToolAbs}}add_executable(mitiru_navbake "{{.ToolAbs}}")
+target_link_libraries(mitiru_navbake PRIVATE Mitiru::mitiru mitiru_nav_bake)
+if(MSVC)
+    target_compile_options(mitiru_navbake PRIVATE /bigobj)
+endif()
+set_target_properties(mitiru_navbake PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "$<TARGET_FILE_DIR:mitiru_host>")
+# 焼いた先は DLL の出力先 (生成式) なので OUTPUT にできない。焼けた印を構成ごとに置く。
+set(_nav_stamp "${CMAKE_CURRENT_BINARY_DIR}/{{$.TargetName}}_navbake_$<CONFIG>.stamp")
+add_custom_command(
+    OUTPUT  "${_nav_stamp}"
+    COMMAND ${CMAKE_COMMAND} -E make_directory "${_game_runtime_dir}/{{.OutDirRel}}"
+    COMMAND mitiru_navbake "{{.SourceAbs}}" -o "${_game_runtime_dir}/{{.OutRel}}"{{.Args}}
+    COMMAND ${CMAKE_COMMAND} -E touch "${_nav_stamp}"
+    DEPENDS mitiru_navbake "{{.SourceAbs}}"
+    VERBATIM
+    COMMENT "mitiru-cli: baking {{.OutRel}}")
+add_custom_target({{$.TargetName}}_navbake ALL DEPENDS "${_nav_stamp}")
+add_dependencies({{$.TargetName}} {{$.TargetName}}_navbake)
+{{else}}message(FATAL_ERROR "mitiru.toml: [nav] source needs apps/mitiru_navbake, which this engine does not have.\n"
+    "  set project.engine to a newer version (mitiru update)")
+{{end}}{{end}}
 {{if .LegacyCEF}}# CEF 世代の engine だけ: HTML の binder (mitiru_runtime/*.js) を assets/ の隣へ置く。
 if(EXISTS "${MITIRU_ENGINE_ROOT}/web/mitiru_runtime")
     add_custom_command(TARGET {{.TargetName}} POST_BUILD
@@ -291,6 +355,42 @@ func resolveEngineSource(engineRoot, dir, file string) string {
 		}
 	}
 	return ""
+}
+
+// resolveNavBake は [nav] source を生成 CMake に渡す値にする。source が無ければ nil。
+// ファイルが無いことはここで止める (ninja の「missing and no known rule」より先に分かるように)。
+func resolveNavBake(opts Options) (*navBake, error) {
+	if opts.NavSource == "" {
+		return nil, nil
+	}
+	src := filepath.Join(opts.ProjectRoot, filepath.FromSlash(opts.NavSource))
+	if _, err := os.Stat(src); err != nil {
+		return nil, fmt.Errorf("[nav] source: level mesh not found: %w", err)
+	}
+	outRel := config.NavMeshPathFor(opts.NavSource)
+	outDir := path.Dir(outRel)
+	tool := ""
+	if p := resolveEngineSource(opts.EngineRoot, "mitiru_navbake", "main.cpp"); p != "" {
+		tool = toCMakePath(p)
+	}
+	var args strings.Builder
+	for _, a := range opts.NavArgs {
+		args.WriteString(" ")
+		args.WriteString(cmakeQuote(a))
+	}
+	return &navBake{
+		SourceAbs: toCMakePath(src),
+		OutRel:    outRel,
+		OutDirRel: outDir,
+		Args:      args.String(),
+		ToolAbs:   tool,
+	}, nil
+}
+
+// cmakeQuote は 1 つの引数を CMake の引用付き引数にする。$ も逃がし、変数として展開させない。
+func cmakeQuote(s string) string {
+	r := strings.NewReplacer(`\`, `\\`, `"`, `\"`, `$`, `\$`)
+	return `"` + r.Replace(s) + `"`
 }
 
 // BuildDirs は projectRoot に対する build artefact の標準 layout を算出する:
@@ -352,9 +452,18 @@ func Configure(opts Options) (cmakeSrcDir, cmakeOutDir string, err error) {
 		selfpackMainAbs = toCMakePath(p)
 	}
 
+	features, err := config.ResolveFeatures(opts.Features)
+	if err != nil {
+		return "", "", err
+	}
+	nav, err := resolveNavBake(opts)
+	if err != nil {
+		return "", "", err
+	}
+
 	data := templateData{
 		ProjectName:     opts.ProjectName,
-		TargetName:      sanitiseTargetName(opts.ProjectName),
+		TargetName:      TargetName(opts.ProjectName),
 		EngineRoot:      toCMakePath(opts.EngineRoot),
 		ProjectRoot:     toCMakePath(opts.ProjectRoot),
 		MainCppAbs:      toCMakePath(mainCpp),
@@ -363,6 +472,8 @@ func Configure(opts Options) (cmakeSrcDir, cmakeOutDir string, err error) {
 		SelfrunMainAbs:  selfrunMainAbs,
 		SelfpackMainAbs: selfpackMainAbs,
 		LegacyCEF:       engine.UsesLegacyCEF(opts.EngineRoot),
+		Features:        features,
+		Nav:             nav,
 	}
 
 	// engine 源の切り替わりは全ターゲットの作り直しになる。黙って始めると
@@ -486,7 +597,7 @@ func Run(opts Options) (*Artifacts, error) {
 		return nil, err
 	}
 
-	targetName := sanitiseTargetName(opts.ProjectName)
+	targetName := TargetName(opts.ProjectName)
 
 	// dry-run mode では実際には何も build されていない。caller が予定の
 	// launch command を log できるよう placeholder の path を返す。
@@ -686,7 +797,7 @@ func runCMakeBuild(vcvars, outDir string, opts Options) error {
 	}
 
 	filtered := opts
-	pf := newBuildProgressFilter(opts.Stdout, sanitiseTargetName(opts.ProjectName))
+	pf := newBuildProgressFilter(opts.Stdout, TargetName(opts.ProjectName))
 	filtered.Stdout = pf
 	buildErr := runBatchScript("mitiru_build", script, filtered)
 	if finishErr := pf.Finish(); finishErr != nil && buildErr == nil {
@@ -769,9 +880,9 @@ func toCMakePath(p string) string {
 	return filepath.ToSlash(p)
 }
 
-// sanitiseTargetName は user 向けの project 名を CMake-safe な target
+// TargetName は user 向けの project 名を CMake-safe な target
 // identifier に変換する。[A-Za-z0-9_] 以外を '_' に置き換える。
-func sanitiseTargetName(name string) string {
+func TargetName(name string) string {
 	out := make([]rune, 0, len(name))
 	for _, r := range name {
 		switch {
