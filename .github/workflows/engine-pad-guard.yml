@@ -43,6 +43,12 @@ defaults:
 jobs:
   pad-host-build:
     runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # 既定のテンプレートと、エンジンの任意の部品 (ナビメッシュなど) を使う action3d の両方を作る。
+        # テンプレートがエンジンの名前とぶつかる、焼く手順が壊れる、といった退行もここで拾う。
+        template: ['', 'action3d']
     steps:
       - uses: actions/checkout@v4
 
@@ -63,7 +69,8 @@ jobs:
           if (Test-Path $cache) { Remove-Item -Recurse -Force $cache }
           "MITIRU_CACHE_DIR=$cache" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
 
-          mitiru new guard_game
+          $t = "${{ matrix.template }}"
+          if ($t) { mitiru new guard_game -t $t } else { mitiru new guard_game }
           # dispatch で版が指定されたら mitiru.toml の pin を上書きする (publish 直後の tag の確認用)。
           $v = "${{ github.event.inputs.engine_version }}"
           if ($v) {
