@@ -10,7 +10,7 @@ func hostExitHint(code int) string {
 	hex := fmt.Sprintf("0x%08X", u)
 	switch u {
 	case 0xC0000135: // STATUS_DLL_NOT_FOUND
-		return hex + " (DLL not found — SDL2.dll が host の隣にあるか、" +
+		return hex + " (DLL not found — SDL2.dll (engine 0.34 以前) や game DLL が依存する DLL が host の隣にあるか、" +
 			"Debug ビルドなら Debug CRT (msvcp140d 等) が PATH にあるか確認。`mitiru doctor` で診断可)"
 	case 0xC0000005: // STATUS_ACCESS_VIOLATION
 		return hex + " (access violation — host がクラッシュ。ゲーム DLL の null 参照等を確認)"

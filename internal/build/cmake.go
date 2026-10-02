@@ -148,10 +148,11 @@ if(WIN32)
 endif()
 {{if .LegacyCEF}}mitiru_add_cef_game(mitiru_host)
 {{end}}
-# SDL2 backend 有効時は SDL2.dll を host の隣へ deploy する (DS4 等 DirectInput パッド対応)。
-# SDL2::SDL2 は shared imported target なので TARGET_FILE = SDL2.dll。これが無いと
-# host は起動直後に STATUS_DLL_NOT_FOUND (0xC0000135) で無言死する。
-if(WIN32 AND TARGET SDL2::SDL2)
+# パッドの DLL を host の隣へ deploy する。engine 0.35 以降は SDL3 (mitiru_deploy_sdl3 を engine が出す)、
+# それより前は SDL2。SDL3.dll は host が遅延読み込みするので、無くても host は起動し、パッドだけ止まる。
+if(COMMAND mitiru_deploy_sdl3)
+    mitiru_deploy_sdl3(mitiru_host)
+elseif(WIN32 AND TARGET SDL2::SDL2)
     add_custom_command(TARGET mitiru_host POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
             "$<TARGET_FILE:SDL2::SDL2>"

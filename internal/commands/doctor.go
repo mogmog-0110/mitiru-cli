@@ -124,7 +124,7 @@ func printSymptomTable() {
 		},
 		{
 			what: "DLL not found (host が起動直後に落ちる)",
-			why:  "`mitiru build` が失敗したか未実行で、host の隣に <game>.dll / SDL2.dll が無い",
+			why:  "`mitiru build` が失敗したか未実行で、host の隣に <game>.dll が無い",
 			fix:  "`mitiru build` を通してから `mitiru run`。個別の欠落 DLL は上の Runtime checks を見る",
 		},
 		{
@@ -149,7 +149,7 @@ func printSymptomTable() {
 }
 
 // printRuntimeChecks は build 済み host の起動前提を診断する (R-02)。
-// host の隣に SDL2.dll と UI の RCSS が居るか、Debug CRT が VS toolchain PATH で
+// host の隣にパッドの DLL (SDL3.dll、古い engine は SDL2.dll) と UI の RCSS が居るか、Debug CRT が VS toolchain PATH で
 // 解決できるかを表示する。host 未ビルドなら黙って skip。warn のみで fail させない。
 func printRuntimeChecks(projectRoot string) {
 	outDir := filepath.Join(projectRoot, "build", "out")
@@ -174,7 +174,7 @@ func printRuntimeChecks(projectRoot string) {
 	// RCSS は host の隣か 1 つ上 (multi-config generator の Debug/ の親) にあれば RmlUi が見つける。
 	rcss := filepath.Join("assets", "ui", "base.rcss")
 	deps := []struct{ name, path, alt string }{
-		{"SDL2.dll", filepath.Join(hostDir, "SDL2.dll"), ""},
+		{"SDL3.dll (gamepads)", filepath.Join(hostDir, "SDL3.dll"), filepath.Join(hostDir, "SDL2.dll")},
 		{"assets/ui/base.rcss", filepath.Join(hostDir, rcss), filepath.Join(filepath.Dir(hostDir), rcss)},
 	}
 	for _, d := range deps {

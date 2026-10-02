@@ -9,7 +9,7 @@ func TestHostExitHint_DllNotFound(t *testing.T) {
 	// 正の int / 負の int32 の両表現で同じデコードになること。
 	for _, code := range []int{int(uint32(0xC0000135)), int(int32(-1073741515))} {
 		got := hostExitHint(code)
-		if !strings.Contains(got, "0xC0000135") || !strings.Contains(got, "SDL2.dll") {
+		if !strings.Contains(got, "0xC0000135") || !strings.Contains(got, "DLL not found") {
 			t.Errorf("hostExitHint(%d) = %q, want DLL-not-found hint", code, got)
 		}
 	}

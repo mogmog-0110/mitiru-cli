@@ -69,13 +69,15 @@ func generatedCMake(t *testing.T, projectRoot, engineRoot string) string {
 	return string(b)
 }
 
-// SDL2 backend 有効時に SDL2.dll が host の隣へ deploy されること (0xC0000135 即死対策)。
-func TestConfigure_TemplateDeploysSDL2(t *testing.T) {
+// パッドの DLL が host の隣へ deploy されること。engine が mitiru_deploy_sdl3 を出せば SDL3、古い engine は SDL2。
+func TestConfigure_TemplateDeploysGamepadDll(t *testing.T) {
 	projectRoot, engineRoot := fakeProject(t)
 	cmake := generatedCMake(t, projectRoot, engineRoot)
 
 	for _, want := range []string{
-		"if(WIN32 AND TARGET SDL2::SDL2)",
+		"if(COMMAND mitiru_deploy_sdl3)",
+		"mitiru_deploy_sdl3(mitiru_host)",
+		"elseif(WIN32 AND TARGET SDL2::SDL2)",
 		"$<TARGET_FILE:SDL2::SDL2>",
 		"$<TARGET_FILE_DIR:mitiru_host>/SDL2.dll",
 	} {
