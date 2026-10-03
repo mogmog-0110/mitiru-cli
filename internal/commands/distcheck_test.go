@@ -48,6 +48,22 @@ func TestFindDistProblemsPicksMissingAssetLines(t *testing.T) {
 	}
 }
 
+// engine の新しい文は「mitiru: 」で始まり、欠けを 5 つの言い回しのどれかで言う。
+func TestFindDistProblemsMatchesEngineNoticeWording(t *testing.T) {
+	lines := []string{
+		"mitiru: 音声ファイル a.wav を読めません。assets からの相対パスと、形式を確かめてください。",
+		"mitiru: g/assets/level.obj が見つかりません。",
+		"mitiru: g/assets/font.ttf を開けません。",
+		"mitiru: assets/ui/main.rml がありません。",
+		"mitiru: モデルの変換に失敗しました (g/assets/level.obj)。",
+	}
+	log := strings.Join(append([]string{"mitiru: 起動しました"}, lines...), "\n")
+	got := findDistProblems(log)
+	if !reflect.DeepEqual(got, lines) {
+		t.Errorf("findDistProblems = %q, want every engine notice line", got)
+	}
+}
+
 func TestIsBlankImage(t *testing.T) {
 	dir := t.TempDir()
 	write := func(name string, paint func(*image.RGBA)) string {
