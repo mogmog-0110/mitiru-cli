@@ -36,13 +36,14 @@ func TestDistE2EAction3D(t *testing.T) {
 
 	bundle := filepath.Join(project, "dist", "e2e3d")
 	data := filepath.Join(bundle, "data")
-	for _, rel := range []string{"e2e3d.exe", "data/vcruntime140.dll", "data/e2e3d/e2e3d.dll",
-		"data/e2e3d/assets/level.obj", "data/e2e3d/assets/level.navmesh"} {
+	for _, rel := range []string{"e2e3d.exe", "THIRD_PARTY_NOTICES.txt", "data/vcruntime140.dll",
+		"data/e2e3d/e2e3d.dll", "data/e2e3d/assets/level.obj", "data/e2e3d/assets/level.navmesh"} {
 		if _, err := os.Stat(filepath.Join(bundle, filepath.FromSlash(rel))); err != nil {
 			t.Errorf("bundle lacks %s: %v", rel, err)
 		}
 	}
-	for _, rel := range []string{"data/compile_commands.json", "data/mitiru_build.json", "data/e2e3d_navbake_Release.stamp"} {
+	for _, rel := range []string{"data/compile_commands.json", "data/mitiru_build.json",
+		"data/e2e3d_navbake_Release.stamp", "data/THIRD_PARTY_NOTICES.txt"} {
 		if _, err := os.Stat(filepath.Join(bundle, filepath.FromSlash(rel))); err == nil {
 			t.Errorf("bundle ships the dev-only file %s", rel)
 		}

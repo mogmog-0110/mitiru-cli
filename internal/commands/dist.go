@@ -186,6 +186,10 @@ func runDist() error {
 	if err != nil {
 		return err
 	}
+	notices, err := writeBundleNotices(projectRoot, bundleRoot, dataDir)
+	if err != nil {
+		return err
+	}
 
 	// セーブと設定は %APPDATA%/<name>/ に置く。指定しないと data/save/ に書くので、
 	// Program Files に入れると書けず、onefile では展開し直すたびに消える。
@@ -306,15 +310,6 @@ func runDist() error {
 	if custom, rerr := os.ReadFile(filepath.Join(projectRoot, "README.dist.txt")); rerr == nil {
 		readme = string(custom)
 	}
-	// 第三者ライセンスの表記 (RmlUi・同梱書体など)。プロジェクトに THIRD_PARTY_NOTICES.txt が
-	// あれば bundle に入れる。
-	if notices, nerr := os.ReadFile(filepath.Join(projectRoot, "THIRD_PARTY_NOTICES.txt")); nerr == nil {
-		if err := os.WriteFile(filepath.Join(bundleRoot, "THIRD_PARTY_NOTICES.txt"),
-			notices, 0o644); err != nil {
-			return err
-		}
-		n++
-	}
 	if err := os.WriteFile(filepath.Join(bundleRoot, "README.txt"), []byte(readme), 0o644); err != nil {
 		return err
 	}
@@ -383,11 +378,9 @@ func runDist() error {
 			[]byte(readme), 0o644); err != nil {
 			return err
 		}
-		if notices, nerr := os.ReadFile(filepath.Join(projectRoot, "THIRD_PARTY_NOTICES.txt")); nerr == nil {
-			if err := os.WriteFile(filepath.Join(filepath.Dir(bundleRoot),
-				"THIRD_PARTY_NOTICES.txt"), notices, 0o644); err != nil {
-				return err
-			}
+		if err := os.WriteFile(filepath.Join(filepath.Dir(bundleRoot), distNoticesFile),
+			notices, 0o644); err != nil {
+			return err
 		}
 		info, _ := os.Stat(onefileExe)
 		fmt.Printf("Onefile OK: %s (%.1f MB)\n", onefileExe, float64(info.Size())/(1024*1024))
@@ -399,11 +392,7 @@ func runDist() error {
 		//   dist/<name>.zip  ← 単一 exe + 第三者ライセンス表記
 		zipPath := filepath.Join(filepath.Dir(bundleRoot),
 			strings.TrimSuffix(filepath.Base(onefileExe), ".exe")+".zip")
-		members := []string{onefileExe}
-		notices := filepath.Join(filepath.Dir(bundleRoot), "THIRD_PARTY_NOTICES.txt")
-		if _, statErr := os.Stat(notices); statErr == nil {
-			members = append(members, notices)
-		}
+		members := []string{onefileExe, filepath.Join(filepath.Dir(bundleRoot), distNoticesFile)}
 		if err := zipFiles(members, zipPath); err != nil {
 			return err
 		}
