@@ -85,14 +85,16 @@ func RunStandalone(opts StandaloneOptions) (*Artifacts, error) {
 		Stdout:      opts.Stdout,
 		Stderr:      opts.Stderr,
 	}
-	fmt.Fprintf(opts.Stdout, "Configuring %s (%s)...\n", opts.Target, opts.Config)
-	if err := runCMakeConfigure(vcvars, generator, opts.SourceDir, outDir, cmakeOpts); err != nil {
+	timer := newPhaseTimer()
+	if err := configureIfNeeded(vcvars, generator, opts.SourceDir, outDir, cmakeOpts, timer); err != nil {
 		return nil, err
 	}
 	fmt.Fprintf(opts.Stdout, "Building %s (%s)...\n", opts.Target, opts.Config)
 	if err := runCMakeBuild(vcvars, outDir, cmakeOpts); err != nil {
 		return nil, err
 	}
+	timer.mark("build")
+	timer.report(opts.Stdout)
 
 	if os.Getenv("MITIRU_DRY_RUN") == "1" {
 		exe := filepath.Join(outDir, "bin", opts.Target+".exe")

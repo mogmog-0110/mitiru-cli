@@ -548,14 +548,12 @@ func Configure(opts Options) (cmakeSrcDir, cmakeOutDir string, err error) {
 		return "", "", fmt.Errorf("parse cmake template: %w", err)
 	}
 
-	out, err := os.Create(filepath.Join(cmakeSrcDir, "CMakeLists.txt"))
-	if err != nil {
-		return "", "", fmt.Errorf("create generated CMakeLists.txt: %w", err)
-	}
-	defer out.Close()
-
-	if err := tmpl.Execute(out, data); err != nil {
+	var rendered bytes.Buffer
+	if err := tmpl.Execute(&rendered, data); err != nil {
 		return "", "", fmt.Errorf("render cmake template: %w", err)
+	}
+	if err := writeFileIfChanged(filepath.Join(cmakeSrcDir, "CMakeLists.txt"), rendered.Bytes()); err != nil {
+		return "", "", fmt.Errorf("write generated CMakeLists.txt: %w", err)
 	}
 	return cmakeSrcDir, cmakeOutDir, nil
 }
@@ -632,8 +630,8 @@ func Run(opts Options) (*Artifacts, error) {
 		return nil, err
 	}
 
-	fmt.Fprintf(opts.Stdout, "Configuring %s (%s)...\n", opts.ProjectName, opts.Config)
-	if err := runCMakeConfigure(vcvars, generator, cmakeSrcDir, cmakeOutDir, opts); err != nil {
+	timer := newPhaseTimer()
+	if err := configureIfNeeded(vcvars, generator, cmakeSrcDir, cmakeOutDir, opts, timer); err != nil {
 		return nil, err
 	}
 	if err := writeBuildMeta(cmakeOutDir, generator); err != nil {
@@ -644,6 +642,8 @@ func Run(opts Options) (*Artifacts, error) {
 	if err := runCMakeBuild(vcvars, cmakeOutDir, opts); err != nil {
 		return nil, err
 	}
+	timer.mark("build")
+	defer timer.report(opts.Stdout)
 
 	targetName := TargetName(opts.ProjectName)
 
@@ -698,6 +698,7 @@ func Run(opts Options) (*Artifacts, error) {
 		fmt.Fprintf(opts.Stdout, "Synced %d asset file(s) into %s\n",
 			copied, filepath.Join(targetName, "assets"))
 	}
+	timer.mark("deploy")
 
 	return &Artifacts{
 		DeployDir:   deployDir,
@@ -707,7 +708,8 @@ func Run(opts Options) (*Artifacts, error) {
 	}, nil
 }
 
-func runCMakeConfigure(vcvars, generator, srcDir, outDir string, opts Options) error {
+// configureCommand は configure 段の cmake 呼び出し 1 行。
+func configureCommand(generator, srcDir, outDir string, opts Options) string {
 	// Multi-config generator (Visual Studio) は -A を受け付け、かつ必須。
 	// single-config generator (NMake、Ninja) は -A を拒否し、明示的な
 	// CMAKE_BUILD_TYPE を必要とする。
@@ -723,10 +725,12 @@ func runCMakeConfigure(vcvars, generator, srcDir, outDir string, opts Options) e
 	for _, d := range opts.ExtraDefines {
 		defs += " -D" + d
 	}
+	return fmt.Sprintf("cmake -S \"%s\" -B \"%s\" -G \"%s\" %s%s",
+		srcDir, outDir, generator, archAndType, defs)
+}
 
-	script := fmt.Sprintf(
-		"%scmake -S \"%s\" -B \"%s\" -G \"%s\" %s%s\r\n",
-		vcvarsPrelude(vcvars), srcDir, outDir, generator, archAndType, defs)
+func runCMakeConfigure(vcvars, generator, srcDir, outDir string, opts Options) error {
+	script := vcvarsPrelude(vcvars) + configureCommand(generator, srcDir, outDir, opts) + "\r\n"
 
 	// CMake の configure 出力は成功時には純粋な diagnostic noise —
 	// "Jolt not found"、"Tracy not found" のような feature detection 行は
