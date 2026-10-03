@@ -37,7 +37,8 @@ func TestDistE2EAction3D(t *testing.T) {
 	bundle := filepath.Join(project, "dist", "e2e3d")
 	data := filepath.Join(bundle, "data")
 	for _, rel := range []string{"e2e3d.exe", "THIRD_PARTY_NOTICES.txt", "data/vcruntime140.dll",
-		"data/e2e3d/e2e3d.dll", "data/e2e3d/assets/level.obj", "data/e2e3d/assets/level.navmesh"} {
+		"data/e2e3d/e2e3d.dll", "data/e2e3d/assets/level.obj", "data/e2e3d/assets/level.navmesh",
+		"data/e2e3d/assets/level.obj.clod"} {
 		if _, err := os.Stat(filepath.Join(bundle, filepath.FromSlash(rel))); err != nil {
 			t.Errorf("bundle lacks %s: %v", rel, err)
 		}
@@ -47,6 +48,9 @@ func TestDistE2EAction3D(t *testing.T) {
 		if _, err := os.Stat(filepath.Join(bundle, filepath.FromSlash(rel))); err == nil {
 			t.Errorf("bundle ships the dev-only file %s", rel)
 		}
+	}
+	if shaders, _ := filepath.Glob(filepath.Join(data, "shader_cache", "*.dxbc")); len(shaders) == 0 {
+		t.Error("the bundle ships no pre-baked shaders in data/shader_cache")
 	}
 	rep, err := checkDistImports(data, readPEImports, systemDLLInWindows)
 	if err != nil {

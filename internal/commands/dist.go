@@ -104,6 +104,14 @@ stylesheets and fonts, your game, assets) lives in data/. Move/copy the whole fo
 Use --bat to also emit a console-visible <name>.bat (useful for reading logs
 while debugging). --exe additionally drops a Steam-style data/<name>.exe.
 
+Before packing, the bundled host loads the game's assets headless on DX12
+(mitiru_host --bake-caches) so the converted models (.clod / .fbx.glb),
+BC-compressed textures (.dds) and compiled shaders (data/shader_cache/) ship
+inside the bundle: the first run does not stall and a read-only install
+works. The list comes from assets/bake.txt when present, otherwise from a
+scan of assets/. An asset that fails to load fails the dist; a host that
+cannot run (no DX12 GPU) only warns. --no-bake skips this step.
+
 --sign signs the launcher, host and game DLL (and the --onefile exe) with
 signtool from the Windows SDK. The certificate comes from environment
 variables only: MITIRU_SIGN_CERT_FILE (+ MITIRU_SIGN_CERT_PASSWORD) or
@@ -116,6 +124,7 @@ Examples:
   mitiru dist --zip           # also produce dist/<name>.zip
   mitiru dist --pack=false    # keep loose assets/ (packing is the default)
   mitiru dist --sign          # Authenticode-sign our own binaries
+  mitiru dist --no-bake       # skip the cache pre-bake (no GPU on this machine)
   mitiru dist --out build/ship`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runDist()
@@ -138,6 +147,8 @@ Examples:
 		"ship Debug binaries (bundles the non-redistributable Debug CRT; for your own test machines only)")
 	cmd.Flags().BoolVar(&distCheck, "check", false,
 		"after packaging, run the bundle headless from a temp copy with a clean environment and fail on missing files")
+	cmd.Flags().BoolVar(&distNoBake, "no-bake", false,
+		"skip pre-baking the load caches (converted models, BC-compressed textures, compiled shaders) into the bundle")
 	cmd.Flags().BoolVar(&distSign, "sign", false,
 		"sign our own exe/DLLs with signtool; env: MITIRU_SIGN_CERT_FILE (+ MITIRU_SIGN_CERT_PASSWORD) "+
 			"or MITIRU_SIGN_CERT_THUMBPRINT, optional MITIRU_SIGNTOOL, MITIRU_SIGN_TIMESTAMP_URL (default "+
@@ -286,6 +297,14 @@ func runDist() error {
 			return err
 		}
 		n++
+	}
+
+	// cache は pack に畳む前に、バラ置きの資産の隣へ作る。DDS・clod・glb は pack に入らずバラ置きで残る
+	if !distNoBake {
+		if err := bakeDistCaches(dataDir, art.DllRel, gameDir, hostArgsFromConfig(cfg),
+			execDistBakeRunner, os.Stdout); err != nil {
+			return err
+		}
 	}
 
 	// 署名は exe へアイコンを埋めたあと、onefile がバイナリを畳む前に済ませる。
