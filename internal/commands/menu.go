@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/mogmog-0110/mitiru-cli/internal/config"
+	"github.com/mogmog-0110/mitiru-cli/internal/console"
 	"github.com/spf13/cobra"
 )
 
@@ -54,7 +55,7 @@ func runMenu() error {
 		}
 		idx, perr := strconv.Atoi(choice)
 		if perr != nil || idx < 1 || idx > len(entries) {
-			fmt.Println("  ? その番号は無い")
+			fmt.Println("  その番号はありません。")
 			continue
 		}
 
@@ -69,16 +70,15 @@ func runMenu() error {
 			}
 			arg := strings.TrimSpace(argLine)
 			if arg == "" {
-				fmt.Println("  キャンセル")
+				fmt.Println("  取り消しました。")
 				continue
 			}
 			runArgs = append(runArgs, arg)
 		}
 
 		fmt.Printf("\n  $ mitiru %s\n", strings.Join(runArgs, " "))
-		if rerr := runSelf(runArgs...); rerr != nil {
-			fmt.Fprintf(os.Stderr, "  (mitiru %s 終了: %v)\n", strings.Join(runArgs, " "), rerr)
-		}
+		// 失敗の中身は子のコマンドが出しているので、ここでは重ねて言わない。
+		_ = runSelf(runArgs...)
 		// コマンド終了後はメニューに戻る (run/watch を抜けたらまた選べる)。
 	}
 }
@@ -122,5 +122,6 @@ func runSelf(args ...string) error {
 	}
 	c := exec.Command(self, args...)
 	c.Stdin, c.Stdout, c.Stderr = os.Stdin, os.Stdout, os.Stderr
+	c.Env = console.ChildEnv(os.Environ())
 	return c.Run()
 }
