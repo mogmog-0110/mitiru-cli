@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 
@@ -63,13 +64,7 @@ func EnsureSource(version string, progress io.Writer) (string, error) {
 			return "", fmt.Errorf("MITIRU_ENGINE_ROOT=%s に CMakeLists.txt が見つかりません。エンジンのフォルダを指しているか確かめてください (%w)。",
 				abs, statErr)
 		}
-		// mitiru.toml の pin が黙って捨てられると、版を指定して確かめたつもりの
-		// 検証が別の源を測ってしまう。1 行に「どちらが使われ、どちらが無視されたか」を
-		// 両方入れ、見落とされないよう黄色にする (E3)。
-		const yellow, reset = "\x1b[33m", "\x1b[0m"
-		fmt.Fprintf(progress,
-			"%sMITIRU_ENGINE_ROOT の %s を使います。mitiru.toml の engine = %q は使いません。%s\n",
-			yellow, abs, version, reset)
+		overrideNotice(progress, abs, version)
 		return abs, nil
 	}
 
@@ -121,6 +116,41 @@ func EnsureSource(version string, progress io.Writer) (string, error) {
 	}
 	console.Fverbosef(progress, "MitiruEngine %s ready at %s\n", tag, root)
 	return root, nil
+}
+
+// cmakeProjectVersionRe は engine の CMakeLists.txt の project(MitiruEngine ... VERSION X.Y.Z) を拾う。
+var cmakeProjectVersionRe = regexp.MustCompile(`(?s)project\(\s*MitiruEngine\b[^)]*?\bVERSION\s+(\d+\.\d+\.\d+)`)
+
+// overrideNotice は MITIRU_ENGINE_ROOT の engine が mitiru.toml の pin と違う版のときだけ
+// 黄色で知らせる。pin が黙って捨てられると、版を指定して確かめたつもりの検証が別の源を
+// 測ってしまう (E3)。同じ版なら毎回の build / run に 1 行足すだけなので -v に回す。
+func overrideNotice(w io.Writer, root, pin string) {
+	have := engineVersionAt(root)
+	want, wantOK := ParseSemver(pin)
+	got, gotOK := ParseSemver(have)
+	if wantOK && gotOK && want.Compare(got) == 0 {
+		console.Fverbosef(w, "using MITIRU_ENGINE_ROOT=%s (engine %s, same as mitiru.toml)\n", root, have)
+		return
+	}
+	if have == "" {
+		have = "版は不明"
+	}
+	const yellow, reset = "\x1b[33m", "\x1b[0m"
+	fmt.Fprintf(w,
+		"%sMITIRU_ENGINE_ROOT の %s (%s) を使います。mitiru.toml の engine = %q とは違う版です。%s\n",
+		yellow, root, have, pin, reset)
+}
+
+// engineVersionAt は root の CMakeLists.txt から engine の版を読む。読めなければ空。
+func engineVersionAt(root string) string {
+	data, err := os.ReadFile(filepath.Join(root, "CMakeLists.txt"))
+	if err != nil {
+		return ""
+	}
+	if m := cmakeProjectVersionRe.FindSubmatch(data); m != nil {
+		return string(m[1])
+	}
+	return ""
 }
 
 // resolveTag は user 向けの version を具体的な git tag 文字列に変換する。
