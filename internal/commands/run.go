@@ -92,8 +92,10 @@ inspector; a window name selects another tool:
   mitiru run --inspect             # gameplay inspector
   mitiru run --inspect perf        # performance window
   mitiru run --inspect rewind      # 巻き戻し窓 (past-frame rewind)
+  mitiru run --inspect story       # cutscene / dialogue / flags / quests
                                    # (perf, inspector, rewind, mixer,
-                                   #  scene, replay, input)
+                                   #  scene, replay, input, story,
+                                   #  side_state, ai, nav, anim)
   mitiru run --learn                # scene 窓を game memory タブで自動で開く (--inspect を知らなくてよい)
 
 A standalone project ([build] kind = "standalone") runs its own exe instead
@@ -122,7 +124,7 @@ of mitiru_host; arguments after -- go to that exe:
 	cmd.Flags().StringVar(&buildGenerator, "generator", "",
 		"explicit CMake generator (e.g. \"Visual Studio 17 2022\", \"NMake Makefiles\"); default is Ninja")
 	cmd.Flags().StringVar(&runInspectArg, "inspect", "",
-		"also open a tool window: perf|inspector|rewind|mixer|scene|replay|input (bare --inspect = gameplay inspector)")
+		"also open a tool window: perf|inspector|rewind|mixer|scene|replay|input|story|side_state|ai|nav|anim (bare --inspect = gameplay inspector)")
 	cmd.Flags().Lookup("inspect").NoOptDefVal = "inspect"
 	cmd.Flags().BoolVar(&runWithConsole, "console", false,
 		"open the runtime control panel (pause/step/scale/screenshot) in your default browser")

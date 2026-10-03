@@ -24,6 +24,12 @@ func TestResolveInspectPage(t *testing.T) {
 		{"rewind", "rewind", nil, "rewind", false},
 		{"timetravel", "timetravel", nil, "rewind", false},
 		{"replay", "inspect", []string{"replay"}, "replay", false},
+		{"story", "story", nil, "story", false},
+		{"side_state", "inspect", []string{"side_state"}, "side_state", false},
+		{"side-state → side_state", "side-state", nil, "side_state", false},
+		{"ai", "ai", nil, "ai", false},
+		{"nav", "inspect", []string{"nav"}, "nav", false},
+		{"anim", "anim", nil, "anim", false},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {

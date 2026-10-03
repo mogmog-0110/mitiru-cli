@@ -45,7 +45,8 @@ build.
 
 With --inspect, also launches a tool window once alongside the game
 (bare --inspect = gameplay inspector; or a name: perf, inspector,
-rewind, mixer, scene, replay, input).`,
+rewind, mixer, scene, replay, input, story, side_state, ai, nav,
+anim).`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			page, err := resolveInspectPage(runInspectArg, args)
 			if err != nil {
@@ -61,7 +62,7 @@ rewind, mixer, scene, replay, input).`,
 	cmd.Flags().StringVar(&buildGenerator, "generator", "",
 		"explicit CMake generator (default is Ninja)")
 	cmd.Flags().StringVar(&runInspectArg, "inspect", "",
-		"also open a tool window: perf|inspector|rewind|mixer|scene|replay|input (bare --inspect = gameplay inspector)")
+		"also open a tool window: perf|inspector|rewind|mixer|scene|replay|input|story|side_state|ai|nav|anim (bare --inspect = gameplay inspector)")
 	cmd.Flags().Lookup("inspect").NoOptDefVal = "inspect"
 	return cmd
 }
