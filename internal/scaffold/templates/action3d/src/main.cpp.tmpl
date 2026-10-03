@@ -55,7 +55,7 @@ struct {{.ProjectIdent}}Game
     ai::AttackTimeline  swing{};
     std::uint32_t       frame = 0, heroHitUntil = 0, enemyHitUntil = 0;
     std::int32_t        heroHp = 5, enemyHp = 3;
-    std::uint8_t        enemySees = 0, pad[3]{};
+    std::uint8_t        enemySees = 0, loading = 1, pad[2]{};   // loading: 1 = これから頼む、2 = 読み終わり待ち
 
     void init()
     {
@@ -68,7 +68,12 @@ struct {{.ProjectIdent}}Game
     void update(Input in, Hud hud, float dt)
     {
         if (in.cancelPressed()) { hud.quit(); }
-        if (in.pressed(Key::R)) { init(); }
+        // 地形を描く前に読ませ、読み終わるまでロード画面を出す。終わりは頼んだ次のフレームから in.preloadPending() で分かる
+        if (loading == 1) { hud.preload(kLevelPath); loading = 2; }
+        else if (loading == 2 && in.preloadPending() == 0) { loading = 0; }
+        hud.set("view.loading", loading != 0);
+        if (loading != 0) { return; }
+        if (in.pressed(Key::R)) { init(); loading = 0; }
         ++frame;
         const act::CollisionWorld world(&stage().collision);
 
@@ -133,6 +138,7 @@ struct {{.ProjectIdent}}Game
     void draw(Screen& s) const
     {
         s.clear(hex(0xEAF1F8));
+        if (loading != 0) { return; }
         s.camera3D(view.eye, view.target, view.up, view.fovDeg, 0.1f, 80.0f);
         s.light3D({-0.5f, -1.0f, -0.35f}, hex(0xFFFBF2));
         s.skybox3D(hex(0x63A5E8), hex(0xEAF3FB));
