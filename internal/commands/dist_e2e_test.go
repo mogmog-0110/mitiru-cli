@@ -69,7 +69,7 @@ func TestDistE2EAction3D(t *testing.T) {
 		if err := os.Remove(filepath.Join(broken, filepath.FromSlash(rel))); err != nil {
 			t.Fatal(err)
 		}
-		res, err := runDistCheck(broken, filepath.Join(t.TempDir(), "shot.png"))
+		res, err := runDistCheck(broken, filepath.Join(t.TempDir(), "shot.png"), distCheckRun{Frames: defaultDistCheckFrames})
 		if err != nil {
 			t.Fatal(err)
 		}

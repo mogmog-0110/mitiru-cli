@@ -33,7 +33,7 @@ mitiru run
 | `mitiru test` | `tests/*.cpp` を `cl /std:c++20 /utf-8` で 1 本ずつビルド・実行し、exit code で合否集計。`--filter` / `--release` / `--include` に対応 |
 | `mitiru run` | ビルドして実行。stdin、stdout、exit code を転送 |
 | `mitiru watch` | ビルドして起動し、`src/` の保存時に state を維持したまま hot reload |
-| `mitiru dist` | 配布フォルダを生成。ランタイムを `data/` に分離し、コンソールなしの `<name>.exe` を出力。`--bat` でログ用 `.bat`、`--zip` で zip を追加。`--onefile` で配布物全体を自己展開の単一 exe に畳む (ファイル名は `[dist] exe_name`、既定は `project.name`)。アセットは既定で `assets.mtpak` に埋め込む (`--pack=false` で外す)。`assets/ui/` と 3D モデル・ナビメッシュは pack に入れずバラ置きで残す (engine がファイルから直に読む)。ゲームの読む DLL を調べて VC ランタイムを同梱し、足りない DLL があれば止まる。セーブは `%APPDATA%/<name>/`。pack の前に資産を読ませ、読み込みの cache を配布物に入れる (下の「配布物に入れる cache」、`--no-bake` で飛ばす)。`--check` で配布物を素の環境に近い一時フォルダで headless に動かして確かめ、`--debug` で Debug ビルドを配る (自分のテスト機用) |
+| `mitiru dist` | 配布フォルダを生成。ランタイムを `data/` に分離し、コンソールなしの `<name>.exe` を出力。`--bat` でログ用 `.bat`、`--zip` で zip を追加。`--onefile` で配布物全体を自己展開の単一 exe に畳む (ファイル名は `[dist] exe_name`、既定は `project.name`)。アセットは既定で `assets.mtpak` に埋め込む (`--pack=false` で外す)。`assets/ui/` と 3D モデル・ナビメッシュは pack に入れずバラ置きで残す (engine がファイルから直に読む)。ゲームの読む DLL を調べて VC ランタイムを同梱し、足りない DLL があれば止まる。セーブは `%APPDATA%/<name>/`。pack の前に資産を読ませ、読み込みの cache を配布物に入れる (下の「配布物に入れる cache」、`--no-bake` で飛ばす)。`--check` で配布物を素の環境に近い一時フォルダで headless に動かして確かめ (`--check-script` で入力の台本を流し、`--check-frames` で回すフレーム数を変える)、`--debug` で Debug ビルドを配る (自分のテスト機用)。初回は Release のエンジンを `build/dist-out/` に一から作るので数分かかる |
 | `mitiru debug` | Debug 構成でビルドし、engine debug helper（`MITIRU_DEBUG=1` / `MITIRU_INSPECTOR=1`）を有効にして実行 |
 | `mitiru inspect [pid]` | 実行中の game を別の OS window に表示したツール画面で観察。`--inspectable input\|timetravel`、`--all` に対応 |
 | `mitiru replay <file>` | 記録済みの入力を決定論的に再生。`--test` で回帰判定、`--suite <dir>` で `*.mtrr` を一括判定 |

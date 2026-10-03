@@ -13,9 +13,9 @@ import (
 	"time"
 )
 
-// distCheckFrames は --check で回すフレーム数。3D の取り込み (.clod の変換) が終わって、
+// defaultDistCheckFrames は --check で回すフレーム数の既定。3D の取り込み (.clod の変換) が終わって、
 // 最初の絵が出るまでに足りる長さ。
-const distCheckFrames = 90
+const defaultDistCheckFrames = 90
 
 // distCheckProblemWords は host のログのうち、配布物に何かが欠けていることを示す言い回し。
 // engine の warnOnce と loader が出す文に合わせてある。
@@ -93,9 +93,29 @@ func findDistProblems(log string) []string {
 	return out
 }
 
+// distCheckRun は --check で何フレーム回し、どの入力を流すか。Script は絶対パスか空。
+type distCheckRun struct {
+	Frames int
+	Script string
+}
+
+// distCheckHostArgs は launch.mtargs の引数に、headless で回して最後のフレームを撮る引数を足す。
+func distCheckHostArgs(launch string, run distCheckRun, capDir string) []string {
+	args := append(splitMtargs(launch), "--headless-3d", "--max-frames", fmt.Sprint(run.Frames),
+		"--capture-dir", capDir, "--capture-every", fmt.Sprint(max(run.Frames-1, 1)))
+	if run.Script != "" {
+		args = append(args, "--input-script", run.Script)
+	}
+	if !strings.Contains(launch, "--backend") {
+		// 窓のある起動は DX12 を選ぶ。窓の無い headless でも同じ描画の経路を通す
+		args = append(args, "--backend", "dx12")
+	}
+	return args
+}
+
 // runDistCheck は bundleRoot を一時フォルダへ写し、素の PC に近い環境で host を headless で走らせる。
 // 撮った絵は shotOut へ写す。
-func runDistCheck(bundleRoot, shotOut string) (distCheckResult, error) {
+func runDistCheck(bundleRoot, shotOut string, run distCheckRun) (distCheckResult, error) {
 	var res distCheckResult
 	tmp, err := os.MkdirTemp("", "mitiru-dist-check-")
 	if err != nil {
@@ -111,12 +131,7 @@ func runDistCheck(bundleRoot, shotOut string) (distCheckResult, error) {
 		return res, fmt.Errorf("dist --check: launch.mtargs が無い (ランチャ stub の無い engine では確かめられない): %w", err)
 	}
 	capDir := filepath.Join(tmp, "_capture")
-	args := append(splitMtargs(string(launch)), "--headless-3d", "--max-frames", fmt.Sprint(distCheckFrames),
-		"--capture-dir", capDir, "--capture-every", fmt.Sprint(distCheckFrames-1))
-	if !strings.Contains(string(launch), "--backend") {
-		// 窓のある起動は DX12 を選ぶ。窓の無い headless でも同じ描画の経路を通す
-		args = append(args, "--backend", "dx12")
-	}
+	args := distCheckHostArgs(string(launch), run, capDir)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 	defer cancel()
@@ -201,9 +216,9 @@ func copyTree(src, dst string) error {
 }
 
 // checkDistBundle は --check の結果を表にして、欠けがあればエラーにする。
-func checkDistBundle(bundleRoot, shotOut string) error {
+func checkDistBundle(bundleRoot, shotOut string, run distCheckRun) error {
 	fmt.Println("dist --check: 配布物を一時フォルダへ写し、開発用の環境変数と PATH を外して headless で走らせる...")
-	res, err := runDistCheck(bundleRoot, shotOut)
+	res, err := runDistCheck(bundleRoot, shotOut, run)
 	if err != nil {
 		return err
 	}

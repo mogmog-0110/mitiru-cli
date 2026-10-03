@@ -24,6 +24,9 @@ var (
 	distDebug bool
 	// distCheck は作った配布物を一時フォルダへ写し、素の PC に近い環境で headless に走らせて確かめる
 	distCheck bool
+	// distCheckScript と distCheckFrames は --check で流す入力の台本と回すフレーム数
+	distCheckScript string
+	distCheckFrames int
 )
 
 // distShipExe は top-level で配布してよい exe (host と、CEF 世代の engine の helper)。他のツール exe
@@ -94,8 +97,10 @@ func newDistCommand() *cobra.Command {
 		Use:   "dist",
 		Short: "Package the current project into a distributable folder",
 		Long: `Build the project in Release and assemble a self-contained, runnable
-bundle — the host, the engine runtime, your game DLL and assets, plus a
-double-clickable launcher .bat.
+bundle: the host, the engine runtime, your game DLL and assets.
+
+The first dist of a project builds the engine in Release into build/dist-out/
+(several minutes, like the first mitiru build); later runs reuse it.
 
 The top level holds a double-clickable <name>.exe launcher (a tiny GUI stub
 that shows NO console window) plus README.txt; all runtime (host, DLLs, UI
@@ -118,6 +123,12 @@ variables only: MITIRU_SIGN_CERT_FILE (+ MITIRU_SIGN_CERT_PASSWORD) or
 MITIRU_SIGN_CERT_THUMBPRINT. MITIRU_SIGNTOOL and MITIRU_SIGN_TIMESTAMP_URL
 are optional.
 
+--check runs the finished bundle headless from a temp copy with the
+development environment variables and PATH removed, and fails when the host
+reports a missing file, exits with an error, or draws a blank frame. By
+default it runs 90 frames with no input; --check-script plays an input script
+(engine docs/INPUT_SCRIPT.md) and --check-frames sets how long it runs.
+
 Examples:
   mitiru dist                 # → dist/<name>/  (no-console <name>.exe)
   mitiru dist --bat           # also add a console-visible <name>.bat
@@ -125,8 +136,12 @@ Examples:
   mitiru dist --pack=false    # keep loose assets/ (packing is the default)
   mitiru dist --sign          # Authenticode-sign our own binaries
   mitiru dist --no-bake       # skip the cache pre-bake (no GPU on this machine)
+  mitiru dist --check --check-script play.txt --check-frames 600
   mitiru dist --out build/ship`,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if distCheckScript != "" || cmd.Flags().Changed("check-frames") {
+				distCheck = true
+			}
 			return runDist()
 		},
 	}
@@ -147,6 +162,10 @@ Examples:
 		"ship Debug binaries (bundles the non-redistributable Debug CRT; for your own test machines only)")
 	cmd.Flags().BoolVar(&distCheck, "check", false,
 		"after packaging, run the bundle headless from a temp copy with a clean environment and fail on missing files")
+	cmd.Flags().StringVar(&distCheckScript, "check-script", "",
+		"input script that --check plays (implies --check)")
+	cmd.Flags().IntVar(&distCheckFrames, "check-frames", defaultDistCheckFrames,
+		"frames that --check runs (implies --check when set)")
 	cmd.Flags().BoolVar(&distNoBake, "no-bake", false,
 		"skip pre-baking the load caches (converted models, BC-compressed textures, compiled shaders) into the bundle")
 	cmd.Flags().BoolVar(&distSign, "sign", false,
@@ -184,6 +203,14 @@ func runDist() error {
 	}
 	buildExtraDefines = []string{"MITIRU_HOST_GUI=ON"}
 	defer func() { buildOutDir = ""; buildExtraDefines = nil }() // 後続コマンドへ漏らさない
+
+	checkRun, err := resolveDistCheckRun()
+	if err != nil {
+		return err
+	}
+	if !fileExists(filepath.Join(buildOutDir, "CMakeCache.txt")) {
+		fmt.Println(distColdBuildNotice(distDebug))
+	}
 
 	result, err := runBuild()
 	if err != nil {
@@ -367,7 +394,7 @@ func runDist() error {
 
 	if distCheck {
 		shot := filepath.Join(projectRoot, "build", "dist-check", name+".png")
-		if err := checkDistBundle(bundleRoot, shot); err != nil {
+		if err := checkDistBundle(bundleRoot, shot, checkRun); err != nil {
 			return err
 		}
 	}
@@ -709,4 +736,37 @@ func isDistEngineAsset(rel string) bool {
 	default:
 		return false
 	}
+}
+
+// resolveDistCheckRun は --check の台本とフレーム数を確かめる。長いビルドの前に誤りを返す。
+func resolveDistCheckRun() (distCheckRun, error) {
+	run := distCheckRun{Frames: distCheckFrames}
+	if !distCheck {
+		return run, nil
+	}
+	if run.Frames < 2 {
+		return run, fmt.Errorf("dist: --check-frames は 2 以上にしてください (今は %d)", run.Frames)
+	}
+	if distCheckScript == "" {
+		return run, nil
+	}
+	abs, err := filepath.Abs(distCheckScript)
+	if err != nil {
+		return run, fmt.Errorf("dist: --check-script %q の場所が分かりません: %w", distCheckScript, err)
+	}
+	if !fileExists(abs) {
+		return run, fmt.Errorf("dist: --check-script の台本 %s がありません", abs)
+	}
+	run.Script = abs
+	return run, nil
+}
+
+// distColdBuildNotice は配布用のビルド先がまだ空のときに、先に待ち時間を知らせる文。
+func distColdBuildNotice(debug bool) string {
+	cfg := "Release"
+	if debug {
+		cfg = "Debug"
+	}
+	return fmt.Sprintf("配布用の %s ビルドがまだ無いので、エンジンを %s で一から作ります。"+
+		"数分 (目安 5〜10 分) かかります。2 回目からは変わったところだけを作り直します。", cfg, cfg)
 }
