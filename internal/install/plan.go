@@ -14,6 +14,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/mogmog-0110/mitiru-cli/internal/console"
 )
 
 // Options は installer の各 step を制御し、破壊的操作を --dry-run に
@@ -134,8 +136,17 @@ func buildPlan(opts Options, r *envReport) []stepAction {
 	return steps
 }
 
+// detailWriter は手順の細かい中身の書き先。--dry-run は中身を見るためのものなので
+// いつも出し、それ以外は -v のときだけ出す。
+func detailWriter(opts Options) io.Writer {
+	if opts.DryRun {
+		return opts.Stdout
+	}
+	return console.VerboseWriter(opts.Stdout)
+}
+
 func printPlan(w io.Writer, steps []stepAction) (toRun int) {
-	fmt.Fprintln(w, "実行プラン:")
+	fmt.Fprintln(w, "次のことをします (✓ は実行、⊘ は飛ばします)。")
 	for _, s := range steps {
 		mark := "  ✓"
 		if s.will == "skip" {
@@ -155,7 +166,7 @@ func promptConsent(opts Options) (bool, error) {
 	if opts.AssumeYes || opts.DryRun {
 		return true, nil
 	}
-	fmt.Fprint(opts.Stdout, "\n続行する? [Y/n]: ")
+	fmt.Fprint(opts.Stdout, "\n続けますか? [Y/n] ")
 	r := bufio.NewReader(os.Stdin)
 	line, err := r.ReadString('\n')
 	if err != nil && line == "" {
@@ -184,15 +195,15 @@ func Run(opts Options) error {
 
 	fmt.Fprintf(opts.Stdout, "MitiruEngine Installer\n")
 	if opts.DryRun {
-		fmt.Fprintf(opts.Stdout, "  (dry-run — nothing will be changed)\n")
+		fmt.Fprintf(opts.Stdout, "--dry-run なので、何も変えずに手順だけを見せます。\n")
 	}
 	if opts.Force {
-		fmt.Fprintf(opts.Stdout, "  --force — 既存検出による skip を無視\n")
+		fmt.Fprintf(opts.Stdout, "--force なので、入っているものも入れ直します。\n")
 	}
 	fmt.Fprintln(opts.Stdout)
 
 	// Step 1: environment チェック
-	fmt.Fprintln(opts.Stdout, "Step 1/5: 環境を確認...")
+	fmt.Fprintln(opts.Stdout, "1/5 いま入っているものを調べています。")
 	report, err := snapshot()
 	if err != nil {
 		return fmt.Errorf("environment check: %w", err)
@@ -202,8 +213,8 @@ func Run(opts Options) error {
 
 	if !report.hasWinget && !opts.SkipWinget {
 		return fmt.Errorf(
-			"winget が見つかりません — Windows 10 1809+ / Windows 11 が必要です。\n" +
-				"  Microsoft Store の 'App Installer' を入れるか、--skip-winget で手動 install してください。")
+			"winget が見つかりません。winget は Windows 10 1809 以降か Windows 11 にあります。" +
+				"Microsoft Store の「アプリ インストーラー」を入れるか、--skip-winget を付けて Build Tools を手で入れてください。")
 	}
 
 	// プラン要約 (検出結果 + フラグで決まる)
@@ -211,16 +222,16 @@ func Run(opts Options) error {
 	toRun := printPlan(opts.Stdout, plan)
 
 	if toRun == 0 {
-		fmt.Fprintln(opts.Stdout, "\nやることがない — 全ステップ skip されました。すでに環境は整ってます。")
+		fmt.Fprintln(opts.Stdout, "\n必要なものはもうそろっているので、何もしませんでした。")
 		printDone(opts)
 		return nil
 	}
 
 	// target 以外の location に既存 mitiru がある場合の警告
 	if report.hasMitiru() && !strings.EqualFold(filepath.Dir(report.mitiruPath), opts.TargetDir) && !opts.SkipDeploy {
-		fmt.Fprintf(opts.Stdout, "\n警告: mitiru は既に PATH 経由で %s から見えています\n", report.mitiruPath)
-		fmt.Fprintf(opts.Stdout, "        target dir (%s) にも deploy します。後勝ち / 先勝ちは PATH の順序で決まります。\n", opts.TargetDir)
-		fmt.Fprintln(opts.Stdout, "        既存版だけで OK なら --skip-deploy --skip-pathenv で進めてください。")
+		fmt.Fprintf(opts.Stdout, "\nPATH には %s の mitiru がもうあります。%s にも置くので、どちらが使われるかは PATH の順番で決まります。"+
+			"今ある mitiru だけでよければ、--skip-deploy --skip-pathenv を付けて実行し直してください。\n",
+			report.mitiruPath, opts.TargetDir)
 	}
 
 	ok, err := promptConsent(opts)
@@ -234,12 +245,12 @@ func Run(opts Options) error {
 	fmt.Fprintln(opts.Stdout)
 
 	// Step 2: winget 経由で MSVC Build Tools を install する。
-	fmt.Fprintln(opts.Stdout, "Step 2/5: MSVC Build Tools 2022 を install")
+	fmt.Fprintln(opts.Stdout, "2/5 MSVC Build Tools 2022 を入れます。")
 	switch {
 	case opts.SkipWinget:
-		fmt.Fprintln(opts.Stdout, "  --skip-winget が指定されたため skip")
+		console.Fverbosef(opts.Stdout, "  skipped (--skip-winget)\n")
 	case report.hasMsvc && !opts.Force:
-		fmt.Fprintln(opts.Stdout, "  既に install 済み — skip")
+		console.Fverbosef(opts.Stdout, "  skipped (already installed)\n")
 	default:
 		if err := installBuildTools(opts); err != nil {
 			return fmt.Errorf("install build tools: %w", err)
@@ -248,12 +259,12 @@ func Run(opts Options) error {
 	fmt.Fprintln(opts.Stdout)
 
 	// Step 3: mitiru.exe を deploy する。
-	fmt.Fprintln(opts.Stdout, "Step 3/5: mitiru.exe を deploy")
+	fmt.Fprintln(opts.Stdout, "3/5 mitiru.exe を置きます。")
 	switch {
 	case opts.SkipDeploy:
-		fmt.Fprintln(opts.Stdout, "  --skip-deploy が指定されたため skip")
+		console.Fverbosef(opts.Stdout, "  skipped (--skip-deploy)\n")
 	case report.hasMitiru() && strings.EqualFold(filepath.Dir(report.mitiruPath), opts.TargetDir) && !opts.Force:
-		fmt.Fprintln(opts.Stdout, "  既に target dir に存在 — skip")
+		console.Fverbosef(opts.Stdout, "  skipped (already in the target dir)\n")
 	default:
 		if err := deployMitiru(opts); err != nil {
 			return fmt.Errorf("deploy mitiru.exe: %w", err)
@@ -262,10 +273,10 @@ func Run(opts Options) error {
 	fmt.Fprintln(opts.Stdout)
 
 	// Step 4: ユーザ PATH に追加する。
-	fmt.Fprintln(opts.Stdout, "Step 4/5: PATH に追加")
+	fmt.Fprintln(opts.Stdout, "4/5 PATH に足します。")
 	switch {
 	case opts.SkipPathEnv:
-		fmt.Fprintln(opts.Stdout, "  --skip-pathenv が指定されたため skip")
+		console.Fverbosef(opts.Stdout, "  skipped (--skip-pathenv)\n")
 	default:
 		if err := appendUserPath(opts); err != nil {
 			return fmt.Errorf("append PATH: %w", err)
@@ -274,21 +285,21 @@ func Run(opts Options) error {
 	fmt.Fprintln(opts.Stdout)
 
 	// Step 5: engine source を pre-cache する。
-	fmt.Fprintln(opts.Stdout, "Step 5/5: engine source を pre-cache")
+	fmt.Fprintln(opts.Stdout, "5/5 エンジンのソースを先に取ってきます。")
 	if opts.SkipPrecache {
-		fmt.Fprintln(opts.Stdout, "  --skip-precache が指定されたため skip")
+		console.Fverbosef(opts.Stdout, "  skipped (--skip-precache)\n")
 	} else if err := precacheEngine(opts); err != nil {
-		fmt.Fprintf(opts.Stderr, "  warning: engine source pre-cache に失敗: %v\n", err)
-		fmt.Fprintln(opts.Stderr, "  (初回 `mitiru build` 時に再 try されます)")
+		fmt.Fprintf(opts.Stderr, "  エンジンのソースを取得できませんでした (%v)。最初の mitiru build でもう一度取得します。\n", err)
 	}
 	fmt.Fprintln(opts.Stdout)
 
 	// Optional: LongPaths registry。
 	if !opts.SkipLongPaths {
-		fmt.Fprintln(opts.Stdout, "Optional: LongPaths registry")
+		fmt.Fprintln(opts.Stdout, "長いパスを使えるようにします (できなくても続けます)。")
 		if err := enableLongPaths(opts); err != nil {
-			fmt.Fprintf(opts.Stderr, "  skipped: %v\n", err)
-			fmt.Fprintln(opts.Stderr, "  (admin で再実行するか、手動で HKLM\\SYSTEM\\CurrentControlSet\\Control\\FileSystem\\LongPathsEnabled = 1 にすると将来詰みを防げます)")
+			fmt.Fprintf(opts.Stderr, "  長いパスを有効にできませんでした (%v)。"+
+				"管理者として実行し直すか、HKLM\\SYSTEM\\CurrentControlSet\\Control\\FileSystem\\LongPathsEnabled を 1 にしておくと、"+
+				"深いフォルダでビルドが止まるのを防げます。\n", err)
 		}
 		fmt.Fprintln(opts.Stdout)
 	}
@@ -298,13 +309,11 @@ func Run(opts Options) error {
 }
 
 func printDone(opts Options) {
-	fmt.Fprintln(opts.Stdout, "完了!")
-	fmt.Fprintln(opts.Stdout)
-	fmt.Fprintln(opts.Stdout, "新しい terminal を開いて、こうしてください:")
+	fmt.Fprintln(opts.Stdout, "終わりました。新しいターミナルを開いて、次を実行してください。")
 	fmt.Fprintln(opts.Stdout)
 	fmt.Fprintln(opts.Stdout, "    mitiru new my_game")
 	fmt.Fprintln(opts.Stdout, "    cd my_game")
 	fmt.Fprintln(opts.Stdout, "    mitiru run")
 	fmt.Fprintln(opts.Stdout)
-	fmt.Fprintln(opts.Stdout, "何かハマったら: https://github.com/mogmog-0110/MitiruEngine/blob/main/docs/FIRST_TOUCH.md")
+	fmt.Fprintln(opts.Stdout, "うまくいかないときは https://github.com/mogmog-0110/MitiruEngine/blob/main/docs/FIRST_TOUCH.md を見てください。")
 }

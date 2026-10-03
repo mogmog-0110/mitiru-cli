@@ -18,7 +18,7 @@ import (
 // 冪等: dir が既に PATH 上にあれば registry の書き込みは skip する。
 func appendUserPath(opts Options) error {
 	dir := opts.TargetDir
-	fmt.Fprintf(opts.Stdout, "  registry: HKCU\\Environment\\Path += %s\n", dir)
+	fmt.Fprintf(detailWriter(opts), "  registry: HKCU\\Environment\\Path += %s\n", dir)
 
 	if opts.DryRun {
 		fmt.Fprintln(opts.Stdout, "  [dry-run] skipped")
@@ -40,7 +40,7 @@ func appendUserPath(opts Options) error {
 
 	for _, e := range strings.Split(cur, ";") {
 		if strings.EqualFold(strings.TrimSpace(e), dir) {
-			fmt.Fprintln(opts.Stdout, "  既に登録済 — skip")
+			fmt.Fprintln(detailWriter(opts), "  already on PATH")
 			return nil
 		}
 	}
@@ -71,7 +71,7 @@ func appendUserPath(opts Options) error {
 	}
 
 	broadcastSettingChange()
-	fmt.Fprintln(opts.Stdout, "  ... done (新しい terminal で有効になります)")
+	fmt.Fprintln(detailWriter(opts), "  done (takes effect in a new terminal)")
 	return nil
 }
 

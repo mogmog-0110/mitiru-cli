@@ -71,11 +71,11 @@ func main() {
 	}
 
 	if err := install.Run(opts); err != nil {
-		fmt.Fprintf(os.Stderr, "\n[ERROR] %v\n", err)
+		fmt.Fprintf(os.Stderr, "\n%v\n", err)
 		// 失敗時: double-click 起動なら console を開いたまま保ち、
 		// window が閉じる前に user が error を読めるようにする。
 		if isConsoleStarted() {
-			fmt.Fprintln(os.Stderr, "\nEnter キーで閉じます...")
+			fmt.Fprintln(os.Stderr, "\nEnter キーを押すと閉じます。")
 			_, _ = fmt.Scanln()
 		}
 		os.Exit(1)
@@ -94,7 +94,7 @@ func main() {
 // console が "閉じます" の N 行で埋まらない。
 func autoCloseCountdown(seconds int) {
 	for i := seconds; i > 0; i-- {
-		fmt.Fprintf(os.Stdout, "\rこのウィンドウは %d 秒後に閉じます ... ", i)
+		fmt.Fprintf(os.Stdout, "\rこの窓は %d 秒後に閉じます。", i)
 		time.Sleep(1 * time.Second)
 	}
 	fmt.Fprintln(os.Stdout)
