@@ -81,13 +81,13 @@ func runTest(filter string, release bool, extraIncl []string) error {
 		return err
 	}
 	if len(files) == 0 {
-		fmt.Printf("mitiru test: %s に *.cpp が見つかりません (filter=%q)\n", testsDir, filter)
+		fmt.Printf("%s に、%q に合う *.cpp が見つかりません。\n", testsDir, filter)
 		return nil
 	}
 
 	clPath, vsEnv, err := resolveClToolchain()
 	if err != nil {
-		return fmt.Errorf("MSVC toolchain の解決に失敗: %w", err)
+		return fmt.Errorf("MSVC のツールが見つかりません (%w)。mitiru doctor で確かめてください。", err)
 	}
 
 	outDir := filepath.Join(projectRoot, "build", "tests")
@@ -313,10 +313,10 @@ func summarizeTests(results []testCaseResult) error {
 			fmt.Println(indentLines(r.output))
 		}
 	}
-	fmt.Printf("\n%d tests, %d failed\n", len(results), failed)
 	if failed > 0 {
-		return fmt.Errorf("%d/%d tests failed", failed, len(results))
+		return fmt.Errorf("%d 件のテストのうち、%d 件が失敗しました。", len(results), failed)
 	}
+	fmt.Printf("\n%d 件のテストがすべて通りました。\n", len(results))
 	return nil
 }
 
