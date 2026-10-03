@@ -104,11 +104,18 @@ stylesheets and fonts, your game, assets) lives in data/. Move/copy the whole fo
 Use --bat to also emit a console-visible <name>.bat (useful for reading logs
 while debugging). --exe additionally drops a Steam-style data/<name>.exe.
 
+--sign signs the launcher, host and game DLL (and the --onefile exe) with
+signtool from the Windows SDK. The certificate comes from environment
+variables only: MITIRU_SIGN_CERT_FILE (+ MITIRU_SIGN_CERT_PASSWORD) or
+MITIRU_SIGN_CERT_THUMBPRINT. MITIRU_SIGNTOOL and MITIRU_SIGN_TIMESTAMP_URL
+are optional.
+
 Examples:
   mitiru dist                 # → dist/<name>/  (no-console <name>.exe)
   mitiru dist --bat           # also add a console-visible <name>.bat
   mitiru dist --zip           # also produce dist/<name>.zip
   mitiru dist --pack=false    # keep loose assets/ (packing is the default)
+  mitiru dist --sign          # Authenticode-sign our own binaries
   mitiru dist --out build/ship`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runDist()
@@ -131,6 +138,10 @@ Examples:
 		"ship Debug binaries (bundles the non-redistributable Debug CRT; for your own test machines only)")
 	cmd.Flags().BoolVar(&distCheck, "check", false,
 		"after packaging, run the bundle headless from a temp copy with a clean environment and fail on missing files")
+	cmd.Flags().BoolVar(&distSign, "sign", false,
+		"sign our own exe/DLLs with signtool; env: MITIRU_SIGN_CERT_FILE (+ MITIRU_SIGN_CERT_PASSWORD) "+
+			"or MITIRU_SIGN_CERT_THUMBPRINT, optional MITIRU_SIGNTOOL, MITIRU_SIGN_TIMESTAMP_URL (default "+
+			defaultTimestamp+")")
 	cmd.Flags().StringVar(&buildGenerator, "generator", "",
 		"explicit CMake generator (default Ninja)")
 	return cmd
@@ -141,6 +152,14 @@ func runDist() error {
 	_, projectRoot, ferr := config.FindManifest(cwd)
 	if ferr != nil {
 		return ferr
+	}
+	var signCfg signConfig
+	if distSign {
+		cfg, err := loadSignConfig(os.Getenv, exec.LookPath)
+		if err != nil {
+			return err
+		}
+		signCfg = cfg
 	}
 
 	// dist 専用ビルド: コンソール窓を出さない GUI host にする。dev の build/out を
@@ -269,6 +288,18 @@ func runDist() error {
 		n++
 	}
 
+	// 署名は exe へアイコンを埋めたあと、onefile がバイナリを畳む前に済ませる。
+	// 署名後に PE を書き換えると署名が壊れる。
+	if distSign {
+		files, err := distSignTargets(bundleRoot, dataDir, name, gameDir, distExe)
+		if err != nil {
+			return err
+		}
+		if err := signFiles(signCfg, files, distSignRunner, os.Stdout); err != nil {
+			return err
+		}
+	}
+
 	if distPack {
 		// <gameDir>/assets/ を <gameDir>/assets.mtpak に畳んで、バラ置きを除去する。
 		// キーは host / native loader が要求する cwd 相対パス "<gameDir>/assets/..."。
@@ -368,6 +399,11 @@ func runDist() error {
 		packCmd.Stdout, packCmd.Stderr = os.Stdout, os.Stderr
 		if err := packCmd.Run(); err != nil {
 			return fmt.Errorf("dist --onefile: selfpack: %w", err)
+		}
+		if distSign {
+			if err := signFiles(signCfg, []string{onefileExe}, distSignRunner, os.Stdout); err != nil {
+				return err
+			}
 		}
 		// 展開元のフォルダは配布物ではない。残すと「exe と data/ の両方を配る」
 		// 形に見えて、単一 exe にした意味が消える。
