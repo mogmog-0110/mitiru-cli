@@ -103,7 +103,9 @@ func scanBakeAssets(assetsDir, logicalPrefix string) ([]string, error) {
 // bakeEntryFor は一覧の 1 行の形 (パスの所は @) を返す。焼かないファイルは空。
 func bakeEntryFor(rel string) string {
 	low := strings.ToLower(rel)
-	if strings.HasSuffix(low, ".world.json") || strings.HasSuffix(low, ".region.json") {
+	// 焼いた光は cache を作らないが、読ませておけば壊れた .lighting.bin を配る前に止められる
+	if strings.HasSuffix(low, ".world.json") || strings.HasSuffix(low, ".region.json") ||
+		strings.HasSuffix(low, ".lighting.bin") {
 		return "@"
 	}
 	ext := filepath.Ext(low)

@@ -132,18 +132,20 @@ func buildProject(stdout, stderr io.Writer, allowStandalone bool) (*buildResult,
 
 	cfgName := resolveBuildConfig()
 	opts := build.Options{
-		ProjectRoot:  projectRoot,
-		ProjectName:  cfg.Project.Name,
-		EngineRoot:   engineRoot,
-		Config:       cfgName,
-		Generator:    buildGenerator,
-		ExtraDefines: buildExtraDefines, // dist が GUI subsystem のフラグを注入 (通常は空)
-		OutDir:       buildOutDir,       // dist は別 out dir (通常は空 = build/out)
-		Features:     cfg.Engine.Features,
-		NavSource:    cfg.Nav.Source,
-		NavArgs:      cfg.Nav.Args,
-		Stdout:       stdout,
-		Stderr:       stderr,
+		ProjectRoot:     projectRoot,
+		ProjectName:     cfg.Project.Name,
+		EngineRoot:      engineRoot,
+		Config:          cfgName,
+		Generator:       buildGenerator,
+		ExtraDefines:    buildExtraDefines, // dist が GUI subsystem のフラグを注入 (通常は空)
+		OutDir:          buildOutDir,       // dist は別 out dir (通常は空 = build/out)
+		Features:        cfg.Engine.Features,
+		NavSource:       cfg.Nav.Source,
+		NavArgs:         cfg.Nav.Args,
+		LightingSources: cfg.Lighting.Source,
+		LightingArgs:    cfg.Lighting.Args,
+		Stdout:          stdout,
+		Stderr:          stderr,
 	}
 
 	artifacts, err := build.Run(opts)

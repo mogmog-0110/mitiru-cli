@@ -142,6 +142,20 @@ source = "assets/level.obj"         # .obj / .gltf / .glb
 
 `[nav] source` を書くと、ビルドの一工程で engine の `mitiru_navbake` がそのメッシュを `.navmesh` に焼き、DLL の隣の同じ相対位置に置く。`assets/level.obj` なら `<DLL のフォルダ>/assets/level.navmesh` になり、ゲームは `"<プロジェクト名>/assets/level.navmesh"` を開く。焼き直すのはメッシュが変わったときだけ。`.navmesh` を読むには Detour が要るので、`[engine] features` に `nav` か `navbake` が無いとエラーにする。
 
+### 焼いた光 (`[lighting]`)
+
+engine 0.38.0 以降は、レベルの間接光 (放射照度と反射のプローブ) をビルドの一工程で焼ける。`source` には `*.lighting.json` のパスか glob を書く。1 つなら文字列、複数なら配列でよい。
+
+```toml
+[lighting]
+source = "assets/*.lighting.json"   # ["assets/stage.lighting.json", "assets/maps/*.lighting.json"] も可
+# args = ["--rays", "512"]          # mitiru_lightbake の option (--threads / --rays)
+```
+
+engine の `mitiru_lightbake` が json ごとに `.lighting.bin` を焼き、DLL の隣の同じ相対位置に置く。`assets/stage.lighting.json` なら `<DLL のフォルダ>/assets/stage.lighting.bin` になり、ゲームは `s.lightingBake3D("<プロジェクト名>/assets/stage.lighting.bin")` で読む。焼き直すのは json か、json の `"level"` が指す glTF が変わったときだけ。json の書き方は engine の `docs/LIGHTING_GI.md` にある。glob はビルドのたびに広げ直すので、json を足したら `mitiru build` を回せば焼く対象に入る。何にも当たらない glob、読めない json、見つからない `"level"` は configure の前にエラーにする。
+
+`mitiru dist` の配布物には焼いた `.lighting.bin` がそのまま入る。pack には畳まずバラ置きで残し、配布前の `--bake-caches` で host に一度読ませて、壊れたファイルを配らないようにする。
+
 ### 自前の CMakeLists.txt を持つプロジェクト
 
 エンジンをライブラリとして取り込み、自分で exe を作るプロジェクトは `[build] kind = "standalone"` にします。`mitiru` は CMakeLists.txt を生成せず、`source` の CMake をそのまま configure と build して、`target` の exe を起動します。ビルドツリーは `build/` です。
@@ -173,7 +187,7 @@ assets/hero.fbx
 assets/field.region.json     # 区画の world.json も全部焼く
 ```
 
-`bake.txt` が無ければ `assets/` を走査する。`.glb` `.gltf` `.fbx` `.vrm` は `model:`、`.obj` と `.clod` は `clod:`、`*.world.json` と `*.region.json` はそのまま一覧に入る。engine が作った cache (`.fbx.glb` `.obj.clod` `.dds`) と `assets/ui/` は入れない。glTF を drawModel で置くゲームは、`bake.txt` に `clod:` で書くと世界のモデルの cache まで焼ける。
+`bake.txt` が無ければ `assets/` を走査する。`.glb` `.gltf` `.fbx` `.vrm` は `model:`、`.obj` と `.clod` は `clod:`、`*.world.json`、`*.region.json`、`*.lighting.bin` はそのまま一覧に入る。engine が作った cache (`.fbx.glb` `.obj.clod` `.dds`) と `assets/ui/` は入れない。glTF を drawModel で置くゲームは、`bake.txt` に `clod:` で書くと世界のモデルの cache まで焼ける。
 
 読めない資産が 1 つでもあれば (host の終了コード 4)、その資産を並べて dist を止める。そのまま配ると遊ぶ側でも読めないからだ。DX12 の GPU が無いなどで host が走れないときは、警告を出して cache 無しで続ける。`--no-bake` を付けると焼き込みを飛ばす。
 

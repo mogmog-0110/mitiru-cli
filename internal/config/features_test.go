@@ -132,3 +132,87 @@ func TestNavMeshPathFor(t *testing.T) {
 		}
 	}
 }
+
+func TestLoad_LightingSourceStringOrList(t *testing.T) {
+	cfg, err := Load(writeManifest(t, hostHeader+`
+[lighting]
+source = "assets/*.lighting.json"
+`))
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if len(cfg.Lighting.Source) != 1 || cfg.Lighting.Source[0] != "assets/*.lighting.json" {
+		t.Errorf("lighting.source = %v", cfg.Lighting.Source)
+	}
+
+	cfg, err = Load(writeManifest(t, hostHeader+`
+[lighting]
+source = ["assets/a.lighting.json", 'assets\maps\*.lighting.json']
+args = ["--rays", "512"]
+`))
+	if err != nil {
+		t.Fatalf("Load list: %v", err)
+	}
+	if len(cfg.Lighting.Source) != 2 || len(cfg.Lighting.Args) != 2 {
+		t.Errorf("lighting = %+v", cfg.Lighting)
+	}
+}
+
+func TestLoad_LightingErrors(t *testing.T) {
+	cases := []struct{ name, body, want string }{
+		{"must be a lighting json", `
+[lighting]
+source = "assets/level.glb"`, "must name *.lighting.json"},
+		{"stays in the project", `
+[lighting]
+source = "../shared/a.lighting.json"`, "must stay inside the project"},
+		{"is relative", `
+[lighting]
+source = "C:/levels/a.lighting.json"`, "must be relative"},
+		{"broken glob", `
+[lighting]
+source = "assets/[a.lighting.json"`, "broken glob"},
+		{"args need a source", `
+[lighting]
+args = ["--rays", "512"]`, "lighting.args needs lighting.source"},
+		{"strings only", `
+[lighting]
+source = 3`, "string or a list of strings"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			_, err := Load(writeManifest(t, hostHeader+c.body))
+			if err == nil || !strings.Contains(err.Error(), c.want) {
+				t.Fatalf("want an error containing %q, got %v", c.want, err)
+			}
+		})
+	}
+}
+
+func TestLoad_StandaloneRejectsLighting(t *testing.T) {
+	_, err := Load(writeManifest(t, `
+[project]
+name = "desktop_world"
+
+[build]
+kind = "standalone"
+
+[lighting]
+source = "assets/a.lighting.json"
+`))
+	if err == nil || !strings.Contains(err.Error(), "only applies to host projects") {
+		t.Fatalf("want a standalone error, got %v", err)
+	}
+}
+
+func TestLightingBinPathFor(t *testing.T) {
+	for in, want := range map[string]string{
+		"assets/stage.lighting.json":         "assets/stage.lighting.bin",
+		`assets\maps\a.Lighting.JSON`:        "assets/maps/a.lighting.bin",
+		"./assets/../assets/b.lighting.json": "assets/b.lighting.bin",
+	} {
+		if got := LightingBinPathFor(in); got != want {
+			t.Errorf("LightingBinPathFor(%q) = %q, want %q", in, got, want)
+		}
+	}
+}

@@ -62,6 +62,12 @@ type Options struct {
 	// NavArgs は [nav] args。mitiru_navbake にそのまま渡す。
 	NavArgs []string
 
+	// LightingSources は [lighting] source (project root からの相対、glob 可)。空なら光を焼かない。
+	LightingSources []string
+
+	// LightingArgs は [lighting] args。mitiru_lightbake にそのまま渡す。
+	LightingArgs []string
+
 	// Stdout は progress と cmake の出力を受け取る。
 	Stdout io.Writer
 
@@ -92,6 +98,8 @@ type templateData struct {
 	Features []config.EngineFeature
 	// Nav は [nav] source があるときだけ非 nil。
 	Nav *navBake
+	// Lighting は [lighting] source があるときだけ非 nil。
+	Lighting *lightingBake
 }
 
 // navBake はビルドの一工程でナビメッシュを焼くための値。
@@ -336,7 +344,35 @@ add_dependencies({{$.TargetName}} {{$.TargetName}}_navbake)
 {{else}}message(FATAL_ERROR "mitiru.toml: [nav] source needs apps/mitiru_navbake, which this engine does not have.\n"
     "  set project.engine to a newer version (mitiru update)")
 {{end}}{{end}}
-{{if .LegacyCEF}}# CEF 世代の engine だけ: HTML の binder (mitiru_runtime/*.js) を assets/ の隣へ置く。
+{{with .Lighting}}# ── 間接光を焼く ([lighting] source) ─────────────────────────────
+# *.lighting.json を mitiru_lightbake が .lighting.bin にして、DLL の隣の同じ相対位置へ置く (lightingBake3D が読む)。
+{{if .ToolAbs}}add_executable(mitiru_lightbake "{{.ToolAbs}}")
+target_link_libraries(mitiru_lightbake PRIVATE Mitiru::mitiru)
+if(MSVC)
+    target_compile_options(mitiru_lightbake PRIVATE /bigobj)
+endif()
+set_target_properties(mitiru_lightbake PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "$<TARGET_FILE_DIR:mitiru_host>")
+# json とレベルが変わったときだけ焼き直す。焼いた先は生成式なので OUTPUT にできず、構成ごとの印で代える。
+set(_light_stamps "")
+{{range .Items}}set(_light_stamp "${CMAKE_CURRENT_BINARY_DIR}/{{$.TargetName}}_lightbake_{{.StampKey}}_$<CONFIG>.stamp")
+add_custom_command(
+    OUTPUT  "${_light_stamp}"
+    COMMAND ${CMAKE_COMMAND} -E make_directory "${_game_runtime_dir}/{{.OutDirRel}}"
+    COMMAND mitiru_lightbake "{{.JSONAbs}}" -o "${_game_runtime_dir}/{{.OutRel}}"{{$.Lighting.Args}}
+    COMMAND ${CMAKE_COMMAND} -E touch "${_light_stamp}"
+    DEPENDS mitiru_lightbake "{{.JSONAbs}}"{{range .DepsAbs}} "{{.}}"{{end}}
+    VERBATIM
+    COMMENT "mitiru-cli: baking {{.OutRel}}")
+list(APPEND _light_stamps "${_light_stamp}")
+{{end}}add_custom_target({{$.TargetName}}_lightbake ALL DEPENDS ${_light_stamps})
+# host の隣に実行時の DLL がそろってから焼く
+add_dependencies({{$.TargetName}}_lightbake mitiru_host)
+add_dependencies({{$.TargetName}} {{$.TargetName}}_lightbake)
+{{else}}message(FATAL_ERROR "mitiru.toml: [lighting] source needs apps/mitiru_lightbake, which this engine does not have.
+"
+    "  set project.engine to 0.38.0 or newer (mitiru update)")
+{{end}}{{end}}{{if .LegacyCEF}}# CEF 世代の engine だけ: HTML の binder (mitiru_runtime/*.js) を assets/ の隣へ置く。
 if(EXISTS "${MITIRU_ENGINE_ROOT}/web/mitiru_runtime")
     add_custom_command(TARGET {{.TargetName}} POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E ${_mitiru_copy_dir}
@@ -467,6 +503,10 @@ func Configure(opts Options) (cmakeSrcDir, cmakeOutDir string, err error) {
 	if err != nil {
 		return "", "", err
 	}
+	lighting, err := resolveLightingBake(opts)
+	if err != nil {
+		return "", "", err
+	}
 
 	data := templateData{
 		ProjectName:     opts.ProjectName,
@@ -481,6 +521,7 @@ func Configure(opts Options) (cmakeSrcDir, cmakeOutDir string, err error) {
 		LegacyCEF:       engine.UsesLegacyCEF(opts.EngineRoot),
 		Features:        features,
 		Nav:             nav,
+		Lighting:        lighting,
 	}
 
 	// engine 源の切り替わりは全ターゲットの作り直しになる。黙って始めると

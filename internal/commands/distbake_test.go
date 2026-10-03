@@ -30,6 +30,7 @@ func TestDistBakeListScansKinds(t *testing.T) {
 		"hero.fbx", "hero.fbx.glb", "pine.glb", "ship.gltf", "ship.bin", "chara.vrm",
 		"level.obj", "level.obj.clod", "level.mtl", "baked.clod",
 		"island.world.json", "island.world.json.m0.base.dds", "map/north.region.json",
+		"stage.lighting.json", "stage.lighting.bin",
 		"balance.json", "grass.png", "ui/main.rml", "ui/icon.glb")
 
 	got, source, err := distBakeList(assets, "g/assets")
@@ -45,6 +46,7 @@ func TestDistBakeListScansKinds(t *testing.T) {
 		"g/assets/map/north.region.json",
 		"model:g/assets/pine.glb",
 		"model:g/assets/ship.gltf",
+		"g/assets/stage.lighting.bin",
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("scan:\n got %q\nwant %q", got, want)

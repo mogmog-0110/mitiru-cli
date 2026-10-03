@@ -17,14 +17,15 @@ const ManifestFilename = "mitiru.toml"
 // ProjectConfig は scaffold テンプレートに記載された schema を反映する。
 // Field tag は BurntSushi/toml の慣習 (小文字・アンダースコア) に従う。
 type ProjectConfig struct {
-	Project ProjectSection `toml:"project"`
-	Window  WindowSection  `toml:"window"`
-	Build   BuildSection   `toml:"build"`
-	Font    FontSection    `toml:"font"`
-	Lofi    LofiSection    `toml:"lofi"`
-	Dist    DistSection    `toml:"dist"`
-	Engine  EngineSection  `toml:"engine"`
-	Nav     NavSection     `toml:"nav"`
+	Project  ProjectSection  `toml:"project"`
+	Window   WindowSection   `toml:"window"`
+	Build    BuildSection    `toml:"build"`
+	Font     FontSection     `toml:"font"`
+	Lofi     LofiSection     `toml:"lofi"`
+	Dist     DistSection     `toml:"dist"`
+	Engine   EngineSection   `toml:"engine"`
+	Nav      NavSection      `toml:"nav"`
+	Lighting LightingSection `toml:"lighting"`
 }
 
 type ProjectSection struct {
@@ -169,7 +170,10 @@ func (c *ProjectConfig) validate(path string) error {
 	if c.Window.Width < 0 || c.Window.Height < 0 {
 		return fmt.Errorf("%s: window.width/height must not be negative", path)
 	}
-	return c.validateEngine(path)
+	if err := c.validateEngine(path); err != nil {
+		return err
+	}
+	return c.validateLighting(path)
 }
 
 func (c *ProjectConfig) applyDefaults() {
