@@ -6,7 +6,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"sort"
-	"strconv"
 
 	"github.com/mogmog-0110/mitiru-cli/internal/build"
 	"github.com/spf13/cobra"
@@ -81,7 +80,8 @@ func runUI(frames int, outPath, inputScript string) error {
 	defer os.RemoveAll(captureDir)
 
 	// host が撮った後に異常終了しても、撮れた絵は残してから終了の失敗を返す (絵と失敗の両方を見せる)。
-	runErr := runHeadlessCapture(result.Artifacts, captureDir, frames, scriptAbs)
+	// frames 経った絵が撮れるまで、2 フレーム余分に回す
+	runErr := runHostCapture(result.Artifacts, captureDir, frames, frames+2, scriptAbs)
 	shot, err := lastCapture(captureDir)
 	if err != nil {
 		if runErr != nil {
@@ -106,29 +106,19 @@ func absOrEmpty(p string) (string, error) {
 	return filepath.Abs(p)
 }
 
-// runHeadlessCapture は host を窓なしの DX12 で frames だけ回し、最後のフレームを captureDir に撮らせる。
-// RmlUi は DX12 の描画先にしか重ならないので backend を固定する。host は 2 フレーム目に 1 枚目を撮り、
-// 以後 frames ごとに撮るので、frames 経った絵が撮れるまで 2 フレーム余分に回す。
-func runHeadlessCapture(art *build.Artifacts, captureDir string, frames int, inputScript string) error {
-	hostArgs := []string{art.DllRel, "--headless-3d", "--backend", "dx12",
-		"--capture-dir", captureDir, "--capture-every", strconv.Itoa(frames),
-		"--max-frames", strconv.Itoa(frames + 2)}
-	if inputScript != "" {
-		hostArgs = append(hostArgs, "--input-script", inputScript)
-	}
-	hostArgs = append(hostArgs, tomlHostArgs()...)
-
-	c := exec.Command(art.HostExePath, hostArgs...)
+// runHostCapture は、ビルドした host (build/out の、このプロジェクトのもの) を captureHostArgs で回す。
+func runHostCapture(art *build.Artifacts, captureDir string, every, maxFrames int, inputScript string) error {
+	c := exec.Command(art.HostExePath, captureHostArgs(art.DllRel, captureDir, every, maxFrames, inputScript)...)
 	c.Dir = art.DeployDir
 	c.Env = build.HostEnv()
 	c.Stdout = os.Stdout
 	c.Stderr = os.Stderr
 	if err := c.Run(); err != nil {
 		if exitErr, ok := err.(*exec.ExitError); ok {
-			return fmt.Errorf("ui: %s exited with status %d = %s",
+			return fmt.Errorf("%s exited with status %d = %s",
 				filepath.Base(art.HostExePath), exitErr.ExitCode(), hostExitHint(exitErr.ExitCode()))
 		}
-		return fmt.Errorf("ui: run %s: %w", filepath.Base(art.HostExePath), err)
+		return fmt.Errorf("run %s: %w", filepath.Base(art.HostExePath), err)
 	}
 	return nil
 }

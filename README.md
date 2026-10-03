@@ -39,6 +39,7 @@ mitiru run
 | `mitiru replay <file>` | 記録済みの入力を決定論的に再生。`--test` で回帰判定、`--suite <dir>` で `*.mtrr` を一括判定 |
 | `mitiru renderer` / `audio` / `input` / `scene` | 各 subsystem を単独で起動 |
 | `mitiru ui` | ゲームを窓なしで回し、RML の UI ごと最後のフレームを PNG に撮る (`--frames` / `--input-script` / `--out`) |
+| `mitiru capture` | ビルドしたこのプロジェクトの host を窓なしで回し、`--every` フレームごとに PNG を `build/capture/` へ書く (`--frames` / `--script` / `--out`) |
 | `mitiru lint` | `assets/ui/main.rml` が引く変数を、C++ の `hud.set("view.x", ...)` と突き合わせる |
 | `mitiru bisect` | どのビルドから決定論が壊れたかを二分探索で特定 |
 | `mitiru fuzz` | ランダム入力でクラッシュ・非決定・不変条件違反を探す |
