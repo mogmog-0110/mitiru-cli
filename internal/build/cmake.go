@@ -18,6 +18,7 @@ import (
 	"text/template"
 
 	"github.com/mogmog-0110/mitiru-cli/internal/config"
+	"github.com/mogmog-0110/mitiru-cli/internal/console"
 	"github.com/mogmog-0110/mitiru-cli/internal/engine"
 )
 
@@ -532,10 +533,9 @@ func Configure(opts Options) (cmakeSrcDir, cmakeOutDir string, err error) {
 		if m := engineRootRe.FindSubmatch(prev); m != nil && string(m[1]) != data.EngineRoot {
 			if opts.Stdout != nil {
 				fmt.Fprintf(opts.Stdout,
-					"NOTE: engine source changed:\n  %s\n  -> %s\n"+
-						"  the whole engine rebuilds from scratch. If this is unexpected,\n"+
-						"  check this terminal for a stale MITIRU_ENGINE_ROOT\n"+
-						"  (the env var overrides the mitiru.toml pin).\n",
+					"エンジンの場所が %s から %s に変わったので、エンジン全体を作り直します。"+
+						"心当たりがなければ、このターミナルに古い MITIRU_ENGINE_ROOT が残っていないか確かめてください"+
+						" (この環境変数は mitiru.toml の指定より優先されます)。\n",
 					string(m[1]), data.EngineRoot)
 			}
 		}
@@ -583,7 +583,7 @@ type Artifacts struct {
 // — host launcher と user の game DLL の両方。
 func Run(opts Options) (*Artifacts, error) {
 	if runtime.GOOS != "windows" {
-		return nil, fmt.Errorf("mitiru build is currently Windows-only (running on %s)",
+		return nil, fmt.Errorf("mitiru build は今のところ Windows でだけ動きます (今の OS は %s です)。",
 			runtime.GOOS)
 	}
 
@@ -617,7 +617,7 @@ func Run(opts Options) (*Artifacts, error) {
 	// これから使うものと異なる場合は output tree を消す。生成された source
 	// tree (cmakeSrcDir) は触らない — cmake -B の output のみ作り直す。
 	if mismatch, cached := generatorMismatch(cmakeOutDir, generator); mismatch {
-		fmt.Fprintf(opts.Stdout,
+		console.Fverbosef(opts.Stdout,
 			"Generator changed (%s -> %s); clearing %s for a clean reconfigure...\n",
 			cached, generator, cmakeOutDir)
 		if rmErr := os.RemoveAll(cmakeOutDir); rmErr != nil {
@@ -632,7 +632,7 @@ func Run(opts Options) (*Artifacts, error) {
 		return nil, err
 	}
 
-	fmt.Fprintf(opts.Stdout, "Configuring %s (%s)...\n", opts.ProjectName, opts.Config)
+	console.Fverbosef(opts.Stdout, "Configuring %s (%s)...\n", opts.ProjectName, opts.Config)
 	if err := runCMakeConfigure(vcvars, generator, cmakeSrcDir, cmakeOutDir, opts); err != nil {
 		return nil, err
 	}
@@ -640,7 +640,7 @@ func Run(opts Options) (*Artifacts, error) {
 		return nil, fmt.Errorf("write %s: %w", buildMetaFile, err)
 	}
 
-	fmt.Fprintf(opts.Stdout, "Building %s (%s)...\n", opts.ProjectName, opts.Config)
+	console.Fverbosef(opts.Stdout, "Building %s (%s)...\n", opts.ProjectName, opts.Config)
 	if err := runCMakeBuild(vcvars, cmakeOutDir, opts); err != nil {
 		return nil, err
 	}
@@ -673,16 +673,15 @@ func Run(opts Options) (*Artifacts, error) {
 	}
 	if hostExe == "" {
 		return nil, fmt.Errorf(
-			"build succeeded but mitiru_host.exe was not found under %s\n"+
-				"  expected one of:\n    %s",
-			cmakeOutDir, strings.Join(hostCandidates, "\n    "))
+			"ビルドは通りましたが、%s の下に mitiru_host.exe が見つかりません。探した場所は %s です。",
+			cmakeOutDir, strings.Join(hostCandidates, "、"))
 	}
 
 	deployDir := filepath.Dir(hostExe)
 	dllPath := filepath.Join(deployDir, targetName, targetName+".dll")
 	if _, err := os.Stat(dllPath); err != nil {
 		return nil, fmt.Errorf(
-			"build succeeded but %s.dll was not found at %s: %w",
+			"ビルドは通りましたが、%s.dll が %s に見つかりません (%w)。",
 			targetName, dllPath, err)
 	}
 
@@ -695,7 +694,7 @@ func Run(opts Options) (*Artifacts, error) {
 		return nil, syncErr
 	}
 	if copied > 0 {
-		fmt.Fprintf(opts.Stdout, "Synced %d asset file(s) into %s\n",
+		console.Fverbosef(opts.Stdout, "Synced %d asset file(s) into %s\n",
 			copied, filepath.Join(targetName, "assets"))
 	}
 
@@ -732,8 +731,8 @@ func runCMakeConfigure(vcvars, generator, srcDir, outDir string, opts Options) e
 	// "Jolt not found"、"Tracy not found" のような feature detection 行は
 	// 初回 user には error のように見え、first-touch の出力 budget を食い潰す。
 	// これを capture し、configure が実際に失敗したときだけ表に出す。
-	// MITIRU_VERBOSE=1 で再度 opt-in できる (dry-run は既に独自の printer を通る)。
-	if os.Getenv("MITIRU_DRY_RUN") == "1" || os.Getenv("MITIRU_VERBOSE") == "1" {
+	// -v / MITIRU_LOG=verbose で再度 opt-in できる (dry-run は既に独自の printer を通る)。
+	if os.Getenv("MITIRU_DRY_RUN") == "1" || console.Verbose() {
 		return runBatchScript("mitiru_configure", script, opts)
 	}
 	var buf bytes.Buffer
@@ -845,11 +844,27 @@ func runCMakeBuild(vcvars, outDir string, opts Options) error {
 	}
 
 	filtered := opts
-	pf := newBuildProgressFilter(opts.Stdout, TargetName(opts.ProjectName))
+	if console.Verbose() {
+		pf := newBuildProgressFilter(opts.Stdout, TargetName(opts.ProjectName))
+		filtered.Stdout = pf
+		buildErr := runBatchScript("mitiru_build", script, filtered)
+		if finishErr := pf.Finish(buildErr == nil); finishErr != nil && buildErr == nil {
+			return finishErr
+		}
+		return buildErr
+	}
+
+	// 既定では進捗の 1 行だけを出し、診断行は失敗したときにまとめて出す。
+	pf := newQuietBuildProgressFilter(opts.Stdout, TargetName(opts.ProjectName))
+	var errBuf bytes.Buffer
 	filtered.Stdout = pf
+	filtered.Stderr = &errBuf
 	buildErr := runBatchScript("mitiru_build", script, filtered)
-	if finishErr := pf.Finish(); finishErr != nil && buildErr == nil {
+	if finishErr := pf.Finish(buildErr == nil); finishErr != nil && buildErr == nil {
 		return finishErr
+	}
+	if buildErr != nil && errBuf.Len() > 0 {
+		fmt.Fprint(opts.Stderr, errBuf.String())
 	}
 	return buildErr
 }
@@ -893,9 +908,21 @@ func runBatchScript(prefix, script string, opts Options) error {
 	cmd.Stderr = opts.Stderr
 	cmd.Dir = opts.ProjectRoot
 	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("command failed (%w): %s", err, scriptPath)
+		return batchFailure(prefix, err)
 	}
 	return nil
+}
+
+// batchFailure は失敗したスクリプトの種類を利用者の言葉で言う。.bat の
+// パスは実行後に消えるので、メッセージには入れない。
+func batchFailure(prefix string, err error) error {
+	switch prefix {
+	case "mitiru_configure":
+		return fmt.Errorf("cmake の構成に失敗しました (%w)。上の出力を確かめてください。", err)
+	case "mitiru_build":
+		return fmt.Errorf("ビルドに失敗しました (%w)。上のエラーを直してください。", err)
+	}
+	return fmt.Errorf("%s が失敗しました (%w)。", prefix, err)
 }
 
 // FindVcvars64 は `mitiru doctor` と同じ candidate set を使って vcvars64.bat を
@@ -919,7 +946,7 @@ func FindVcvars64() (string, error) {
 	if len(matches) > 0 {
 		return matches[0], nil
 	}
-	return "", fmt.Errorf("vcvars64.bat not found; install Visual Studio 2022 Build Tools (C++ workload) and re-run 'mitiru doctor'")
+	return "", fmt.Errorf("vcvars64.bat が見つかりません。Visual Studio 2022 Build Tools (C++ のワークロード) を入れてから、mitiru doctor で確かめてください。")
 }
 
 // toCMakePath は Windows path を、CMake が常に受け付ける forward-slash 形式に

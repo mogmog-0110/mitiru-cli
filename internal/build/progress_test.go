@@ -19,7 +19,7 @@ func TestBuildProgressFilterDropsShowIncludesNoise(t *testing.T) {
 	if _, err := f.Write([]byte(strings.Join(lines, "\r\n") + "\r\n")); err != nil {
 		t.Fatalf("Write: %v", err)
 	}
-	if err := f.Finish(); err != nil {
+	if err := f.Finish(true); err != nil {
 		t.Fatalf("Finish: %v", err)
 	}
 
@@ -48,7 +48,7 @@ func TestBuildProgressFilterKeepsRealErrorLines(t *testing.T) {
 	if _, err := f.Write([]byte(strings.Join(lines, "\r\n") + "\r\n")); err != nil {
 		t.Fatalf("Write: %v", err)
 	}
-	if err := f.Finish(); err != nil {
+	if err := f.Finish(true); err != nil {
 		t.Fatalf("Finish: %v", err)
 	}
 
@@ -68,7 +68,7 @@ func TestBuildProgressFilterBucketsEngineVsUser(t *testing.T) {
 	_, _ = f.Write([]byte("[1/3] Building CXX object CMakeFiles/mitiru_host.dir/main.cpp.obj\r\n"))
 	_, _ = f.Write([]byte("[2/3] Building CXX object CMakeFiles/probe.dir/src/main.cpp.obj\r\n"))
 	_, _ = f.Write([]byte("[3/3] Building CXX object CMakeFiles/probe.dir/src/other.cpp.obj\r\n"))
-	if err := f.Finish(); err != nil {
+	if err := f.Finish(true); err != nil {
 		t.Fatalf("Finish: %v", err)
 	}
 
@@ -77,5 +77,49 @@ func TestBuildProgressFilterBucketsEngineVsUser(t *testing.T) {
 	}
 	if f.userDone != 2 {
 		t.Errorf("expected 2 user-bucket lines (probe target), got %d", f.userDone)
+	}
+}
+
+func TestQuietBuildProgressFilterLeavesNothingOnSuccess(t *testing.T) {
+	var out bytes.Buffer
+	f := newQuietBuildProgressFilter(&out, "probe")
+
+	lines := []string{
+		`[1/2] Building CXX object CMakeFiles/probe.dir/src/main.cpp.obj`,
+		`E:\proj\src\main.cpp(3): warning C4100: 'x': unreferenced formal parameter`,
+		`ninja: no work to do.`,
+		`[2/2] Linking CXX shared library probe\probe.dll`,
+	}
+	_, _ = f.Write([]byte(strings.Join(lines, "\r\n") + "\r\n"))
+	if err := f.Finish(true); err != nil {
+		t.Fatalf("Finish: %v", err)
+	}
+
+	got := out.String()
+	if strings.Contains(got, "warning") || strings.Contains(got, "ninja:") || strings.Contains(got, "\n") {
+		t.Errorf("quiet success should leave no lines, got %q", got)
+	}
+	if !strings.HasSuffix(got, "\r") {
+		t.Errorf("quiet success should erase the progress line, got %q", got)
+	}
+}
+
+func TestQuietBuildProgressFilterShowsHeldLinesOnFailure(t *testing.T) {
+	var out bytes.Buffer
+	f := newQuietBuildProgressFilter(&out, "probe")
+
+	lines := []string{
+		`[1/2] Building CXX object CMakeFiles/probe.dir/src/main.cpp.obj`,
+		`E:\proj\src\main.cpp(12): error C2065: 'foo': undeclared identifier`,
+		`FAILED: CMakeFiles/probe.dir/src/main.cpp.obj`,
+	}
+	_, _ = f.Write([]byte(strings.Join(lines, "\r\n") + "\r\n"))
+	if err := f.Finish(false); err != nil {
+		t.Fatalf("Finish: %v", err)
+	}
+
+	got := out.String()
+	if !strings.Contains(got, "error C2065") || !strings.Contains(got, "FAILED:") {
+		t.Errorf("held error lines should appear on failure, got %q", got)
 	}
 }

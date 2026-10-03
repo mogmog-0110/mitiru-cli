@@ -9,6 +9,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/mogmog-0110/mitiru-cli/internal/console"
 )
 
 const (
@@ -33,7 +35,7 @@ func EnsureLegacyCEF(engineRoot string, progress io.Writer) error {
 		return nil
 	}
 	if err := EnsureCEF(engineRoot, progress); err != nil {
-		return fmt.Errorf("CEF setup failed (engine 0.33 以前): %w", err)
+		return fmt.Errorf("engine 0.33 以前が使う CEF を用意できません。%w", err)
 	}
 	return nil
 }
@@ -80,8 +82,8 @@ func EnsureCEF(engineRoot string, progress io.Writer) error {
 	}
 
 	url := cefDownloadURL()
-	fmt.Fprintf(progress, "Downloading CEF %s (this may take a few minutes)...\n", cefVersion)
-	fmt.Fprintf(progress, "  URL: %s\n", url)
+	fmt.Fprintf(progress, "CEF %s をダウンロードしています。数分かかります。\n", cefVersion)
+	console.Fverbosef(progress, "  URL: %s\n", url)
 
 	client := &http.Client{Timeout: cefTimeout}
 	req, err := http.NewRequest(http.MethodGet, url, nil)
@@ -104,7 +106,7 @@ func EnsureCEF(engineRoot string, progress io.Writer) error {
 			resp.Status, url)
 	}
 
-	fmt.Fprintln(progress, "  Extracting CEF archive...")
+	console.Fverbosef(progress, "  Extracting CEF archive\n")
 	if err := extractTarBz2(resp.Body, externalCef, progress); err != nil {
 		// Best-effort cleanup — 中途半端に展開された tree を残さない。
 		_ = os.RemoveAll(targetDir)
@@ -127,7 +129,7 @@ func EnsureCEF(engineRoot string, progress io.Writer) error {
 			targetDir)
 	}
 
-	fmt.Fprintf(progress, "CEF ready at %s\n", targetDir)
+	console.Fverbosef(progress, "CEF ready at %s\n", targetDir)
 	return nil
 }
 
@@ -185,7 +187,7 @@ func extractTarBz2(r io.Reader, destDir string, progress io.Writer) error {
 			fileCount++
 			totalBytes += n
 			if fileCount%500 == 0 {
-				fmt.Fprintf(progress, "  extracted %d files (%.1f MB)...\n",
+				console.Fverbosef(progress, "  extracted %d files (%.1f MB)\n",
 					fileCount, float64(totalBytes)/(1024*1024))
 			}
 		default:
@@ -194,7 +196,7 @@ func extractTarBz2(r io.Reader, destDir string, progress io.Writer) error {
 		}
 	}
 
-	fmt.Fprintf(progress, "  Extracted %d files (%.1f MB total).\n",
+	console.Fverbosef(progress, "  Extracted %d files (%.1f MB total)\n",
 		fileCount, float64(totalBytes)/(1024*1024))
 	return nil
 }

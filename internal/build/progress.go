@@ -38,10 +38,16 @@ type buildProgressFilter struct {
 	// 目印 (通常は TargetName されたターゲット名の .dir)。
 	userDirMarker string
 
+	// hold が真なら診断行をすぐ出さずに溜め、失敗したときだけ出す。成功した
+	// ビルドの警告や "ninja: no work to do." を既定の画面に出さないため。
+	hold bool
+	held bytes.Buffer
+
 	buf            bytes.Buffer
 	engineDone     int
 	userDone       int
 	onProgressLine bool // 直前の書き込みが \r 上書き行だったか
+	progressWidth  int  // 成功時に進捗行を空白で消すための幅
 	err            error
 }
 
@@ -51,6 +57,12 @@ func newBuildProgressFilter(underlying io.Writer, targetName string) *buildProgr
 		marker = targetName + ".dir"
 	}
 	return &buildProgressFilter{underlying: underlying, userDirMarker: marker}
+}
+
+func newQuietBuildProgressFilter(underlying io.Writer, targetName string) *buildProgressFilter {
+	f := newBuildProgressFilter(underlying, targetName)
+	f.hold = true
+	return f
 }
 
 func (f *buildProgressFilter) Write(p []byte) (int, error) {
@@ -73,15 +85,28 @@ func (f *buildProgressFilter) Write(p []byte) (int, error) {
 }
 
 // Finish は残った未改行のバッファを吐き出し、進捗行の上書き表示中だったなら
-// 改行して締める。cmake --build 完了後に必ず呼ぶこと。
-func (f *buildProgressFilter) Finish() error {
+// 改行して締める。cmake --build 完了後に必ず呼ぶこと。ok はビルドが成功したか。
+// 溜めた診断行は失敗したときだけ出し、成功したときは進捗行も消して何も残さない。
+func (f *buildProgressFilter) Finish(ok bool) error {
 	if f.buf.Len() > 0 {
 		f.handleLine(strings.TrimRight(f.buf.String(), "\r\n"))
 		f.buf.Reset()
 	}
+	if f.hold && ok {
+		if f.onProgressLine {
+			f.writeRaw("\r" + strings.Repeat(" ", f.progressWidth) + "\r")
+			f.onProgressLine = false
+		}
+		f.held.Reset()
+		return f.err
+	}
 	if f.onProgressLine {
 		f.writeRaw("\n")
 		f.onProgressLine = false
+	}
+	if f.held.Len() > 0 {
+		f.writeRaw(f.held.String())
+		f.held.Reset()
 	}
 	return f.err
 }
@@ -100,9 +125,15 @@ func (f *buildProgressFilter) handleLine(line string) {
 		} else {
 			f.engineDone++
 		}
-		status := fmt.Sprintf("\r[%s/%s] engine:%d user:%d", cur, total, f.engineDone, f.userDone)
-		f.writeRaw(status)
+		status := fmt.Sprintf("[%s/%s] engine:%d user:%d", cur, total, f.engineDone, f.userDone)
+		f.writeRaw("\r" + status)
+		f.progressWidth = max(f.progressWidth, len(status))
 		f.onProgressLine = true
+		return
+	}
+	if f.hold {
+		f.held.WriteString(line)
+		f.held.WriteString("\n")
 		return
 	}
 	// 通常の診断行 (warning / error / cmake message)。進捗行の上に重ねて

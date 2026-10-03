@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/mogmog-0110/mitiru-cli/internal/build"
+	"github.com/mogmog-0110/mitiru-cli/internal/console"
 	"github.com/spf13/cobra"
 )
 
@@ -39,8 +40,8 @@ Set [build] bake = true in mitiru.toml to run this automatically after
 				return err
 			}
 			if res.Config.Standalone() {
-				return fmt.Errorf("mitiru bake: standalone projects don't use mitiru_host --bake " +
-					"(no game DLL / Spawner schema to bake against)")
+				return fmt.Errorf("standalone のプロジェクトでは mitiru bake を使えません。" +
+					"焼くには game DLL の配置の定義が要ります。")
 			}
 			return runBakeAll(res.Artifacts, os.Stdout)
 		},
@@ -59,10 +60,10 @@ func runBakeAll(art *build.Artifacts, stdout io.Writer) error {
 	entries, err := os.ReadDir(assetsDir)
 	if err != nil {
 		if os.IsNotExist(err) {
-			fmt.Fprintf(stdout, "mitiru bake: %s が無いので何もしません\n", assetsDir)
+			fmt.Fprintf(stdout, "%s が無いので、焼くものはありません。\n", assetsDir)
 			return nil
 		}
-		return fmt.Errorf("mitiru bake: read %s: %w", assetsDir, err)
+		return fmt.Errorf("%s を読めません (%w)。", assetsDir, err)
 	}
 
 	baked, skipped := 0, 0
@@ -79,13 +80,17 @@ func runBakeAll(art *build.Artifacts, stdout io.Writer) error {
 		output, runErr := cmd.CombinedOutput()
 		if runErr != nil {
 			// Spawner 形でない JSON は「焼けない」が正常系 (i18n など)。stderr 1 行だけ見せて続行する。
-			fmt.Fprintf(stdout, "  skip %s (%s)\n", e.Name(), strings.TrimSpace(string(output)))
+			console.Fverbosef(stdout, "  skip %s (%s)\n", e.Name(), strings.TrimSpace(string(output)))
 			skipped++
 			continue
 		}
-		fmt.Fprintf(stdout, "  baked %s -> %s\n", e.Name(), filepath.Base(out))
+		console.Fverbosef(stdout, "  baked %s -> %s\n", e.Name(), filepath.Base(out))
 		baked++
 	}
-	fmt.Fprintf(stdout, "mitiru bake: %d baked, %d skipped (%s)\n", baked, skipped, assetsDir)
+	fmt.Fprintf(stdout, "%s の JSON を %d 個焼きました。", assetsDir, baked)
+	if skipped > 0 {
+		fmt.Fprintf(stdout, "配置の形でない %d 個は飛ばしました。", skipped)
+	}
+	fmt.Fprintln(stdout)
 	return nil
 }

@@ -20,6 +20,26 @@ func hostExitHint(code int) string {
 	return hex
 }
 
+// hostExitMessage は run / watch が利用者に見せる 1 文。hostExitHint は verify の
+// JSON にも入るので英語のまま残し、こちらは日本語で対処まで書く。
+func hostExitMessage(exe string, code int) string {
+	u := uint32(code)
+	switch u {
+	case 0xC0000135:
+		return fmt.Sprintf("%s を起動できませんでした (0xC0000135)。必要な DLL が見つかりません。"+
+			"`mitiru doctor` で、host の隣の DLL と Debug CRT (msvcp140d など) を確かめてください。", exe)
+	case 0xC0000005:
+		return fmt.Sprintf("%s がアクセス違反 (0xC0000005) で止まりました。"+
+			"ゲーム DLL が null や解放済みのポインタを使っていないか確かめてください。", exe)
+	case 0xC0000409:
+		return fmt.Sprintf("%s がスタックの破損か強制終了 (0xC0000409) で止まりました。", exe)
+	}
+	if u < 0x10000 {
+		return fmt.Sprintf("%s が終了コード %d で終わりました。", exe, code)
+	}
+	return fmt.Sprintf("%s が終了コード 0x%08X で終わりました。", exe, u)
+}
+
 // hostExitReason は host 即死時の exit code を人間語に変換する (verify の A6)。
 func hostExitReason(code int) string {
 	return fmt.Sprintf("host exited immediately (exit code %s)", hostExitHint(code))

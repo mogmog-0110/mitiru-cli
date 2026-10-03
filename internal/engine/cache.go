@@ -13,6 +13,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/mogmog-0110/mitiru-cli/internal/console"
 )
 
 const (
@@ -58,7 +60,7 @@ func EnsureSource(version string, progress io.Writer) (string, error) {
 			return "", fmt.Errorf("resolve MITIRU_ENGINE_ROOT: %w", absErr)
 		}
 		if _, statErr := os.Stat(filepath.Join(abs, "CMakeLists.txt")); statErr != nil {
-			return "", fmt.Errorf("MITIRU_ENGINE_ROOT=%s does not contain CMakeLists.txt: %w",
+			return "", fmt.Errorf("MITIRU_ENGINE_ROOT=%s に CMakeLists.txt が見つかりません。エンジンのフォルダを指しているか確かめてください (%w)。",
 				abs, statErr)
 		}
 		// mitiru.toml の pin が黙って捨てられると、版を指定して確かめたつもりの
@@ -66,7 +68,7 @@ func EnsureSource(version string, progress io.Writer) (string, error) {
 		// 両方入れ、見落とされないよう黄色にする (E3)。
 		const yellow, reset = "\x1b[33m", "\x1b[0m"
 		fmt.Fprintf(progress,
-			"%s[warn] MITIRU_ENGINE_ROOT=%s を使用 (mitiru.toml の engine = %q は無視)%s\n",
+			"%sMITIRU_ENGINE_ROOT の %s を使います。mitiru.toml の engine = %q は使いません。%s\n",
 			yellow, abs, version, reset)
 		return abs, nil
 	}
@@ -102,7 +104,7 @@ func EnsureSource(version string, progress io.Writer) (string, error) {
 		return "", fmt.Errorf("create cache dir: %w", err)
 	}
 
-	fmt.Fprintf(progress, "Downloading MitiruEngine %s...\n", tag)
+	fmt.Fprintf(progress, "MitiruEngine %s をダウンロードしています。この版では初回だけです。\n", tag)
 	if err := downloadAndExtract(tag, versionDir, progress); err != nil {
 		// Best-effort: 中途半端な cache を残さない。
 		_ = os.RemoveAll(versionDir)
@@ -117,7 +119,7 @@ func EnsureSource(version string, progress io.Writer) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	fmt.Fprintf(progress, "MitiruEngine %s ready at %s\n", tag, root)
+	console.Fverbosef(progress, "MitiruEngine %s ready at %s\n", tag, root)
 	return root, nil
 }
 
@@ -128,7 +130,7 @@ func resolveTag(version string, progress io.Writer) (string, error) {
 		return "", errors.New("engine version is empty")
 	}
 	if v == "latest" {
-		fmt.Fprintln(progress, "Resolving latest MitiruEngine release...")
+		console.Fverbosef(progress, "Resolving latest MitiruEngine release\n")
 		tag, err := fetchLatestTag()
 		if err != nil {
 			return "", fmt.Errorf("resolve 'latest' tag: %w", err)
@@ -174,8 +176,8 @@ func downloadAndExtract(tag, destDir string, progress io.Writer) error {
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("GET %s returned %s (does tag %q exist on %s?)",
-			url, resp.Status, tag, publicRepo)
+		return fmt.Errorf("%s を取得できません (%s)。%s に %s の版があるか確かめてください。",
+			url, resp.Status, publicRepo, tag)
 	}
 
 	return extractTarGz(resp.Body, destDir, progress)
@@ -241,7 +243,7 @@ func extractTarGz(r io.Reader, destDir string, progress io.Writer) error {
 			fileCount++
 			totalBytes += n
 			if fileCount%200 == 0 {
-				fmt.Fprintf(progress, "  extracted %d files (%.1f MB)...\n",
+				console.Fverbosef(progress, "  extracted %d files (%.1f MB)\n",
 					fileCount, float64(totalBytes)/(1024*1024))
 			}
 		case tar.TypeSymlink, tar.TypeLink:
@@ -254,7 +256,7 @@ func extractTarGz(r io.Reader, destDir string, progress io.Writer) error {
 		}
 	}
 
-	fmt.Fprintf(progress, "Extracted %d files (%.1f MB total).\n",
+	console.Fverbosef(progress, "Extracted %d files (%.1f MB total)\n",
 		fileCount, float64(totalBytes)/(1024*1024))
 	return nil
 }

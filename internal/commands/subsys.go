@@ -1,6 +1,7 @@
 package commands
 
 import (
+	"bytes"
 	"fmt"
 	"os"
 	"os/exec"
@@ -9,6 +10,7 @@ import (
 
 	"github.com/mogmog-0110/mitiru-cli/internal/build"
 	"github.com/mogmog-0110/mitiru-cli/internal/config"
+	"github.com/mogmog-0110/mitiru-cli/internal/console"
 	"github.com/mogmog-0110/mitiru-cli/internal/engine"
 )
 
@@ -65,15 +67,15 @@ func resolveEngineRoot() (string, error) {
 	}
 	manifestPath, _, err := config.FindManifest(cwd)
 	if err != nil {
-		return "", fmt.Errorf("run this from inside a mitiru project (mitiru.toml pins the engine version): %w", err)
+		return "", fmt.Errorf("mitiru のプロジェクトの中 (mitiru.toml があるフォルダ) で実行してください。%w", err)
 	}
 	cfg, err := config.Load(manifestPath)
 	if err != nil {
 		return "", fmt.Errorf("load %s: %w", manifestPath, err)
 	}
-	root, err := engine.EnsureSource(cfg.EngineTag(), os.Stdout)
+	root, err := engine.EnsureSource(cfg.EngineTag(), os.Stderr)
 	if err != nil {
-		return "", fmt.Errorf("fetch engine %s: %w", cfg.EngineTag(), err)
+		return "", fmt.Errorf("engine %s を用意できません。%w", cfg.EngineTag(), err)
 	}
 	return root, nil
 }
@@ -112,6 +114,7 @@ func findOrBuildEngineExe(engineRoot, target, exeName string) (string, error) {
 		return c, nil
 	}
 
+	fmt.Fprintf(os.Stderr, "%s をエンジンからビルドしています。初回だけ数分かかります。\n", target)
 	if err := ensureEngineConfigured(engineRoot); err != nil {
 		return "", err
 	}
@@ -121,7 +124,7 @@ func findOrBuildEngineExe(engineRoot, target, exeName string) (string, error) {
 	if c := firstExisting(candidates); c != "" {
 		return c, nil
 	}
-	return "", fmt.Errorf("built %s but no executable appeared under %s",
+	return "", fmt.Errorf("%s をビルドしましたが、%s の下に実行ファイルが見つかりません。",
 		target, filepath.Join(engineRoot, "build", "{apps,examples}", target))
 }
 
@@ -133,14 +136,14 @@ func ensureEngineConfigured(engineRoot string) error {
 	if _, err := os.Stat(filepath.Join(buildDir, "CMakeCache.txt")); err == nil {
 		return nil
 	}
-	if err := engine.EnsureLegacyCEF(engineRoot, os.Stdout); err != nil {
+	if err := engine.EnsureLegacyCEF(engineRoot, os.Stderr); err != nil {
 		return err
 	}
 	vcvars, err := build.FindVcvars64()
 	if err != nil {
 		return err
 	}
-	fmt.Println("Configuring engine (first subsystem build; cached afterwards)...")
+	console.Verbosef("Configuring engine (first subsystem build; cached afterwards)\n")
 	// MITIRU_BUILD_TESTS は top-level engine configure では ON がデフォルトだが、
 	// release snapshot は examples/ (subsystem target 群) を tests/ なしで配布するため、
 	// 存在しない dir への add_subdirectory(tests) を避けるべく tests は off にする。
@@ -148,7 +151,7 @@ func ensureEngineConfigured(engineRoot string) error {
 		"cmake -S \"%s\" -B \"%s\" -G Ninja -DCMAKE_BUILD_TYPE=Debug -DMITIRU_BUILD_TESTS=OFF\r\n",
 		engineRoot, buildDir)
 	if err := runMsvcScript("mitiru_engine_configure", body); err != nil {
-		return fmt.Errorf("configure engine at %s: %w", engineRoot, err)
+		return fmt.Errorf("%s のエンジンで cmake の構成に失敗しました (%w)。上の出力を確かめてください。", engineRoot, err)
 	}
 	return nil
 }
@@ -169,7 +172,7 @@ func subsysExeName(name string) string {
 // status を mirror できるようにする。
 func launchSubsystem(name string, args ...string) error {
 	if runtime.GOOS != "windows" {
-		return fmt.Errorf("mitiru %s is currently Windows-only (running on %s)",
+		return fmt.Errorf("mitiru %s は今のところ Windows でだけ動きます (今の OS は %s です)。",
 			name, runtime.GOOS)
 	}
 
@@ -178,7 +181,7 @@ func launchSubsystem(name string, args ...string) error {
 		return err
 	}
 
-	fmt.Printf("Running %s\n", exePath)
+	console.Verbosef("Running %s\n", exePath)
 
 	cmd := exec.Command(exePath, args...)
 	cmd.Stdout = os.Stdout
@@ -188,7 +191,7 @@ func launchSubsystem(name string, args ...string) error {
 
 	if err := cmd.Run(); err != nil {
 		if exitErr, ok := err.(*exec.ExitError); ok {
-			return fmt.Errorf("%s exited with status %d", filepath.Base(exePath), exitErr.ExitCode())
+			return fmt.Errorf("%s", hostExitMessage(filepath.Base(exePath), exitErr.ExitCode()))
 		}
 		return fmt.Errorf("%s: %w", name, err)
 	}
@@ -206,7 +209,7 @@ func buildEngineTarget(buildDir, target string) error {
 	body := msvcPrelude(vcvars) + fmt.Sprintf(
 		"cmake --build \"%s\" --config Debug --target %s\r\n", buildDir, target)
 	if err := runMsvcScript("mitiru_target", body); err != nil {
-		return fmt.Errorf("cmake --build %s --target %s: %w", buildDir, target, err)
+		return fmt.Errorf("%s のビルドに失敗しました (%w)。上のエラーを確かめてください。", target, err)
 	}
 	return nil
 }
@@ -222,9 +225,9 @@ func msvcPrelude(vcvars string) string {
 		vcvars)
 }
 
-// runMsvcScript は body を一時 .bat として書き出し cmd /c 経由で実行し、出力を
-// console に stream する。file に書くことで、path に空白を含むときの cmd quoting bug
-// を回避する。
+// runMsvcScript は body を一時 .bat として書き出し cmd /c 経由で実行する。出力は
+// -v のときだけ流し、それ以外は失敗したときにまとめて出す。file に書くことで、
+// path に空白を含むときの cmd quoting bug を回避する。
 func runMsvcScript(prefix, body string) error {
 	tmp, err := os.CreateTemp("", prefix+"-*.bat")
 	if err != nil {
@@ -239,7 +242,17 @@ func runMsvcScript(prefix, body string) error {
 	tmp.Close()
 
 	cmd := exec.Command("cmd", "/c", scriptPath)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	return cmd.Run()
+	if console.Verbose() {
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		return cmd.Run()
+	}
+	var out bytes.Buffer
+	cmd.Stdout = &out
+	cmd.Stderr = &out
+	if err := cmd.Run(); err != nil {
+		os.Stderr.Write(out.Bytes())
+		return err
+	}
+	return nil
 }

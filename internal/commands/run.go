@@ -12,6 +12,7 @@ import (
 
 	"github.com/mogmog-0110/mitiru-cli/internal/build"
 	"github.com/mogmog-0110/mitiru-cli/internal/config"
+	"github.com/mogmog-0110/mitiru-cli/internal/console"
 	"github.com/mogmog-0110/mitiru-cli/internal/engine"
 	"github.com/spf13/cobra"
 )
@@ -174,8 +175,8 @@ func warnIfNoAutoReflect(projectRoot string) {
 			return // 見つかった (AUTO/手動どちらでも可)
 		}
 	}
-	fmt.Println("--learn: src/ に MITIRU_REFLECT_AUTO(YourGameType) が無いので inspector は空のままです。")
-	fmt.Println("         状態を GameMemory の struct 定義の後ろに 1 行足すと全フィールドが見えるようになります。")
+	fmt.Fprintln(os.Stderr, "src/ に MITIRU_REFLECT_AUTO(YourGameType) が無いので、--learn で開く窓には何も表示されません。"+
+		"GameMemory の struct 定義の後ろにこの 1 行を足すと、すべてのフィールドが見えるようになります。")
 }
 
 func runRun() error {
@@ -189,7 +190,7 @@ func runRun() error {
 	build.ClearBuildErrorFile(result.ProjectRoot)
 
 	art := result.Artifacts
-	fmt.Printf("\nRunning %s %s\n", filepath.Base(art.HostExePath), art.DllRel)
+	console.Verbosef("Running %s %s\n", filepath.Base(art.HostExePath), art.DllRel)
 
 	hostArgs := []string{art.DllRel}
 	// 並走中の `mitiru watch` 等がエラーファイルを書いたら帯を出せるよう、
@@ -198,10 +199,10 @@ func runRun() error {
 	if runRecordFile != "" {
 		abs, err := filepath.Abs(runRecordFile)
 		if err != nil {
-			return fmt.Errorf("run: resolve --record %q: %w", runRecordFile, err)
+			return fmt.Errorf("--record に指定した %q を絶対パスにできません (%w)。", runRecordFile, err)
 		}
 		hostArgs = append(hostArgs, "--record", abs)
-		fmt.Printf("Recording input → %s\n", abs)
+		console.Verbosef("Recording input to %s\n", abs)
 	}
 
 	// mitiru.toml の [window] サイズ / [font] atlas を host へ渡す。
@@ -221,17 +222,17 @@ func runRun() error {
 	// では解決できない → ビルドに使う VS toolchain の PATH を前置する (R-01)。
 	cmd.Env = build.HostEnv()
 	if err := cmd.Start(); err != nil {
-		return fmt.Errorf("run %s %s: %w", art.HostExePath, art.DllRel, err)
+		return fmt.Errorf("%s を起動できません (%w)。", art.HostExePath, err)
 	}
 
 	var inspectorCmd *exec.Cmd
 	if runInspectPage != "" {
 		ic, err := startInspectorChild(cmd.Process.Pid, runInspectPage)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "warning: --inspect failed: %v\n", err)
+			fmt.Fprintf(os.Stderr, "--inspect の窓を開けませんでした。%v。\n", err)
 		} else {
 			inspectorCmd = ic
-			fmt.Printf("Inspector pid: %d (will close when game exits)\n", ic.Process.Pid)
+			console.Verbosef("Inspector pid: %d (will close when game exits)\n", ic.Process.Pid)
 		}
 	}
 
@@ -245,14 +246,13 @@ func runRun() error {
 	if waitErr != nil {
 		if exitErr, ok := waitErr.(*exec.ExitError); ok {
 			// 異常終了コードは 16 進デコード + 既知コードのヒント付きで出す (R-02)。
-			return fmt.Errorf("%s exited with status %d = %s",
-				filepath.Base(art.HostExePath), exitErr.ExitCode(), hostExitHint(exitErr.ExitCode()))
+			return fmt.Errorf("%s", hostExitMessage(filepath.Base(art.HostExePath), exitErr.ExitCode()))
 		}
-		return fmt.Errorf("run %s: %w", filepath.Base(art.HostExePath), waitErr)
+		return fmt.Errorf("%s の終わりを待てませんでした (%w)。", filepath.Base(art.HostExePath), waitErr)
 	}
 
-	// ゲーム終了後に受動的な更新通知を出す (コマンド末尾、一行 footer)。
-	maybeNotifyUpdates(result.Config.Project.Engine, os.Stdout)
+	// 更新の知らせは成功時の画面に出さない。-v のときだけ末尾に添える。
+	maybeNotifyUpdates(result.Config.Project.Engine, console.VerboseWriter(os.Stdout))
 	return nil
 }
 
@@ -271,14 +271,14 @@ func standaloneProjectHere() bool {
 // host 向けの窓 (inspector、console、record) は host が無いので付けられない。
 func runStandalone(exeArgs []string) error {
 	if runInspectArg != "" || runWithConsole || runRecordFile != "" {
-		return fmt.Errorf("--inspect, --console and --record need mitiru_host; a standalone project runs its own exe")
+		return fmt.Errorf("--inspect、--console、--record は mitiru_host で動かすときだけ使えます。standalone のプロジェクトでは外してください。")
 	}
 	result, err := runAnyBuild()
 	if err != nil {
 		return err
 	}
 	exe := result.Artifacts.HostExePath
-	fmt.Printf("\nRunning %s %s\n", filepath.Base(exe), strings.Join(exeArgs, " "))
+	console.Verbosef("Running %s %s\n", filepath.Base(exe), strings.Join(exeArgs, " "))
 
 	cmd := exec.Command(exe, exeArgs...)
 	cmd.Stdout = os.Stdout
@@ -289,10 +289,9 @@ func runStandalone(exeArgs []string) error {
 	cmd.Env = build.HostEnv()
 	if err := cmd.Run(); err != nil {
 		if exitErr, ok := err.(*exec.ExitError); ok {
-			return fmt.Errorf("%s exited with status %d = %s",
-				filepath.Base(exe), exitErr.ExitCode(), hostExitHint(exitErr.ExitCode()))
+			return fmt.Errorf("%s", hostExitMessage(filepath.Base(exe), exitErr.ExitCode()))
 		}
-		return fmt.Errorf("run %s: %w", filepath.Base(exe), err)
+		return fmt.Errorf("%s を起動できません (%w)。", filepath.Base(exe), err)
 	}
 	return nil
 }
@@ -302,15 +301,15 @@ func runStandalone(exeArgs []string) error {
 // launch 前にゲームの snapshot file を短時間 poll し、即「waiting」表示を避ける。
 func startInspectorChild(gamePid int, page string) (*exec.Cmd, error) {
 	if runtime.GOOS != "windows" {
-		return nil, fmt.Errorf("--inspect is Windows-only for now")
+		return nil, fmt.Errorf("--inspect は今のところ Windows でだけ使えます")
 	}
-	engineRoot, err := engine.EnsureSource("latest", os.Stdout)
+	engineRoot, err := engine.EnsureSource("latest", os.Stderr)
 	if err != nil {
-		return nil, fmt.Errorf("locate engine source: %w", err)
+		return nil, fmt.Errorf("エンジンのソースが見つかりません (%w)", err)
 	}
 	exePath := findToolExe(engineRoot)
 	if exePath == "" {
-		return nil, fmt.Errorf("%s.exe not found — run `cmake --build <engine>/build --target %s` once",
+		return nil, fmt.Errorf("%s.exe が見つかりません。一度 `cmake --build <engine>/build --target %s` を実行してください",
 			toolExeTarget, toolExeTarget)
 	}
 
@@ -330,7 +329,7 @@ func startInspectorChild(gamePid int, page string) (*exec.Cmd, error) {
 	c.Stderr = os.Stderr
 	c.Dir = filepath.Dir(exePath)
 	if err := c.Start(); err != nil {
-		return nil, fmt.Errorf("start inspector: %w", err)
+		return nil, fmt.Errorf("窓を起動できません (%w)", err)
 	}
 	return c, nil
 }

@@ -6,6 +6,7 @@ import (
 	"os/exec"
 	"path/filepath"
 
+	"github.com/mogmog-0110/mitiru-cli/internal/console"
 	"github.com/spf13/cobra"
 )
 
@@ -45,24 +46,23 @@ func runDebug() error {
 	}
 	art := result.Artifacts
 
-	fmt.Printf("\nRunning %s %s [debug mode]\n", filepath.Base(art.HostExePath), art.DllRel)
+	console.Verbosef("Running %s %s [debug mode]\n", filepath.Base(art.HostExePath), art.DllRel)
 
 	cmd := exec.Command(art.HostExePath, art.DllRel)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	cmd.Stdin = os.Stdin
 	cmd.Dir = art.DeployDir
-	cmd.Env = append(os.Environ(),
+	cmd.Env = append(console.ChildEnv(os.Environ()),
 		"MITIRU_DEBUG=1",
 		"MITIRU_INSPECTOR=1",
 	)
 
 	if err := cmd.Run(); err != nil {
 		if exitErr, ok := err.(*exec.ExitError); ok {
-			return fmt.Errorf("%s exited with status %d (see stderr above)",
-				filepath.Base(art.HostExePath), exitErr.ExitCode())
+			return fmt.Errorf("%s", hostExitMessage(filepath.Base(art.HostExePath), exitErr.ExitCode()))
 		}
-		return fmt.Errorf("debug run %s: %w", filepath.Base(art.HostExePath), err)
+		return fmt.Errorf("%s を起動できません (%w)。", filepath.Base(art.HostExePath), err)
 	}
 	return nil
 }
