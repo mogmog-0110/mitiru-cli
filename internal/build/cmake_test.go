@@ -75,7 +75,8 @@ func TestConfigure_TemplateDeploysGamepadDll(t *testing.T) {
 	cmake := generatedCMake(t, projectRoot, engineRoot)
 
 	for _, want := range []string{
-		"if(COMMAND mitiru_deploy_runtime)\n    mitiru_deploy_runtime(mitiru_host)",
+		// ゲームの target も渡し、ゲームの DLL が link した物を第三者ライセンスの表記に載せる
+		"if(COMMAND mitiru_deploy_runtime)\n    mitiru_deploy_runtime(mitiru_host my_first_game)",
 		"elseif(COMMAND mitiru_deploy_sdl3)",
 		"mitiru_deploy_sdl3(mitiru_host)",
 		"elseif(WIN32 AND TARGET SDL2::SDL2)",

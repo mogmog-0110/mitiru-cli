@@ -185,8 +185,9 @@ endif()
 {{end}}
 # host が実行時に読む DLL を host の隣へ deploy する。engine に mitiru_deploy_runtime があれば、何を置くか
 # (パッドの SDL3、ONNX Runtime と DirectML、DXC、Steam) は engine が決める。古い engine は SDL3 か SDL2 だけ。
+# ゲームの target も渡すと、engine はゲームの DLL が link した物も第三者ライセンスの表記に載せる。
 if(COMMAND mitiru_deploy_runtime)
-    mitiru_deploy_runtime(mitiru_host)
+    mitiru_deploy_runtime(mitiru_host {{.TargetName}})
 elseif(COMMAND mitiru_deploy_sdl3)
     mitiru_deploy_sdl3(mitiru_host)
 elseif(WIN32 AND TARGET SDL2::SDL2)
