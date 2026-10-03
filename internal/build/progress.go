@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"os"
 	"regexp"
 	"strings"
 )
@@ -43,6 +44,11 @@ type buildProgressFilter struct {
 	userDone       int
 	onProgressLine bool // 直前の書き込みが \r 上書き行だったか
 	err            error
+
+	// toPipe は書き先が端末でないとき true。ログや別のプログラムが読む出力では \r の
+	// 上書きが効かず進捗が数百行に並ぶので、最後の 1 行だけを Finish で出す。
+	toPipe     bool
+	lastStatus string
 }
 
 func newBuildProgressFilter(underlying io.Writer, targetName string) *buildProgressFilter {
@@ -50,7 +56,17 @@ func newBuildProgressFilter(underlying io.Writer, targetName string) *buildProgr
 	if targetName != "" {
 		marker = targetName + ".dir"
 	}
-	return &buildProgressFilter{underlying: underlying, userDirMarker: marker}
+	return &buildProgressFilter{underlying: underlying, userDirMarker: marker, toPipe: !isTerminal(underlying)}
+}
+
+// isTerminal は w がコンソールにつながった *os.File のとき true。
+func isTerminal(w io.Writer) bool {
+	f, ok := w.(*os.File)
+	if !ok {
+		return false
+	}
+	st, err := f.Stat()
+	return err == nil && st.Mode()&os.ModeCharDevice != 0
 }
 
 func (f *buildProgressFilter) Write(p []byte) (int, error) {
@@ -83,6 +99,10 @@ func (f *buildProgressFilter) Finish() error {
 		f.writeRaw("\n")
 		f.onProgressLine = false
 	}
+	if f.lastStatus != "" {
+		f.writeRaw(f.lastStatus + "\n")
+		f.lastStatus = ""
+	}
 	return f.err
 }
 
@@ -100,8 +120,12 @@ func (f *buildProgressFilter) handleLine(line string) {
 		} else {
 			f.engineDone++
 		}
-		status := fmt.Sprintf("\r[%s/%s] engine:%d user:%d", cur, total, f.engineDone, f.userDone)
-		f.writeRaw(status)
+		status := fmt.Sprintf("[%s/%s] engine:%d user:%d", cur, total, f.engineDone, f.userDone)
+		if f.toPipe {
+			f.lastStatus = status
+			return
+		}
+		f.writeRaw("\r" + status)
 		f.onProgressLine = true
 		return
 	}
