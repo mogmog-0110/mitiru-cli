@@ -33,6 +33,12 @@ func SetVerbose(on bool) {
 
 func Verbose() bool { return verbose.Load() }
 
+// ForceVerbose はテストが詳しさを決め打ちにするためのもの。戻り値で元に戻す。
+func ForceVerbose(on bool) (restore func()) {
+	prev := verbose.Swap(on)
+	return func() { verbose.Store(prev) }
+}
+
 // Logger は書き先と詳しさを値で持つ。テストでは書き先を差し替える。
 type Logger struct {
 	out     io.Writer

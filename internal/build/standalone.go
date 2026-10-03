@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+
+	"github.com/mogmog-0110/mitiru-cli/internal/console"
 )
 
 // StandaloneOptions は自前の CMakeLists.txt と exe を持つ project
@@ -85,11 +87,11 @@ func RunStandalone(opts StandaloneOptions) (*Artifacts, error) {
 		Stdout:      opts.Stdout,
 		Stderr:      opts.Stderr,
 	}
-	fmt.Fprintf(opts.Stdout, "Configuring %s (%s)...\n", opts.Target, opts.Config)
+	console.Fverbosef(opts.Stdout, "Configuring %s (%s)...\n", opts.Target, opts.Config)
 	if err := runCMakeConfigure(vcvars, generator, opts.SourceDir, outDir, cmakeOpts); err != nil {
 		return nil, err
 	}
-	fmt.Fprintf(opts.Stdout, "Building %s (%s)...\n", opts.Target, opts.Config)
+	console.Fverbosef(opts.Stdout, "Building %s (%s)...\n", opts.Target, opts.Config)
 	if err := runCMakeBuild(vcvars, outDir, cmakeOpts); err != nil {
 		return nil, err
 	}

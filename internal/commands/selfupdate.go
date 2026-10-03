@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/mogmog-0110/mitiru-cli/internal/console"
 	"github.com/mogmog-0110/mitiru-cli/internal/engine"
 	"github.com/spf13/cobra"
 )
@@ -96,7 +97,7 @@ func runSelfUpdate(checkOnly bool) error {
 		return fmt.Errorf("current CLI version %q is not parseable", cliVersion)
 	}
 
-	fmt.Println("Checking for the latest mitiru release...")
+	console.Verbosef("Checking for the latest mitiru release\n")
 	rel, err := fetchLatestCLIRelease()
 	if err != nil {
 		return err
@@ -108,22 +109,21 @@ func runSelfUpdate(checkOnly bool) error {
 
 	switch latest.Compare(cur) {
 	case 0:
-		fmt.Printf("Already up to date: mitiru %s is the latest release.\n", cur)
+		fmt.Printf("mitiru %s が最新です。\n", cur)
 		return nil
 	case -1:
-		fmt.Printf("Running mitiru %s is newer than the latest release %s; leaving it.\n", cur, latest)
+		fmt.Printf("今の mitiru %s は、公開されている最新の %s より新しいので、そのままにします。\n", cur, latest)
 		return nil
 	}
 
-	fmt.Printf("\n  update available: mitiru %s -> %s\n", cur, latest)
 	if checkOnly {
-		fmt.Println("\n  (--check) no changes made. Run 'mitiru self-update' to apply.")
+		fmt.Printf("mitiru %s から %s へ上げられます。--check なので何も変えていません。上げるには mitiru self-update を実行してください。\n", cur, latest)
 		return nil
 	}
 
 	dlURL := pickAsset(rel.Assets)
 	if dlURL == "" {
-		return fmt.Errorf("release %s has no mitiru asset for %s/%s (platform unsupported by this release?)",
+		return fmt.Errorf("%s の release には %s/%s 向けの mitiru がありません。",
 			latest, runtime.GOOS, runtime.GOARCH)
 	}
 
@@ -136,11 +136,11 @@ func runSelfUpdate(checkOnly bool) error {
 		return fmt.Errorf("resolve binary path: %w", err)
 	}
 
-	fmt.Printf("Downloading mitiru %s for %s/%s...\n", latest, runtime.GOOS, runtime.GOARCH)
+	console.Verbosef("Downloading mitiru %s for %s/%s\n", latest, runtime.GOOS, runtime.GOARCH)
 	if err := downloadBinarySwap(dlURL, exe); err != nil {
 		return err
 	}
-	fmt.Printf("Updated: %s is now mitiru %s.\n", exe, latest)
+	fmt.Printf("mitiru を %s から %s に上げました (%s)。\n", cur, latest, exe)
 	return nil
 }
 

@@ -10,6 +10,8 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+
+	"github.com/mogmog-0110/mitiru-cli/internal/console"
 )
 
 // 署名の設定は環境変数だけから読む。証明書の場所やパスワードを mitiru.toml に書かせると、
@@ -173,12 +175,12 @@ func maskSignArgs(args []string) []string {
 // signFiles は files に署名する。走らせるコマンド行は w に出すが、パスワードは伏せる。
 func signFiles(cfg signConfig, files []string, run signRunner, w io.Writer) error {
 	if len(files) == 0 {
-		return errors.New("dist --sign: 署名するファイルが無い")
+		return errors.New("dist --sign で署名するファイルがありません。")
 	}
 	args := signtoolArgs(cfg, files)
-	fmt.Fprintf(w, "dist --sign: %s %s\n", cfg.Tool, strings.Join(maskSignArgs(args), " "))
+	console.Fverbosef(w, "dist --sign: %s %s\n", cfg.Tool, strings.Join(maskSignArgs(args), " "))
 	if err := run(cfg.Tool, args); err != nil {
-		return fmt.Errorf("dist --sign: signtool が失敗した: %w", err)
+		return fmt.Errorf("signtool での署名に失敗しました (%w)。", err)
 	}
 	return nil
 }

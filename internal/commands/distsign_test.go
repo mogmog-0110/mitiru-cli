@@ -7,6 +7,8 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+
+	"github.com/mogmog-0110/mitiru-cli/internal/console"
 )
 
 func fakeEnv(vars map[string]string) func(string) string {
@@ -53,6 +55,8 @@ func TestSignFilesDryRun(t *testing.T) {
 	var gotTool string
 	var gotArgs []string
 	run := func(tool string, args []string) error { gotTool, gotArgs = tool, args; return nil }
+	// コマンド行は -v のときだけ出る。
+	defer console.ForceVerbose(true)()
 	var echo bytes.Buffer
 	if err := signFiles(cfg, []string{"g.exe", "g.dll"}, run, &echo); err != nil {
 		t.Fatal(err)
