@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/mogmog-0110/mitiru-cli/internal/build"
+	"github.com/mogmog-0110/mitiru-cli/internal/console"
 	"github.com/mogmog-0110/mitiru-cli/internal/hunt"
 )
 
@@ -134,7 +135,7 @@ func runInhumanSequence(p huntJobParams, work string) {
 	if sl := hunt.GenSaveLoadEveryFrame(p.saveKey, p.loadKey, p.frames); sl != nil {
 		variants = append(variants, sl)
 	} else {
-		fmt.Println("  inhuman: --save-key/--load-key 未指定のため save→load 連打チェックはスキップ")
+		console.Verbosef("  inhuman: no --save-key/--load-key; skipping the save/load-every-frame check\n")
 	}
 	for _, events := range variants {
 		if len(events) == 0 {
@@ -144,7 +145,7 @@ func runInhumanSequence(p huntJobParams, work string) {
 		handleHuntCandidate(p, work, events, false)
 	}
 
-	fmt.Println("  inhuman: PUT /api/ai/state 極端値チェック中...")
+	console.Verbosef("  inhuman: checking extreme values through PUT /api/ai/state\n")
 	p.st.incRuns()
 	if finding := huntPutExtreme(p.art, p.timeout); finding.IsBug() {
 		p.st.reportFinding(p, work,
@@ -206,9 +207,9 @@ func (st *huntState) reportFinding(p huntJobParams, work string, events []hunt.E
 	}
 
 	if _, err := hunt.WriteTicket(p.outDir, t); err != nil {
-		fmt.Fprintf(os.Stderr, "hunt: ticket_%02d 書き込み失敗: %v\n", n, err)
+		fmt.Fprintf(os.Stderr, "ticket_%02d を書けませんでした (%v)。\n", n, err)
 	} else {
-		fmt.Printf("  [ticket_%02d] %s: %s\n", n, t.Kind, t.Reason)
+		fmt.Printf("ticket_%02d  %s  %s\n", n, t.Kind, t.Reason)
 	}
 	st.mu.Lock()
 	st.tickets = append(st.tickets, t)

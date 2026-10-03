@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/mogmog-0110/mitiru-cli/internal/build"
+	"github.com/mogmog-0110/mitiru-cli/internal/console"
 	"github.com/mogmog-0110/mitiru-cli/internal/hunt"
 	"github.com/spf13/cobra"
 )
@@ -126,12 +127,12 @@ func runHunt() error {
 	if explorerKind == "inhuman" || explorerKind == "pairs" {
 		// 決定的な有限列挙は並列に繰り返しても無意味 (同じ入力を何本並べても同じ結果)。
 		if jobs != 1 {
-			fmt.Printf("hunt: --explorer %s は決定的な有限探索のため --jobs は無視し 1 本で走ります\n", explorerKind)
+			fmt.Printf("--explorer %s は毎回同じ入力を試すので、--jobs は使わず 1 本で調べます。\n", explorerKind)
 		}
 		jobs = 1
 	}
 
-	fmt.Printf("hunt: explorer=%s jobs=%d hours=%g frames=%d out=%s\n\n",
+	console.Verbosef("hunt: explorer=%s jobs=%d hours=%g frames=%d out=%s\n",
 		huntExplorer, jobs, huntHours, huntFrames, outDir)
 
 	start := time.Now()
@@ -162,7 +163,7 @@ func runHunt() error {
 	if err := hunt.WriteReport(outDir, stats, st.tickets); err != nil {
 		return err
 	}
-	fmt.Printf("\nhunt: %d runs, 新規チケット %d 件, 重複統合 %d 件 → %s\n",
+	fmt.Printf("%d 回試し、新しい不具合を %d 件見つけました (既に見つけたものと同じだったのは %d 件)。結果は %s にあります。\n",
 		st.runs, len(st.tickets), st.knownHits, filepath.Join(outDir, "hunt_report.md"))
 	if len(st.tickets) > 0 {
 		os.Exit(1) // CI ゲート的に使うときのため: 見つかったら非ゼロ
@@ -179,18 +180,17 @@ func printHuntAtGuidance(at string) {
 	if parts := strings.SplitN(at, ":", 2); len(parts) == 2 {
 		hh, mm = parts[0], parts[1]
 	}
-	fmt.Printf(`hunt --at は自前でスケジューラを持たず、Windows タスクスケジューラへの登録案内だけ出します。
+	fmt.Printf(`hunt --at は自分では予約しません。Windows のタスク スケジューラに登録する手順を出します。
 
-以下を管理者 PowerShell で実行するとタスクが登録されます (毎日 %s:%s に起動):
+管理者の PowerShell で次を実行すると、毎日 %s:%s に動くタスクが登録されます。
 
   schtasks /Create /TN "MitiruHunt" /SC DAILY /ST %s:%s /TR "\"%s\" hunt --hours 6 --jobs 4" /F
 
-タスクを消すには:
+タスクを消すときは次を実行してください。
 
   schtasks /Delete /TN "MitiruHunt" /F
 
-生成済みの案内 .bat が欲しい場合は tools/hunt_nightly.bat を参照してください
-(docs/BUG_HUNT.md に運用手順あり)。
+同じことをする .bat はエンジンの tools/hunt_nightly.bat にあります。
 `, hh, mm, hh, mm, exe)
 }
 
@@ -231,5 +231,5 @@ func resolveHuntArtifacts(gamePath string) (*build.Artifacts, error) {
 		}
 		return &build.Artifacts{DeployDir: deployDir, HostExePath: hostExe, DllPath: dllAbs, DllRel: dllRel}, nil
 	}
-	return nil, fmt.Errorf("hunt: --game %s の隣 (または親) に mitiru_host.exe が見つかりません (deploy レイアウト外)", dllAbs)
+	return nil, fmt.Errorf("--game に指定した %s の隣にも親のフォルダにも mitiru_host.exe が見つかりません。ビルドしてできた DLL を指定してください。", dllAbs)
 }

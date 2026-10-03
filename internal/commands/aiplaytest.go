@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/mogmog-0110/mitiru-cli/internal/build"
+	"github.com/mogmog-0110/mitiru-cli/internal/console"
 	"github.com/spf13/cobra"
 )
 
@@ -82,7 +83,7 @@ func runAiPlaytest() error {
 	}
 	if aipDriver == "sweep" && len(inv) == 0 {
 		fmt.Fprintln(os.Stderr,
-			"注意: sweep は --assert が無いと違反を検出できません (状態の観察のみ)。")
+			"sweep は --assert が無いと状態を見るだけで、不具合を見つけられません。--assert で守るべき条件を渡してください。")
 	}
 
 	res, err := runBuild()
@@ -156,8 +157,8 @@ func aiPlaytestSweep(baseURL string, inv []invariant) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	fmt.Printf("観測開始: %s\n\n", strings.TrimSpace(string(st0)))
-	fmt.Printf("ai-playtest (sweep): %d 戦略 × branch %df, 不変条件 %d 個\n\n",
+	console.Verbosef("initial state: %s\n", strings.TrimSpace(string(st0)))
+	console.Verbosef("ai-playtest (sweep): %d strategies, branch %d frames, %d invariants\n",
 		len(aipStrategies), aipHorizon, len(inv))
 
 	found := false
@@ -166,27 +167,26 @@ func aiPlaytestSweep(baseURL string, inv []invariant) (bool, error) {
 		body := fmt.Sprintf(`{"keys":%q,"frames":%d}`, s.keys, aipHorizon)
 		out, status, err := apiPost(baseURL, apiBranch, strings.NewReader(body), "application/json")
 		if err != nil || status != 200 {
-			fmt.Printf("  [%s] branch 失敗 (status %d)\n", s.name, status)
+			fmt.Printf("  [%s] 分岐を試せませんでした (status %d)。\n", s.name, status)
 			continue
 		}
 		shown := strings.TrimSpace(string(out))
 		if v := checkInvariants(string(out), inv); v != "" {
-			fmt.Printf("  [%s] → %s  ✗ %s\n", s.name, shown, v)
+			fmt.Printf("  [%s] %s  %s\n", s.name, v, shown)
 			if !found {
-				firstBug = fmt.Sprintf("戦略「%s」(branch keys=%q) で %s", s.name, s.keys, v)
+				firstBug = fmt.Sprintf("戦略「%s」(branch keys=%q) で %s を破りました", s.name, s.keys, v)
 				found = true
 			}
 		} else {
-			fmt.Printf("  [%s] → %s  ok\n", s.name, shown)
+			console.Verbosef("  [%s] ok  %s\n", s.name, shown)
 		}
 	}
 
-	fmt.Println()
 	if found {
-		fmt.Printf("バグ発見: %s\n  → この入力を記録すれば決定論 .mtrr のバグ票になる\n", firstBug)
+		fmt.Printf("不具合を見つけました。%s。この入力を --record で記録すると、毎回同じように再現できます。\n", firstBug)
 		return true, nil
 	}
-	fmt.Println("全戦略 clean ── 観測した範囲で不変条件違反なし")
+	fmt.Println("どの戦略でも、見た範囲では不変条件は守られていました。")
 	return false, nil
 }
 
@@ -198,8 +198,7 @@ func aiPlaytestClaudeCode(baseURL string) (bool, error) {
 		return false, fmt.Errorf("`claude` (Claude Code) が PATH に無い。導入するか --driver sweep を使う")
 	}
 	st0, _, _ := apiGet(baseURL, apiState)
-	fmt.Printf("観測開始: %s\n\n", strings.TrimSpace(string(st0)))
-	fmt.Println("ai-playtest (claude-code / ウィンドウなし実行 / サブスク認証・API キー不要)")
+	console.Verbosef("initial state: %s\n", strings.TrimSpace(string(st0)))
 
 	prompt := fmt.Sprintf(`あなたは MitiruEngine 製の決定論ゲームの自動プレイテスターです。画面は 1280x720。状態 API がローカルに立っています — curl で叩いてください:
   GET %[1]s%[2]s … 現在の状態 (MITIRU_REFLECT の名前付き field)
@@ -226,14 +225,14 @@ func aiPlaytestClaudeCode(baseURL string) (bool, error) {
 
 	v, ok := parseAiVerdict(text)
 	if !ok {
-		fmt.Fprintln(os.Stderr, "エージェントが verdict JSON を出さずに終了 (inconclusive)")
+		fmt.Fprintln(os.Stderr, "エージェントが判定の JSON を出さずに終わったので、結果は分かりません。")
 		return false, nil
 	}
 	if strings.EqualFold(v.Verdict, "BUG") {
-		fmt.Printf("\nバグ発見: %s  → 記録すれば決定論 .mtrr のバグ票\n", strings.TrimSpace(v.Detail))
+		fmt.Printf("不具合を見つけました。%s\n", strings.TrimSpace(v.Detail))
 		return true, nil
 	}
-	fmt.Printf("\nclean: %s\n", strings.TrimSpace(v.Detail))
+	fmt.Printf("不具合は見つかりませんでした。%s\n", strings.TrimSpace(v.Detail))
 	return false, nil
 }
 
