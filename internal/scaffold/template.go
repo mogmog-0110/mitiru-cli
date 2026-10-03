@@ -20,14 +20,6 @@ type Data struct {
 	// title や画面上のラベルにそのまま使われる。
 	ProjectName string
 
-	// ProjectIdent は ProjectName の C++ で安全な識別子形式 — lower
-	// snake_case で、`namespace <ident> { ... }` に適する。
-	ProjectIdent string
-
-	// UpperIdent は ProjectName の UPPER_SNAKE_CASE 形式。`#define
-	// <UPPER>_DLL_EXPORT` のような macro guard の接頭辞に使う。
-	UpperIdent string
-
 	// TargetName は mitiru build が作る DLL の名前 (build.TargetName と同じ規則)。
 	// DLL は mitiru_host.exe の隣の <TargetName>/ に置かれるので、ゲームがファイルを
 	// 開くときのパスの頭になる。

@@ -16,8 +16,7 @@ import (
 func TestAction3DTemplate_ManifestAndPathsAgree(t *testing.T) {
 	dir := t.TempDir()
 	name := "my-Action"
-	data := scaffold.Data{ProjectName: name, ProjectIdent: toLowerSnake(name), UpperIdent: toUpperSnake(name),
-		TargetName: build.TargetName(name), EngineVersion: defaultEngineVersion}
+	data := scaffold.Data{ProjectName: name, TargetName: build.TargetName(name), EngineVersion: defaultEngineVersion}
 	if err := scaffold.Expand("action3d", dir, data); err != nil {
 		t.Fatalf("expand: %v", err)
 	}
@@ -53,5 +52,38 @@ func TestAction3DTemplate_ManifestAndPathsAgree(t *testing.T) {
 	}
 	if !strings.Contains(string(ignore), "!/assets/**/*.obj") {
 		t.Error(".gitignore hides assets/level.obj")
+	}
+}
+
+// カメラは play の早い return に関係なく毎フレーム作り、鳴らす音はテンプレートに同梱する。
+func TestAction3DTemplate_CameraEveryFrameAndBundledSounds(t *testing.T) {
+	dir := t.TempDir()
+	data := scaffold.Data{ProjectName: "game", TargetName: build.TargetName("game"), EngineVersion: defaultEngineVersion}
+	if err := scaffold.Expand("action3d", dir, data); err != nil {
+		t.Fatalf("expand: %v", err)
+	}
+	b, err := os.ReadFile(filepath.Join(dir, "src", "main.cpp"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	src := string(b)
+	if strings.Contains(src, "gameGame") || !strings.Contains(src, "struct MyGame") {
+		t.Error("the game struct must not repeat the project name")
+	}
+	if strings.Contains(src, "pad[") {
+		t.Error("the template must not ask for hand-written padding")
+	}
+	update := src[strings.Index(src, "void update(Input in, Hud hud, float dt)"):]
+	update = update[:strings.Index(update, "}")]
+	if !strings.Contains(update, "play(in, hud, dt);") || !strings.Contains(update, "aimCamera(in, dt);") {
+		t.Errorf("update must run play and then aimCamera every frame:\n%s", update)
+	}
+	for _, id := range []string{"hit", "bgm"} {
+		if _, err := os.Stat(filepath.Join(dir, "assets", "audio", id+".wav")); err != nil {
+			t.Errorf("assets/audio/%s.wav is not scaffolded: %v", id, err)
+		}
+		if !strings.Contains(src, `"`+id+`"`) {
+			t.Errorf("main.cpp does not play %q", id)
+		}
 	}
 }

@@ -17,6 +17,7 @@ mitiru run
 - `src/main.cpp`: ゲームのコード。キャラは `mitiru/action/` (当たり判定、キャラの移動、カメラ)、敵は `mitiru/gameai/` (視界、経路、攻撃の時間割) を使う
 - `assets/level.obj`: 地形。描画 (`drawModel`)、当たり判定 (`addMeshFile`)、敵の経路の 3 つが同じファイルを読む
 - `assets/ui/main.rml`: 体力と敵の様子を出す UI (RML / RCSS)
+- `assets/audio/hit.wav`, `assets/audio/bgm.wav`: 突いたとき・打たれたときの音と、ループする BGM。`hud.play("hit")` と `hud.music("bgm")` が拡張子を除いた名前で鳴らす。どちらも mitiru-cli が数式から作った音で、CC0 (自由に使ってよい)
 - `mitiru.toml`: `[engine] features = ["nav"]` でナビメッシュの部品を DLL へ link し、`[nav] source` で `assets/level.navmesh` をビルドの時に焼く
 
 ## 次に試すこと

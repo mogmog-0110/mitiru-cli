@@ -70,8 +70,6 @@ func runNew(name string) error {
 
 	data := scaffold.Data{
 		ProjectName:   name,
-		ProjectIdent:  toLowerSnake(name),
-		UpperIdent:    toUpperSnake(name),
 		TargetName:    build.TargetName(name),
 		EngineVersion: defaultEngineVersion,
 	}
@@ -91,46 +89,4 @@ func runNew(name string) error {
 	fmt.Println("")
 	fmt.Println("Stuck? Run 'mitiru doctor' to verify your toolchain.")
 	return nil
-}
-
-// toLowerSnake は "my-game" / "myGame" / "My_Game" を "my_game" に変換する。
-// namespace として使える C++-safe な identifier になる。
-func toLowerSnake(s string) string {
-	upper := toUpperSnake(s)
-	out := make([]rune, 0, len(upper))
-	for _, r := range upper {
-		if r >= 'A' && r <= 'Z' {
-			r += 32
-		}
-		out = append(out, r)
-	}
-	return string(out)
-}
-
-func toUpperSnake(s string) string {
-	out := make([]rune, 0, len(s)*2)
-	prevWasUpper := true
-	for i, r := range s {
-		isUpper := r >= 'A' && r <= 'Z'
-		switch {
-		case r == '-' || r == '_':
-			if len(out) > 0 && out[len(out)-1] != '_' {
-				out = append(out, '_')
-			}
-			prevWasUpper = true
-		case isUpper:
-			if i > 0 && !prevWasUpper && len(out) > 0 && out[len(out)-1] != '_' {
-				out = append(out, '_')
-			}
-			out = append(out, r)
-			prevWasUpper = true
-		default:
-			if r >= 'a' && r <= 'z' {
-				r -= 32
-			}
-			out = append(out, r)
-			prevWasUpper = false
-		}
-	}
-	return string(out)
 }

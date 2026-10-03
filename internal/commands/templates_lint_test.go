@@ -14,8 +14,7 @@ func TestTemplatesScaffoldLintCleanRML(t *testing.T) {
 	for _, name := range []string{"welcome", "hello", "clicker", "shooter", "objects", "action3d"} {
 		t.Run(name, func(t *testing.T) {
 			dir := t.TempDir()
-			data := scaffold.Data{ProjectName: "lint-game", ProjectIdent: "lint_game",
-				UpperIdent: "LINT_GAME", TargetName: "lint_game", EngineVersion: defaultEngineVersion}
+			data := scaffold.Data{ProjectName: "lint-game", TargetName: "lint_game", EngineVersion: defaultEngineVersion}
 			if err := scaffold.Expand(name, dir, data); err != nil {
 				t.Fatalf("expand: %v", err)
 			}
