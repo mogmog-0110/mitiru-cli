@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"github.com/mogmog-0110/mitiru-cli/internal/console"
 	"io"
 	"os"
 	"path/filepath"
@@ -121,7 +122,7 @@ func configureIfNeeded(vcvars, generator, srcDir, outDir string, opts Options, t
 		timer.mark("configure (skipped)")
 		return nil
 	}
-	fmt.Fprintf(opts.Stdout, "Configuring %s (%s)...\n", opts.ProjectName, opts.Config)
+	console.Fverbosef(opts.Stdout, "Configuring %s (%s)...\n", opts.ProjectName, opts.Config)
 	clearConfigureStamp(outDir)
 	if err := runCMakeConfigure(vcvars, generator, srcDir, outDir, opts); err != nil {
 		return err
