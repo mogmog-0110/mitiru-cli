@@ -2,45 +2,17 @@ package hunt
 
 import (
 	"bytes"
-	"encoding/binary"
-	"os"
-	"path/filepath"
 	"testing"
 )
 
-// writeTestMtrr は v5 .mtrr を frames 個の frame (frameIdx=0..len-1、指定 state blob 付き) で
-// 合成する。frameSize は keysArrayEnd 固定 (中身は使わないのでゼロ埋めでよい)。
+// writeTestMtrr は v5 .mtrr を frameIdx=0..len-1、指定 state blob 付きで合成する。
 func writeTestMtrr(t *testing.T, states [][]byte) string {
 	t.Helper()
-	const frameSize = keysArrayEnd
-
-	var buf bytes.Buffer
-	buf.WriteString("MTRR")
-	writeU32 := func(v uint32) { _ = binary.Write(&buf, binary.LittleEndian, v) }
-	writeU64 := func(v uint64) { _ = binary.Write(&buf, binary.LittleEndian, v) }
-
-	writeU32(mtrrFormatV5)
-	writeU32(frameSize)
-	writeU32(uint32(len(states)))
-	writeU64(0) // rngSeed
-	writeU64(0) // recordedAt
-	writeU64(0) // abiVersion
-	buf.Write(make([]byte, 64)) // envTag
-
-	payload := make([]byte, frameSize)
+	frames := make([]testFrame, len(states))
 	for i, state := range states {
-		writeU32(uint32(i)) // frameIdx
-		buf.Write(payload)
-		writeU32(uint32(len(state))) // stateLen
-		buf.Write(state)
-		writeU32(0) // checksum (未検証)
+		frames[i] = testFrame{input: make([]byte, keysArrayEnd), state: state}
 	}
-
-	path := filepath.Join(t.TempDir(), "test.mtrr")
-	if err := os.WriteFile(path, buf.Bytes(), 0o644); err != nil {
-		t.Fatalf("write test mtrr: %v", err)
-	}
-	return path
+	return writeMtrr(t, mtrrFormatV5, frames)
 }
 
 func TestReadStateAtFrame(t *testing.T) {

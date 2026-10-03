@@ -1,0 +1,6 @@
+3 down Space
+5 up Space
+8 down Left
+9 down A
+12 up Left
+20 up A
