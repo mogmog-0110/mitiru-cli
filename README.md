@@ -33,7 +33,7 @@ mitiru run
 | `mitiru test` | `tests/*.cpp` を `cl /std:c++20 /utf-8` で 1 本ずつビルド・実行し、exit code で合否集計。`--filter` / `--release` / `--include` に対応 |
 | `mitiru run` | ビルドして実行。stdin、stdout、exit code を転送 |
 | `mitiru watch` | ビルドして起動し、`src/` の保存時に state を維持したまま hot reload |
-| `mitiru dist` | 配布フォルダを生成。ランタイムを `data/` に分離し、コンソールなしの `<name>.exe` を出力。`--bat` でログ用 `.bat`、`--zip` で zip を追加。`--onefile` で配布物全体を自己展開の単一 exe に畳む (ファイル名は `[dist] exe_name`、既定は `project.name`)。アセットは既定で `assets.mtpak` に埋め込む (`--pack=false` で外す)。`assets/ui/` と 3D モデル・ナビメッシュは pack に入れずバラ置きで残す (engine がファイルから直に読む)。ゲームの読む DLL を調べて VC ランタイムを同梱し、足りない DLL があれば止まる。セーブは `%APPDATA%/<name>/`。`--check` で配布物を素の環境に近い一時フォルダで headless に動かして確かめ、`--debug` で Debug ビルドを配る (自分のテスト機用) |
+| `mitiru dist` | 配布フォルダを生成。ランタイムを `data/` に分離し、コンソールなしの `<name>.exe` を出力。`--bat` でログ用 `.bat`、`--zip` で zip を追加。`--onefile` で配布物全体を自己展開の単一 exe に畳む (ファイル名は `[dist] exe_name`、既定は `project.name`)。アセットは既定で `assets.mtpak` に埋め込む (`--pack=false` で外す)。`assets/ui/` と 3D モデル・ナビメッシュは pack に入れずバラ置きで残す (engine がファイルから直に読む)。ゲームの読む DLL を調べて VC ランタイムを同梱し、足りない DLL があれば止まる。セーブは `%APPDATA%/<name>/`。pack の前に資産を読ませ、読み込みの cache を配布物に入れる (下の「配布物に入れる cache」、`--no-bake` で飛ばす)。`--check` で配布物を素の環境に近い一時フォルダで headless に動かして確かめ、`--debug` で Debug ビルドを配る (自分のテスト機用) |
 | `mitiru debug` | Debug 構成でビルドし、engine debug helper（`MITIRU_DEBUG=1` / `MITIRU_INSPECTOR=1`）を有効にして実行 |
 | `mitiru inspect [pid]` | 実行中の game を別の OS window に表示したツール画面で観察。`--inspectable input\|timetravel`、`--all` に対応 |
 | `mitiru replay <file>` | 記録済みの入力を決定論的に再生。`--test` で回帰判定、`--suite <dir>` で `*.mtrr` を一括判定 |
@@ -157,6 +157,25 @@ target = "desktop_world" # ビルドする CMake target。exe の名前でもあ
 ```
 
 `project.engine` は不要です。`mitiru run -- --selftest` のように `--` の後ろの引数は exe に渡ります。`--inspect`、`--console`、`--record`、`mitiru watch`、`mitiru dist` は mitiru_host の機能なので使えません。
+
+## 配布物に入れる cache
+
+engine は 3D の資産を初めて読むときに変換の cache を作る。FBX は `<x>.fbx.glb`、drawModel の世界のモデルは `<x>.clod`、材質と地形のテクスチャは BC 圧縮の `.dds` になり、元のファイルの隣に置かれる。シェーダーのコンパイル結果も残す。遊ぶ側でこれを作らせると、初回の起動が止まり、書けない場所 (Program Files など) に入れたときは毎回作り直しになる。
+
+`mitiru dist` は配布物を組んだあと、pack に畳む前に `data/mitiru_host.exe <game.dll> --bake-caches <一覧>` を窓なしの DX12 で走らせ、これらを配布物の中に作る。シェーダーは `data/shader_cache/` に入り、host はここを読むだけの置き場として使う。`.dds`・`.clod`・`.glb` は pack に入れずバラ置きで残る。
+
+焼く資産の一覧は `assets/bake.txt` があればその行をそのまま使う。書式は 1 行 1 つで、`#` から後は読まない。パスはゲームが読むときと同じ書き方でよい。行の頭に `model:` (glTF / FBX をスキンのモデルとして)、`clod:` (drawModel の世界のモデル) を付けると種類を決められる。
+
+```text
+# assets/bake.txt
+clod: assets/castle.glb      # drawModel で置く建物
+assets/hero.fbx
+assets/field.region.json     # 区画の world.json も全部焼く
+```
+
+`bake.txt` が無ければ `assets/` を走査する。`.glb` `.gltf` `.fbx` `.vrm` は `model:`、`.obj` と `.clod` は `clod:`、`*.world.json` と `*.region.json` はそのまま一覧に入る。engine が作った cache (`.fbx.glb` `.obj.clod` `.dds`) と `assets/ui/` は入れない。glTF を drawModel で置くゲームは、`bake.txt` に `clod:` で書くと世界のモデルの cache まで焼ける。
+
+読めない資産が 1 つでもあれば (host の終了コード 4)、その資産を並べて dist を止める。そのまま配ると遊ぶ側でも読めないからだ。DX12 の GPU が無いなどで host が走れないときは、警告を出して cache 無しで続ける。`--no-bake` を付けると焼き込みを飛ばす。
 
 ## ビルドと実行の流れ
 
