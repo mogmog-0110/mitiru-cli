@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/mogmog-0110/mitiru-cli/internal/console"
 	"github.com/mogmog-0110/mitiru-cli/internal/config"
 	"github.com/mogmog-0110/mitiru-cli/internal/engine"
 	"github.com/spf13/cobra"
@@ -47,7 +48,7 @@ func runClean() error {
 		return manifestErr
 	} else {
 		// project 無しの --all は OK — cache 削除へ進む。
-		fmt.Println("Note: not inside a mitiru project; skipping local build/ cleanup.")
+		console.Verbosef("not inside a mitiru project; skipping local build/ cleanup\n")
 	}
 
 	if cleanAll {
@@ -67,7 +68,7 @@ func removeIfPresent(path, label string) error {
 	st, err := os.Stat(path)
 	if err != nil {
 		if os.IsNotExist(err) {
-			fmt.Printf("Skipping %s (%s does not exist).\n", label, path)
+			console.Verbosef("Skipping %s (%s does not exist)\n", label, path)
 			return nil
 		}
 		return fmt.Errorf("stat %s: %w", path, err)
@@ -78,6 +79,6 @@ func removeIfPresent(path, label string) error {
 	if err := os.RemoveAll(path); err != nil {
 		return fmt.Errorf("remove %s: %w", path, err)
 	}
-	fmt.Printf("Deleted %s: %s\n", label, path)
+	fmt.Printf("%s を消しました。\n", path)
 	return nil
 }

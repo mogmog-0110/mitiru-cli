@@ -15,18 +15,18 @@ type detPattern struct {
 }
 
 var detPatterns = []detPattern{
-	{"rand(", "use a seeded std::mt19937 stored in your game state struct"},
-	{"srand(", "use a seeded std::mt19937 stored in your game state struct"},
-	{"std::random_device", "non-deterministic seed; use a fixed/replay seed"},
-	{"std::chrono::system_clock", "use the engine's dt (frame delta), not wall-clock"},
-	{"std::chrono::high_resolution_clock", "use the engine's dt (frame delta), not wall-clock"},
-	{"steady_clock::now", "use the engine's dt (frame delta), not wall-clock"},
-	{"chrono::now()", "use the engine's dt (frame delta), not wall-clock"},
-	{"time(", "wall-clock breaks determinism/replay; use dt"},
-	{"::time(", "wall-clock breaks determinism/replay; use dt"},
-	{"GetTickCount", "wall-clock breaks determinism/replay; use dt"},
-	{"timeGetTime", "wall-clock breaks determinism/replay; use dt"},
-	{"QueryPerformanceCounter", "wall-clock breaks determinism/replay; use dt"},
+	{"rand(", "ゲームの状態の struct に、種を決めた std::mt19937 を持たせて使ってください。"},
+	{"srand(", "ゲームの状態の struct に、種を決めた std::mt19937 を持たせて使ってください。"},
+	{"std::random_device", "実行のたびに違う種になります。決まった種か、リプレイに記録した種を使ってください。"},
+	{"std::chrono::system_clock", "壁時計の時刻ではなく、エンジンが渡す dt (前のフレームからの経過時間) を使ってください。"},
+	{"std::chrono::high_resolution_clock", "壁時計の時刻ではなく、エンジンが渡す dt (前のフレームからの経過時間) を使ってください。"},
+	{"steady_clock::now", "壁時計の時刻ではなく、エンジンが渡す dt (前のフレームからの経過時間) を使ってください。"},
+	{"chrono::now()", "壁時計の時刻ではなく、エンジンが渡す dt (前のフレームからの経過時間) を使ってください。"},
+	{"time(", "壁時計の時刻ではなく、エンジンが渡す dt (前のフレームからの経過時間) を使ってください。"},
+	{"::time(", "壁時計の時刻ではなく、エンジンが渡す dt (前のフレームからの経過時間) を使ってください。"},
+	{"GetTickCount", "壁時計の時刻ではなく、エンジンが渡す dt (前のフレームからの経過時間) を使ってください。"},
+	{"timeGetTime", "壁時計の時刻ではなく、エンジンが渡す dt (前のフレームからの経過時間) を使ってください。"},
+	{"QueryPerformanceCounter", "壁時計の時刻ではなく、エンジンが渡す dt (前のフレームからの経過時間) を使ってください。"},
 }
 
 // detFinding は flag された 1 行。
@@ -125,17 +125,13 @@ func stripStringLiterals(line string) string {
 // error は返さない — findings は warning のみ。
 func printDeterminismReport(findings []detFinding) {
 	fmt.Println()
-	fmt.Println("  --- determinism lint ---")
-
 	if len(findings) == 0 {
-		fmt.Println("  deterministic: no nondeterministic sources found.")
+		fmt.Println("src/ に、リプレイや巻き戻しの結果を変えるコードは見つかりませんでした。")
 		return
 	}
 
+	fmt.Printf("src/ に、リプレイや巻き戻しで同じ結果を出せなくするコードが %d 件あります。\n", len(findings))
 	for _, f := range findings {
-		fmt.Printf("  %s:%d  %s  →  %s\n", f.file, f.line, f.token, f.suggestion)
+		fmt.Printf("  %s:%d  %s  %s\n", f.file, f.line, f.token, f.suggestion)
 	}
-
-	fmt.Println()
-	fmt.Printf("  %d finding(s). These patterns break replay and past-frame rewind. See suggestions above.\n", len(findings))
 }

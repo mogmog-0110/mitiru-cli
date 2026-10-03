@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/mogmog-0110/mitiru-cli/internal/console"
 	"github.com/spf13/cobra"
 )
 
@@ -149,27 +150,26 @@ func runFuzz() error {
 	}
 	rng := rand.New(rand.NewSource(fuzzSeed))
 
-	fmt.Printf("fuzz: %d 入力, %df, seed=%d, 不変条件 %d 個\n\n", fuzzIters, fuzzFrames, fuzzSeed, len(inv))
+	console.Verbosef("fuzz: %d inputs, %d frames, seed=%d, %d invariants\n", fuzzIters, fuzzFrames, fuzzSeed, len(inv))
 	found := false
 	for i := 0; i < fuzzIters; i++ {
 		events := genInput(rng, fuzzFrames)
 		verdict, fj := fuzzRun(art.HostExePath, art.DeployDir, art.DllRel, work, events, fuzzFrames, fuzzTimeout)
 		if !fuzzFails(verdict, fj, inv) {
-			fmt.Printf("  [%02d] ok\n", i+1)
+			console.Verbosef("  [%02d] ok\n", i+1)
 			continue
 		}
 
 		var reason string
 		switch verdict {
 		case "crash":
-			reason = "CRASH"
+			reason = "ゲームが落ちました"
 		case "nondeterminism":
-			reason = "非決定性 (同入力で DIVERGE)"
+			reason = "同じ入力なのに結果が変わりました"
 		default:
-			reason = "不変条件違反 " + checkInvariants(fj, inv)
+			reason = "不変条件を破りました (" + checkInvariants(fj, inv) + ")"
 		}
-		fmt.Printf("  [%02d] FAIL: %s\n", i+1, reason)
-		fmt.Printf("       最小化中 (%d events)...\n", len(events))
+		fmt.Printf("%d 本目の入力で%s。再現する最小の入力を探しています (今は %d 個)。\n", i+1, reason, len(events))
 		minimal := minimizeFuzz(art.HostExePath, art.DeployDir, art.DllRel, work, events, inv, fuzzFrames, fuzzTimeout)
 		writeFuzzRepro(art.HostExePath, art.DeployDir, art.DllRel, minimal)
 		found = true
@@ -178,11 +178,11 @@ func runFuzz() error {
 	os.RemoveAll(work)
 
 	if !found {
-		tail := "クラッシュ/非決定性なし"
+		tail := "落ちることも、結果が変わることもありませんでした。"
 		if len(inv) > 0 {
-			tail = "不変条件も全て満たした"
+			tail = "落ちることも結果が変わることもなく、不変条件もすべて守られました。"
 		}
-		fmt.Printf("\n%d/%d clean ── 決定論 OK・%s\n", fuzzIters, fuzzIters, tail)
+		fmt.Printf("%d 本の入力を試しました。%s\n", fuzzIters, tail)
 		return nil
 	}
 	os.Exit(1)
@@ -202,9 +202,8 @@ func writeFuzzRepro(hostExe, deployDir, dllRel string, minimal []string) {
 	runHostCaptured(hostExe, deployDir, fuzzTimeout,
 		dllRel, "--size", "1280x720", "--input-script", reproTxt, "--record", reproMtrr,
 		"--max-frames", strconv.Itoa(fuzzFrames), "--window-pos", "-2200", "0", "--no-tool-windows")
-	fmt.Printf("       最小再現 = %d events → %s\n", len(minimal), reproTxt)
-	fmt.Printf("       再現リプレイ → %s\n", reproMtrr)
+	fmt.Printf("%d 個の入力で再現します。入力は %s に、再生できる記録は %s に保存しました。\n", len(minimal), reproTxt, reproMtrr)
 	for _, e := range minimal {
-		fmt.Printf("         %s\n", e)
+		fmt.Printf("  %s\n", e)
 	}
 }

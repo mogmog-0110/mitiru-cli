@@ -10,6 +10,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/mogmog-0110/mitiru-cli/internal/console"
 )
 
 // distNoBake は配布前の cache の焼き込み (mitiru_host --bake-caches) を飛ばす。
@@ -126,7 +128,7 @@ func bakeEntryFor(rel string) string {
 func bakeDistCaches(dataDir, dllRel, gameDir string, hostArgs []string, run distBakeRunner, out io.Writer) error {
 	host := filepath.Join(dataDir, "mitiru_host.exe")
 	if _, err := os.Stat(host); err != nil {
-		fmt.Fprintln(out, "dist: mitiru_host.exe が無いので cache の焼き込みを飛ばす")
+		console.Fverbosef(out, "dist: no mitiru_host.exe; skipping the cache bake\n")
 		return nil
 	}
 	entries, source, err := distBakeList(filepath.Join(dataDir, gameDir, "assets"), gameDir+"/assets")
@@ -159,17 +161,17 @@ func bakeDistCaches(dataDir, dllRel, gameDir string, hostArgs []string, run dist
 
 	switch {
 	case runErr != nil:
-		fmt.Fprintf(out, "dist: warning: cache を焼く host を起動できない (cache 無しで続ける): %v\n", runErr)
+		fmt.Fprintf(out, "読み込みの cache を作る host を起動できませんでした (%v)。cache 無しで続けます。\n", runErr)
 		return nil
 	case code == 4:
-		return fmt.Errorf("dist: 読めない資産がある (このまま配ると遊ぶ側でも読めない)\n  %s",
+		return fmt.Errorf("読めない資産があります。このまま配ると、遊ぶ側でも読めません。\n  %s",
 			strings.Join(bakeFailLines(string(output)), "\n  "))
 	case code != 0:
-		fmt.Fprintf(out, "dist: warning: cache を焼けなかった (終了コード %s)。cache 無しで続ける\n  %s\n",
+		fmt.Fprintf(out, "読み込みの cache を作れませんでした (終了コード %s)。cache 無しで続けます。\n  %s\n",
 			hostExitHint(code), lastLine(string(output)))
 		return nil
 	}
-	fmt.Fprintf(out, "dist: baked %d assets, %d shaders (%s, %.1fs)\n", len(entries), shaders, source, elapsed)
+	console.Fverbosef(out, "dist: baked %d assets, %d shaders (%s, %.1fs)\n", len(entries), shaders, source, elapsed)
 	return nil
 }
 

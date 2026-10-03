@@ -13,8 +13,8 @@ import (
 	"github.com/mogmog-0110/mitiru-cli/internal/engine"
 )
 
-// 更新通知 (受動 footer)。build / run の最後に、新しい engine release や CLI binary が
-// あれば一行だけ知らせる。pulled-UI 哲学 (ADR 0010) を守るため:
+// 更新通知 (受動 footer)。mitiru version と、-v を付けた build / run の最後に、
+// 新しい engine release や CLI binary があれば一行だけ知らせる。pulled-UI 哲学 (ADR 0010) を守るため:
 //   - ユーザーが既に叩いたコマンドの文脈でのみ出す (background daemon ではない)
 //   - 自動 DL しない。導線 (`mitiru update` / `mitiru self-update`) を示すだけ
 //   - 24h キャッシュ + 短 timeout + オフライン無言で build を遅くしない
@@ -64,15 +64,13 @@ func updateNotices(enginePin, latestEngine, cliCur, latestCLI string) []string {
 	if cur, ok := engine.ParseSemver(enginePin); ok {
 		if latest, ok := engine.ParseSemver(latestEngine); ok && latest.Compare(cur) > 0 {
 			lines = append(lines,
-				fmt.Sprintf("  ▸ engine %s available (pinned %s)", latest, cur),
-				"    run 'mitiru update' to upgrade")
+				fmt.Sprintf("engine %s が出ています (このプロジェクトは %s)。mitiru update で上げられます。", latest, cur))
 		}
 	}
 	if cur, ok := engine.ParseSemver(cliCur); ok {
 		if latest, ok := engine.ParseSemver(latestCLI); ok && latest.Compare(cur) > 0 {
 			lines = append(lines,
-				fmt.Sprintf("  ▸ mitiru CLI %s available (running %s)", latest, cur),
-				"    run 'mitiru self-update' to upgrade")
+				fmt.Sprintf("mitiru CLI %s が出ています (今は %s)。mitiru self-update で上げられます。", latest, cur))
 		}
 	}
 	return lines

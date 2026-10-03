@@ -22,7 +22,7 @@ func TestBuildProgressFilterPipeWritesOneStatusLine(t *testing.T) {
 	if _, err := f.Write([]byte(in.String())); err != nil {
 		t.Fatalf("Write: %v", err)
 	}
-	if err := f.Finish(); err != nil {
+	if err := f.Finish(true); err != nil {
 		t.Fatalf("Finish: %v", err)
 	}
 	got := out.String()

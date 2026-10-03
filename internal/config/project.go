@@ -112,7 +112,7 @@ func FindManifest(startDir string) (manifestPath, projectRoot string, err error)
 		}
 		parent := filepath.Dir(dir)
 		if parent == dir {
-			return "", "", fmt.Errorf("%s not found; run 'mitiru new' first", ManifestFilename)
+			return "", "", fmt.Errorf("%s が見つかりません。プロジェクトのフォルダで実行するか、mitiru new でプロジェクトを作ってください。", ManifestFilename)
 		}
 		dir = parent
 	}
@@ -146,7 +146,7 @@ var cefWarnOnce sync.Once
 // 古い mitiru.toml の [cef] は読み捨てる。Load は 1 コマンドで何度も呼ばれるので、知らせるのは 1 回だけ。
 func warnCEFSection(path string) {
 	cefWarnOnce.Do(func() {
-		fmt.Fprintf(os.Stderr, "%s: [cef] は使われなくなった (UI は assets/ui/main.rml)。この節は消してよい\n", path)
+		fmt.Fprintf(os.Stderr, "%s の [cef] は使われなくなりました。UI は assets/ui/main.rml に書くので、この節は消してかまいません。\n", path)
 	})
 }
 

@@ -6,6 +6,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/mogmog-0110/mitiru-cli/internal/console"
 	"github.com/mogmog-0110/mitiru-cli/internal/config"
 	"github.com/mogmog-0110/mitiru-cli/internal/engine"
 	"github.com/spf13/cobra"
@@ -59,11 +60,11 @@ func runUpdate(checkOnly, assumeYes bool) error {
 
 	cur, ok := engine.ParseSemver(cfg.Project.Engine)
 	if !ok {
-		return fmt.Errorf("mitiru.toml engine=%q is not a X.Y.Z version; fix it by hand",
+		return fmt.Errorf("mitiru.toml の engine = %q は X.Y.Z の形ではありません。手で直してください。",
 			cfg.Project.Engine)
 	}
 
-	fmt.Println("Resolving latest MitiruEngine release...")
+	console.Verbosef("Resolving latest MitiruEngine release\n")
 	latest, err := engine.LatestVersion(os.Stdout)
 	if err != nil {
 		// offline / API 失敗時は pin を壊さずに抜ける (ADR 0010 #4)。
@@ -73,48 +74,45 @@ func runUpdate(checkOnly, assumeYes bool) error {
 
 	switch latest.Compare(cur) {
 	case 0:
-		fmt.Printf("Already up to date: engine %s is the latest release.\n", cur)
+		fmt.Printf("engine %s が最新です。\n", cur)
 		return nil
 	case -1:
-		fmt.Printf("Pinned engine %s is newer than the latest published release %s; leaving it.\n",
+		fmt.Printf("指定している engine %s は、公開されている最新の %s より新しいので、そのままにします。\n",
 			cur, latest)
 		return nil
 	}
 
 	breaking := latest.Major > cur.Major || latest.Minor > cur.Minor
-	fmt.Printf("\n  update available: %s -> %s\n", cur, latest)
+	fmt.Printf("engine %s から %s へ上げられます。\n", cur, latest)
 	if breaking {
-		fmt.Printf("  WARNING: this is a minor/major bump and may break ABI.\n")
-		fmt.Printf("           rebuild from clean (mitiru clean && mitiru build) after updating.\n")
+		fmt.Printf("この更新では ABI が変わることがあります。上げたら mitiru clean で古いビルドを消してから mitiru build してください。\n")
 	}
 
 	if checkOnly {
-		fmt.Printf("\n  (--check) no changes made. Run 'mitiru update' to apply.\n")
+		fmt.Printf("--check なので何も変えていません。上げるには mitiru update を実行してください。\n")
 		return nil
 	}
 
-	if !assumeYes && !confirm(fmt.Sprintf("\nUpdate mitiru.toml to engine = \"%s\"?", latest)) {
-		fmt.Println("Aborted; pin unchanged.")
+	if !assumeYes && !confirm(fmt.Sprintf("mitiru.toml を engine = \"%s\" に書き換えますか?", latest)) {
+		fmt.Println("取りやめました。mitiru.toml はそのままです。")
 		return nil
 	}
 
 	if err := config.SetEngine(manifestPath, latest.String()); err != nil {
 		return err
 	}
-	fmt.Printf("Pinned engine = \"%s\" in %s\n", latest, config.ManifestFilename)
-
 	// MITIRU_ENGINE_ROOT override 中は tarball を引かない (pin は cosmetic)。
 	if root := strings.TrimSpace(os.Getenv("MITIRU_ENGINE_ROOT")); root != "" {
-		fmt.Printf("MITIRU_ENGINE_ROOT is set (%s); builds use that local checkout.\n", root)
-		fmt.Println("The pin was updated but no download is needed. Rebuild to pick up changes.")
+		fmt.Printf("%s を engine = \"%s\" にしました。ただし MITIRU_ENGINE_ROOT があるので、ビルドには %s を使います。\n",
+			config.ManifestFilename, latest, root)
 		return nil
 	}
 
-	fmt.Println("Pre-fetching the engine source...")
 	if _, err := engine.EnsureSource(latest.String(), os.Stdout); err != nil {
-		return fmt.Errorf("prefetch engine %s: %w", latest, err)
+		return fmt.Errorf("engine %s を取得できません (%w)。mitiru.toml はもう書き換えたので、mitiru build で取得し直せます。", latest, err)
 	}
-	fmt.Printf("Done. Run 'mitiru build' to build against engine %s.\n", latest)
+	fmt.Printf("%s を engine = \"%s\" にしました。mitiru build でこの版を使ってビルドします。\n",
+		config.ManifestFilename, latest)
 	return nil
 }
 

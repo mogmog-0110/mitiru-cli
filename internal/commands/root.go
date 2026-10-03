@@ -1,6 +1,7 @@
 package commands
 
 import (
+	"github.com/mogmog-0110/mitiru-cli/internal/console"
 	"github.com/spf13/cobra"
 )
 
@@ -18,6 +19,8 @@ const (
 // (-X .../commands.cliVersion=<tag>) で上書きする。手元 build では既定値のまま。
 // self-update がこの値と最新 release を比較する (ADR 0010)。
 var cliVersion = "0.12.8"
+
+var rootVerbose bool
 
 func NewRootCommand() *cobra.Command {
 	// 前回の self-update が残した <exe>.old を best-effort で掃除する (ADR 0010 #8)。
@@ -52,7 +55,10 @@ Manage MitiruEngine game projects without touching CMakeLists.txt:
   mitiru self-update     update the mitiru CLI binary itself
   mitiru clean           remove build/ (--all also clears engine cache)
   mitiru doctor          check that prerequisites are installed
-  mitiru version         print version`,
+  mitiru version         print version
+
+A successful run prints nothing. Add -v (or set MITIRU_LOG=verbose) to see
+build progress and diagnostics from the CLI and the game.`,
 		SilenceUsage:  true,
 		SilenceErrors: true,
 		// 引数なしの `mitiru` は対話ランチャー (menu) を開く。コマンド名を覚えて
@@ -61,7 +67,13 @@ Manage MitiruEngine game projects without touching CMakeLists.txt:
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runMenu()
 		},
+		// 子コマンドが PersistentPreRun を持たないので、ここで全コマンドに効く。
+		PersistentPreRun: func(cmd *cobra.Command, args []string) {
+			console.SetVerbose(rootVerbose)
+		},
 	}
+	root.PersistentFlags().BoolVarP(&rootVerbose, "verbose", "v", false,
+		"also print build progress and diagnostics (same as MITIRU_LOG=verbose)")
 
 	root.AddCommand(newMenuCommand())
 	root.AddCommand(newNewCommand())

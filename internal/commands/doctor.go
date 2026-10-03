@@ -33,18 +33,18 @@ func runDoctor() error {
 	checks := []check{
 		{
 			name:   "OS",
-			hint:   "Windows is the primary supported platform",
+			hint:   "mitiru は今のところ Windows で動かすものです。",
 			doneFn: func() bool { return runtime.GOOS == "windows" },
 		},
 		{
 			name: "CMake",
-			hint: "Install from https://cmake.org/download/ (or 'winget install Kitware.CMake'). " +
-				"Alternatively, install Visual Studio 2022 with the 'C++ CMake tools for Windows' component.",
+			hint: "https://cmake.org/download/ から入れてください (winget install Kitware.CMake でも入ります)。" +
+				"Visual Studio 2022 の「C++ CMake tools for Windows」を入れてもかまいません。",
 			doneFn: hasCMake,
 		},
 		{
 			name: "git",
-			hint: "Install from https://git-scm.com/download/win (or 'winget install Git.Git')",
+			hint: "https://git-scm.com/download/win から入れてください (winget install Git.Git でも入ります)。",
 			doneFn: func() bool {
 				_, err := exec.LookPath("git")
 				return err == nil
@@ -52,12 +52,12 @@ func runDoctor() error {
 		},
 		{
 			name:   "Visual Studio Build Tools",
-			hint:   "Install Visual Studio 2022 Build Tools (C++ workload). vcvars64.bat must exist.",
+			hint:   "Visual Studio 2022 Build Tools を C++ のワークロード付きで入れてください。vcvars64.bat が要ります。",
 			doneFn: hasVcvars64,
 		},
 		{
 			name: "Windows SDK",
-			hint: "Installed alongside Visual Studio 2022.",
+			hint: "Visual Studio 2022 と一緒に入ります。",
 			doneFn: func() bool {
 				return os.Getenv("WindowsSdkDir") != "" ||
 					dirExists(`C:\Program Files (x86)\Windows Kits\10`)
@@ -68,25 +68,15 @@ func runDoctor() error {
 	allOK := true
 	for _, c := range checks {
 		ok := c.doneFn()
-		mark := "OK"
-		if !ok {
-			mark = "MISSING"
-			allOK = false
-		}
-		fmt.Printf("  [%-7s] %s\n", mark, c.name)
-		if !ok {
-			fmt.Printf("            hint: %s\n", c.hint)
-		}
+		allOK = allOK && ok
+		printCheck(ok, c.name, c.hint)
 	}
 
 	if !allOK {
-		fmt.Println()
-		fmt.Println("Some prerequisites are missing. See hints above.")
-		return fmt.Errorf("doctor: prerequisites missing")
+		return fmt.Errorf("足りないものがあります。上の説明のとおりに入れてください。")
 	}
 
-	fmt.Println()
-	fmt.Println("All prerequisites look good.")
+	fmt.Println("ビルドに要るものはそろっています。")
 
 	// determinism lint — warn のみ、command を fail させない。
 	cwd, err := os.Getwd()
@@ -118,33 +108,33 @@ type symptom struct {
 func printSymptomTable() {
 	symptoms := []symptom{
 		{
-			what: "build が長い (初回 5〜10 分)",
-			why:  "初回 build はエンジン本体 (RmlUi と FreeType 込み) を丸ごとコンパイルするため。2 回目以降は数秒〜数十秒",
-			fix:  "初回は待つしかない。何度も長いなら CMake の並列度 (`cmake --build build -j N`) を確認する",
+			what: "初回のビルドに 5〜10 分かかる",
+			why:  "初回はエンジン本体を RmlUi と FreeType ごとコンパイルするからです。2 回目からは数秒から数十秒で終わります。",
+			fix:  "初回は待ってください。毎回長いときは、並列にビルドできているか (cmake --build build -j N) を確かめてください。",
 		},
 		{
-			what: "DLL not found (host が起動直後に落ちる)",
-			why:  "`mitiru build` が失敗したか未実行で、host の隣に <game>.dll が無い",
-			fix:  "`mitiru build` を通してから `mitiru run`。個別の欠落 DLL は上の Runtime checks を見る",
+			what: "mitiru run で host が起動してすぐ止まり、DLL が見つからないと言われる",
+			why:  "mitiru build が失敗したか、まだ実行していないので、host の隣に <game>.dll がありません。",
+			fix:  "mitiru build が通ってから mitiru run してください。ほかの DLL が足りないときは上の一覧を見てください。",
 		},
 		{
-			what: "窓が出ない (プロセスは起動するが画面が真っ黒/出ない)",
-			why:  "GPU backend の生成に失敗して NullDevice に fallback している",
-			fix:  "stderr の `[mitiru] gfx.*.fallback` 行を確認し、GPU ドライバ/対応 backend を見直す",
+			what: "プロセスは動いているのに、窓が出ないか真っ黒のまま",
+			why:  "GPU を使う準備に失敗しています。",
+			fix:  "mitiru run -v で起動し、GPU について出る文を確かめてから、GPU のドライバを見直してください。",
 		},
 		{
-			what: "録画がずれる (`--record` の再生が元と違う動きをする)",
-			why:  "GameMemory が flat POD でない (乱数・時刻・std::vector 等) か、記録後にゲームロジックを変更した",
-			fix:  "`docs/FLAT_POD.md` に従い状態を flat POD に保つ。ロジック変更後は録画を撮り直す",
+			what: "--record で撮った入力を再生すると、元と違う動きになる",
+			why:  "GameMemory の外に状態 (乱数、時刻、std::vector など) があるか、撮ったあとでゲームのロジックを変えています。",
+			fix:  "状態は GameMemory に置き、ロジックを変えたら撮り直してください。",
 		},
 	}
 
 	fmt.Println()
-	fmt.Println("Common symptoms:")
+	fmt.Println("よくあるつまずき")
 	for _, s := range symptoms {
-		fmt.Printf("  症状: %s\n", s.what)
-		fmt.Printf("    なぜ: %s\n", s.why)
-		fmt.Printf("    対処: %s\n", s.fix)
+		fmt.Printf("  %s\n", s.what)
+		fmt.Printf("    %s\n", s.why)
+		fmt.Printf("    %s\n", s.fix)
 	}
 }
 
@@ -169,7 +159,7 @@ func printRuntimeChecks(projectRoot string) {
 	}
 
 	fmt.Println()
-	fmt.Printf("Runtime checks (%s):\n", hostExe)
+	fmt.Printf("ビルド済みの %s を動かすのに要るもの\n", hostExe)
 	hostDir := filepath.Dir(hostExe)
 	// RCSS は host の隣か 1 つ上 (multi-config generator の Debug/ の親) にあれば RmlUi が見つける。
 	rcss := filepath.Join("assets", "ui", "base.rcss")
@@ -178,14 +168,9 @@ func printRuntimeChecks(projectRoot string) {
 		{"assets/ui/base.rcss", filepath.Join(hostDir, rcss), filepath.Join(filepath.Dir(hostDir), rcss)},
 	}
 	for _, d := range deps {
-		mark := "MISSING"
-		if fileExists(d.path) || (d.alt != "" && fileExists(d.alt)) {
-			mark = "OK"
-		}
-		fmt.Printf("  [%-7s] %s next to mitiru_host.exe\n", mark, d.name)
-		if mark == "MISSING" {
-			fmt.Println("            hint: re-run `mitiru build` (deploys runtime files next to the host)")
-		}
+		ok := fileExists(d.path) || (d.alt != "" && fileExists(d.alt))
+		printCheck(ok, d.name+" (mitiru_host.exe の隣)",
+			"mitiru build をもう一度実行してください。host の隣に必要なファイルを置き直します。")
 	}
 
 	// Debug CRT: 隣に手動配置済みか、VS toolchain PATH で解決できれば OK。
@@ -198,18 +183,23 @@ func printRuntimeChecks(projectRoot string) {
 		crtOK = build.FindInPathList(vsPath, "ucrtbased.dll") &&
 			build.FindInPathList(vsPath, "msvcp140d.dll")
 		if !crtOK {
-			hint = "Debug CRT not found in the VS toolchain PATH; repair the Visual Studio C++ workload"
+			hint = "Visual Studio のツールの PATH に Debug CRT が見つかりません。Visual Studio の C++ のワークロードを修復してください。"
 		}
 	} else {
-		hint = "vcvars64.bat not found: " + vsErr.Error()
+		hint = vsErr.Error()
 	}
-	mark := "OK"
-	if !crtOK {
-		mark = "MISSING"
+	printCheck(crtOK, "Debug ビルドの host が使う Debug CRT (msvcp140d、ucrtbased)", hint)
+}
+
+// printCheck は doctor の 1 項目を出す。足りないときだけ、その下に対処を出す。
+func printCheck(ok bool, name, hint string) {
+	if ok {
+		fmt.Printf("  OK    %s\n", name)
+		return
 	}
-	fmt.Printf("  [%-7s] Debug CRT (msvcp140d/ucrtbased) resolvable for Debug-built hosts\n", mark)
+	fmt.Printf("  なし  %s\n", name)
 	if hint != "" {
-		fmt.Printf("            hint: %s\n", hint)
+		fmt.Printf("        %s\n", hint)
 	}
 }
 

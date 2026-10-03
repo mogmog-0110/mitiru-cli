@@ -12,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/mogmog-0110/mitiru-cli/internal/console"
 	"github.com/fsnotify/fsnotify"
 	"github.com/mogmog-0110/mitiru-cli/internal/build"
 	"github.com/mogmog-0110/mitiru-cli/internal/config"
@@ -82,7 +83,7 @@ func runWatch() error {
 
 	watcher, err := fsnotify.NewWatcher()
 	if err != nil {
-		return fmt.Errorf("watch: create fsnotify watcher: %w", err)
+		return fmt.Errorf("ファイルの監視を始められません (%w)。", err)
 	}
 	defer watcher.Close()
 
@@ -101,14 +102,11 @@ func runWatch() error {
 			}
 			return nil
 		}); err != nil {
-			return fmt.Errorf("watch: walk %s: %w", root, err)
+			return fmt.Errorf("%s の中を調べられません (%w)。", root, err)
 		}
 	}
 
-	fmt.Printf("mitiru watch: watching %s\n", cwd)
-	fmt.Println("  ↳ src/**.{cpp,hpp,...}  →  rebuild DLL (host hot-reloads in place)")
-	fmt.Println("  ↳ assets/** (.lvl 等)   →  deploy へ同期 (rebuild 無し、走行中ゲームが拾う)")
-	fmt.Println("  Ctrl-C to stop")
+	console.Verbosef("mitiru watch: watching %s (src/ rebuilds the DLL, assets/ is copied to the deploy dir)\n", cwd)
 
 	state := newGameState(projectRoot)
 	state.srcAssetsDir = filepath.Join(cwd, "assets")  // データ資産 live 同期の元
@@ -118,7 +116,7 @@ func runWatch() error {
 	// すべて処理する — 後続の rebuild は disk 上の DLL を更新するだけでよく、
 	// host は relaunch しない。
 	if err := state.firstBuildAndLaunch(); err != nil {
-		return fmt.Errorf("watch: initial build/launch failed: %w", err)
+		return err
 	}
 
 	// build request は直列化された goroutine に集約され、save の burst が 1 回の
@@ -127,9 +125,9 @@ func runWatch() error {
 	buildReq := make(chan struct{}, 1)
 	go func() {
 		for range buildReq {
-			fmt.Println("\nmitiru watch: rebuilding...")
+			console.Verbosef("mitiru watch: rebuilding\n")
 			if err := state.rebuildOnly(); err != nil {
-				fmt.Fprintf(os.Stderr, "watch: rebuild failed: %v\n", err)
+				fmt.Fprintf(os.Stderr, "%v\n", err)
 			}
 		}
 	}()
@@ -163,10 +161,10 @@ func runWatch() error {
 	for {
 		select {
 		case <-state.exited:
-			fmt.Println("\nmitiru watch: ゲーム窓が閉じられた — 監視を停止します。")
+			console.Verbosef("mitiru watch: the game window closed; stopping\n")
 			return nil
 		case <-sigCh:
-			fmt.Println("\nmitiru watch: 停止します (Ctrl-C)。")
+			console.Verbosef("mitiru watch: Ctrl-C; stopping\n")
 			return nil
 		case ev, ok := <-watcher.Events:
 			if !ok { return nil }
@@ -177,19 +175,19 @@ func runWatch() error {
 				}
 			}
 			if shouldTrigger(ev.Name, ev.Op) {
-				fmt.Printf("mitiru watch: %s changed\n", filepath.Base(ev.Name))
+				console.Verbosef("mitiru watch: %s changed\n", filepath.Base(ev.Name))
 				schedule()
 			} else if state.shouldSyncAsset(ev.Name, ev.Op) {
 				// データ資産 (.lvl 等) は rebuild せず deploy へコピー → 走行中ゲームが拾う。
 				if err := state.syncAsset(ev.Name); err != nil {
-					fmt.Fprintf(os.Stderr, "watch: asset sync %s: %v\n", filepath.Base(ev.Name), err)
+					fmt.Fprintf(os.Stderr, "%s を実行中のゲームへ写せませんでした (%v)。\n", filepath.Base(ev.Name), err)
 				} else {
-					fmt.Printf("mitiru watch: %s → deploy (live)\n", filepath.Base(ev.Name))
+					console.Verbosef("mitiru watch: copied %s to the deploy dir\n", filepath.Base(ev.Name))
 				}
 			}
 		case err, ok := <-watcher.Errors:
 			if !ok { return nil }
-			fmt.Fprintf(os.Stderr, "watch: %v\n", err)
+			fmt.Fprintf(os.Stderr, "ファイルの監視でエラーが起きました (%v)。\n", err)
 		}
 	}
 }
@@ -284,7 +282,7 @@ func (s *gameState) buildCapturingErrors() (*buildResult, error) {
 	res, err := runBuildTo(io.MultiWriter(os.Stdout, &buf), io.MultiWriter(os.Stderr, &buf))
 	if err != nil {
 		if werr := build.WriteBuildErrorFile(s.projectRoot, buf.String()); werr != nil {
-			fmt.Fprintf(os.Stderr, "watch: %v\n", werr)
+			fmt.Fprintf(os.Stderr, "ビルドエラーをゲーム画面に出すためのファイルを書けませんでした (%v)。\n", werr)
 		}
 		return res, err
 	}
@@ -322,7 +320,7 @@ func (s *gameState) firstBuildAndLaunch() error {
 	// deploy 側 assets の場所を確定 (<DeployDir>/<project>/assets)。.lvl 等の live 同期先。
 	s.deployAssetsDir = filepath.Join(art.DeployDir, filepath.Dir(art.DllRel), "assets")
 
-	fmt.Printf("\nLaunching %s %s --watch\n",
+	console.Verbosef("Launching %s %s --watch\n",
 		filepath.Base(art.HostExePath), art.DllRel)
 
 	// mitiru.toml の [window] サイズ / [font] atlas も host へ渡す (run と同じ)。
@@ -338,7 +336,7 @@ func (s *gameState) firstBuildAndLaunch() error {
 	// Debug CRT 解決のため VS toolchain PATH を前置 (R-01、run と同じ)。
 	cmd.Env = build.HostEnv()
 	if err := cmd.Start(); err != nil {
-		return fmt.Errorf("launch %s: %w", art.HostExePath, err)
+		return fmt.Errorf("%s を起動できません (%w)。", art.HostExePath, err)
 	}
 
 	s.mu.Lock()
@@ -350,8 +348,8 @@ func (s *gameState) firstBuildAndLaunch() error {
 	go func() {
 		err := cmd.Wait()
 		if exitErr, ok := err.(*exec.ExitError); ok {
-			fmt.Fprintf(os.Stderr, "\nmitiru watch: host exited with %s\n",
-				hostExitHint(exitErr.ExitCode()))
+			fmt.Fprintf(os.Stderr, "%s\n",
+				hostExitMessage(filepath.Base(art.HostExePath), exitErr.ExitCode()))
 		}
 		s.markExited()
 	}()
@@ -359,7 +357,7 @@ func (s *gameState) firstBuildAndLaunch() error {
 	if runInspectPage != "" {
 		insp, err := startInspectorChild(cmd.Process.Pid, runInspectPage)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "watch: --inspect failed: %v\n", err)
+			fmt.Fprintf(os.Stderr, "--inspect の窓を開けませんでした。%v。\n", err)
 		} else {
 			s.mu.Lock()
 			s.insp = insp

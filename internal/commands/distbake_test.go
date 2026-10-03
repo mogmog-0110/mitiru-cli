@@ -9,6 +9,8 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+
+	"github.com/mogmog-0110/mitiru-cli/internal/console"
 )
 
 func writeFiles(t *testing.T, root string, rels ...string) {
@@ -101,6 +103,8 @@ func envValue(env []string, key string) string {
 }
 
 func TestBakeDistCachesSuccess(t *testing.T) {
+	// 焼いた数の行は -v のときだけ出る。
+	defer console.ForceVerbose(true)()
 	data := fakeBakeData(t)
 	t.Setenv("MITIRU_ASSET_ROOT", "somewhere-else")
 	var gotArgs []string
@@ -177,7 +181,7 @@ func TestBakeDistCachesWarnsWhenHostCannotRun(t *testing.T) {
 		if err := bakeDistCaches(data, "g/g.dll", "g", nil, run, &out); err != nil {
 			t.Errorf("%s: dist should go on without caches: %v", name, err)
 		}
-		if !strings.Contains(out.String(), "warning") {
+		if !strings.Contains(out.String(), "cache 無しで続けます") {
 			t.Errorf("%s: no warning: %q", name, out.String())
 		}
 		if _, err := os.Stat(filepath.Join(data, "shader_cache")); err == nil {

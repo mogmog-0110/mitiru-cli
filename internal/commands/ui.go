@@ -92,9 +92,9 @@ func runUI(frames int, outPath, inputScript string) error {
 	if err := copyFile(shot, outAbs); err != nil {
 		return fmt.Errorf("ui: write %s: %w", outAbs, err)
 	}
-	fmt.Printf("UI capture → %s\n", outAbs)
+	fmt.Printf("%s に保存しました。\n", outAbs)
 	if runErr != nil {
-		return fmt.Errorf("%w (the capture above was written before the host failed)", runErr)
+		return fmt.Errorf("%w (保存した画像は host が止まる前に撮ったものです)", runErr)
 	}
 	return nil
 }

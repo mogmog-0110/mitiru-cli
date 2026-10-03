@@ -24,7 +24,7 @@ func deployMitiru(opts Options) error {
 
 	if opts.DryRun {
 		if srcErr != nil {
-			fmt.Fprintln(opts.Stdout, "  source: <not located — release zip では同フォルダの mitiru.exe を copy>")
+			fmt.Fprintln(opts.Stdout, "  source: (見つかりません。release の zip では同じフォルダの mitiru.exe を写します)")
 		} else {
 			fmt.Fprintf(opts.Stdout, "  source: %s\n", src)
 		}
@@ -36,8 +36,8 @@ func deployMitiru(opts Options) error {
 	if srcErr != nil {
 		return srcErr
 	}
-	fmt.Fprintf(opts.Stdout, "  source: %s\n", src)
-	fmt.Fprintf(opts.Stdout, "  dest:   %s\n", dst)
+	fmt.Fprintf(detailWriter(opts), "  source: %s\n", src)
+	fmt.Fprintf(detailWriter(opts), "  dest:   %s\n", dst)
 
 	if err := os.MkdirAll(opts.TargetDir, 0o755); err != nil {
 		return fmt.Errorf("mkdir %s: %w", opts.TargetDir, err)
@@ -46,7 +46,7 @@ func deployMitiru(opts Options) error {
 	if err := copyFile(src, dst); err != nil {
 		return err
 	}
-	fmt.Fprintln(opts.Stdout, "  ... done")
+	fmt.Fprintln(detailWriter(opts), "  done")
 	return nil
 }
 

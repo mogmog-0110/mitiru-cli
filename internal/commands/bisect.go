@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"sort"
 
+	"github.com/mogmog-0110/mitiru-cli/internal/console"
 	"github.com/spf13/cobra"
 )
 
@@ -102,7 +103,7 @@ func runBisect() error {
 	}
 	sort.Strings(snaps)
 	if len(snaps) < 2 {
-		return fmt.Errorf("bisect: snapshots は 2 個以上必要 (古→新): %s", bisectSnapshots)
+		return fmt.Errorf("%s に一致するスナップショットが 2 個以上要ります (名前順で古いものから新しいものへ並べます)。", bisectSnapshots)
 	}
 
 	result, err := runBuild() // host exe + deploy layout を 1 回だけ用意
@@ -133,18 +134,18 @@ func runBisect() error {
 		return ok, formatReplayDiff(out)
 	}
 
-	fmt.Printf("bisect: %d スナップショット, replay=%s\n\n", len(snaps), filepath.Base(absReplay))
+	console.Verbosef("bisect: %d snapshots, replay=%s\n", len(snaps), filepath.Base(absReplay))
 
 	// 端の健全性: 最古=PASS / 最新=FAIL でないとバイセクト不能。
 	loOK, _ := probe(snaps[0])
 	hiOK, _ := probe(snaps[len(snaps)-1])
-	fmt.Printf("  %s: %s (最古)\n", filepath.Base(snaps[0]), passFail(loOK))
-	fmt.Printf("  %s: %s (最新)\n", filepath.Base(snaps[len(snaps)-1]), passFail(hiOK))
+	console.Verbosef("  %s: %s (oldest)\n", filepath.Base(snaps[0]), passFail(loOK))
+	console.Verbosef("  %s: %s (newest)\n", filepath.Base(snaps[len(snaps)-1]), passFail(hiOK))
 	if !loOK {
-		return fmt.Errorf("最古スナップショットで既に FAIL = 範囲外に回帰がある")
+		return fmt.Errorf("いちばん古い %s でもリプレイが合いません。壊れたのはこの範囲より前です。", filepath.Base(snaps[0]))
 	}
 	if hiOK {
-		return fmt.Errorf("最新スナップショットでも PASS = この範囲に回帰なし")
+		return fmt.Errorf("いちばん新しい %s でもリプレイが合います。この範囲では壊れていません。", filepath.Base(snaps[len(snaps)-1]))
 	}
 
 	// 二分探索: PASS する最大 index lo と FAIL する最小 index hi を詰める。
@@ -153,7 +154,7 @@ func runBisect() error {
 		mid := (lo + hi) / 2
 		ok, _ := probe(snaps[mid])
 		tests++
-		fmt.Printf("  → %s: %s\n", filepath.Base(snaps[mid]), passFail(ok))
+		console.Verbosef("  %s: %s\n", filepath.Base(snaps[mid]), passFail(ok))
 		if ok {
 			lo = mid
 		} else {
@@ -162,10 +163,10 @@ func runBisect() error {
 	}
 
 	_, diff := probe(snaps[hi]) // 回帰の入った snapshot の壊れた field を取り直す
-	fmt.Printf("\n回帰はここで入った: %s  (直前 %s は OK)\n", filepath.Base(snaps[hi]), filepath.Base(snaps[lo]))
-	fmt.Printf("  二分探索 %d 回で特定 (全 %d を試すと %d 回)\n", tests, len(snaps), len(snaps))
+	fmt.Printf("%s で壊れました。ひとつ前の %s では合っています (%d 個のうち %d 個を試しました)。\n",
+		filepath.Base(snaps[hi]), filepath.Base(snaps[lo]), len(snaps), tests+2)
 	if diff != "" {
-		fmt.Printf("  壊れた値: %s\n", diff)
+		fmt.Printf("食い違った値は %s です。\n", diff)
 	}
 	return nil
 }

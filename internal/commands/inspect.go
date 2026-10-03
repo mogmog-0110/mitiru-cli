@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/mogmog-0110/mitiru-cli/internal/console"
 	"github.com/mogmog-0110/mitiru-cli/internal/engine"
 	"github.com/spf13/cobra"
 )
@@ -64,7 +65,7 @@ windows open side by side, each watching the same game process.`,
 					return fmt.Errorf("inspect: %w", err)
 				}
 				pid = p
-				fmt.Printf("Auto-detected producer pid: %d\n", pid)
+				console.Verbosef("Auto-detected producer pid: %d\n", pid)
 			} else if len(args) == 1 {
 				v, err := strconv.Atoi(args[0])
 				if err != nil {
@@ -203,7 +204,7 @@ func runInspect(pid int, filePath, inspectable string) error {
 		args = append(args, strconv.Itoa(pid))
 	}
 
-	fmt.Printf("Running %s %v\n", exePath, args)
+	console.Verbosef("Running %s %v\n", exePath, args)
 	cmd := exec.Command(exePath, args...)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
@@ -413,18 +414,19 @@ func runInspectAll(pid int) error {
 		cmd.Stderr = os.Stderr
 		cmd.Dir = filepath.Dir(exePath)
 		if err := cmd.Start(); err != nil {
-			fmt.Fprintf(os.Stderr, "warning: inspect --all: failed to launch %s panel: %v\n", name, err)
+			fmt.Fprintf(os.Stderr, "%s の窓を開けませんでした (%v)。\n", name, err)
 			continue
 		}
 		launched++
-		fmt.Printf("Launched %s inspector window (pid %d, watching game %d)\n",
+		console.Verbosef("Launched %s inspector window (pid %d, watching game %d)\n",
 			name, cmd.Process.Pid, pid)
 	}
 
 	if launched == 0 {
-		return fmt.Errorf("inspect --all: no inspector windows could be launched")
+		return fmt.Errorf("調べる窓を 1 つも開けませんでした。")
 	}
-	fmt.Printf("Opened %d/%d sub-windows for game %d (each is an independent OS window)\n",
-		launched, len(allInspectables), pid)
+	if launched < len(allInspectables) {
+		fmt.Printf("%d 個のうち %d 個の窓を開きました。\n", len(allInspectables), launched)
+	}
 	return nil
 }

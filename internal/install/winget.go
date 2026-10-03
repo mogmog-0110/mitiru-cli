@@ -26,8 +26,8 @@ func installBuildTools(opts Options) error {
 		"--quiet --wait --add Microsoft.VisualStudio.Workload.VCTools --includeRecommended",
 	}
 
-	fmt.Fprintf(opts.Stdout, "  実行: winget %s\n", quoteArgs(args))
-	fmt.Fprintln(opts.Stdout, "  [UAC が出ます。VS Installer の進捗バーが別 window で表示されます — 待ち時間: 5-15 min]")
+	fmt.Fprintf(detailWriter(opts), "  winget %s\n", quoteArgs(args))
+	fmt.Fprintln(opts.Stdout, "  UAC の確認が出ます。Visual Studio Installer が別の窓で進み、5〜15 分かかります。")
 
 	if opts.DryRun {
 		fmt.Fprintln(opts.Stdout, "  [dry-run] skipped")
@@ -40,9 +40,9 @@ func installBuildTools(opts Options) error {
 	cmd.Stdin = os.Stdin
 
 	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("winget exit: %w", err)
+		return fmt.Errorf("winget が失敗しました (%w)", err)
 	}
-	fmt.Fprintln(opts.Stdout, "  ... done")
+	fmt.Fprintln(detailWriter(opts), "  done")
 	return nil
 }
 

@@ -90,7 +90,7 @@ func runVerify() error {
 		result.BuildErr = err.Error()
 		result.Verdict = "build_error"
 		result.Reason = "build failed (see buildErr)"
-		fmt.Fprintln(os.Stderr, "mitiru verify: FAIL — build failed: "+err.Error())
+		fmt.Fprintln(os.Stderr, err.Error())
 		return writeVerifyResult(result, 2)
 	}
 	result.Build = "ok"
@@ -205,7 +205,7 @@ func runVerify() error {
 			result.Reason = fmt.Sprintf(
 				"golden mismatch: %.1f%% match < threshold %.1f%% (golden=%s)",
 				pct*100, verifyGoldenThreshold*100, verifyGolden)
-			fmt.Fprintln(os.Stderr, "mitiru verify: FAIL — "+result.Reason)
+			fmt.Fprintln(os.Stderr, "verify が失敗しました ("+result.Reason+")。")
 		}
 	}
 
@@ -281,7 +281,7 @@ func writeVerifyResult(r *verifyResult, exitCode int) error {
 func failVerify(r *verifyResult, reason string) error {
 	r.Verdict = "fail"
 	r.Reason = reason
-	fmt.Fprintln(os.Stderr, "mitiru verify: FAIL — "+reason)
+	fmt.Fprintln(os.Stderr, "verify が失敗しました ("+reason+")。")
 	return writeVerifyResult(r, 1)
 }
 

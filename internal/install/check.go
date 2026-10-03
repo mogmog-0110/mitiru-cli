@@ -51,18 +51,18 @@ func (r *envReport) hasMitiru() bool { return r.mitiruPath != "" }
 func (r *envReport) print(w io.Writer) {
 	mark := func(ok bool) string {
 		if ok {
-			return "[OK     ]"
+			return "OK  "
 		}
-		return "[MISSING]"
+		return "なし"
 	}
 	fmt.Fprintf(w, "  %s Windows + winget\n", mark(r.hasWinget))
-	fmt.Fprintf(w, "  %s MSVC Build Tools 2022 (C++ workload)\n", mark(r.hasMsvc))
+	fmt.Fprintf(w, "  %s MSVC Build Tools 2022 (C++ のワークロード)\n", mark(r.hasMsvc))
 	fmt.Fprintf(w, "  %s CMake\n", mark(r.hasCMake))
 	fmt.Fprintf(w, "  %s Windows SDK\n", mark(r.hasSDK))
 	if r.hasMitiru() {
-		fmt.Fprintf(w, "  [OK     ] mitiru on PATH (%s)\n", r.mitiruPath)
+		fmt.Fprintf(w, "  OK   PATH 上の mitiru (%s)\n", r.mitiruPath)
 	} else {
-		fmt.Fprintln(w, "  [MISSING] mitiru on PATH")
+		fmt.Fprintln(w, "  なし PATH 上の mitiru")
 	}
 }
 

@@ -11,6 +11,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/mogmog-0110/mitiru-cli/internal/console"
 )
 
 // defaultDistCheckFrames は --check で回すフレーム数の既定。3D の取り込み (.clod の変換) が終わって、
@@ -18,9 +20,10 @@ import (
 const defaultDistCheckFrames = 90
 
 // distCheckProblemWords は host のログのうち、配布物に何かが欠けていることを示す言い回し。
-// engine の warnOnce と loader が出す文に合わせてある。
+// engine の warnOnce と loader が出す文に合わせてある。engine は欠けを知らせる文に
+// 読めません / 見つかりません / 開けません / ありません / 失敗しました のどれかを入れる。
 var distCheckProblemWords = []string{
-	"読めない", "読めません", "ありません", "見つから", "開けません", "失敗",
+	"読めない", "読めません", "ありません", "見つから", "見つかりません", "開けません", "失敗", "失敗しました",
 	"not found", "cannot open", "failed to load", "missing",
 }
 
@@ -170,11 +173,11 @@ func runDistCheck(bundleRoot, shotOut string, run distCheckRun) (distCheckResult
 func exitCodeText(code uint32) string {
 	switch code {
 	case 0xC0000135:
-		return "host が起動前に落ちた: 必要な DLL が無い (0xC0000135)"
+		return "host が起動する前に止まりました。必要な DLL がありません (0xC0000135)。"
 	case 0xC0000139, 0xC000007B:
-		return fmt.Sprintf("host が起動前に落ちた: DLL の版か形式が合わない (0x%08X)", code)
+		return fmt.Sprintf("host が起動する前に止まりました。DLL の版か形式が合いません (0x%08X)。", code)
 	default:
-		return fmt.Sprintf("host が終了コード %d (0x%08X) で終わった", int32(code), code)
+		return fmt.Sprintf("host が終了コード %d (0x%08X) で終わりました。", int32(code), code)
 	}
 }
 
@@ -217,22 +220,22 @@ func copyTree(src, dst string) error {
 
 // checkDistBundle は --check の結果を表にして、欠けがあればエラーにする。
 func checkDistBundle(bundleRoot, shotOut string, run distCheckRun) error {
-	fmt.Println("dist --check: 配布物を一時フォルダへ写し、開発用の環境変数と PATH を外して headless で走らせる...")
+	console.Verbosef("dist --check: 配布物を一時フォルダへ写し、開発用の環境変数と PATH を外して headless で走らせます\n")
 	res, err := runDistCheck(bundleRoot, shotOut, run)
 	if err != nil {
 		return err
 	}
 	if res.Shot != "" {
 		if blank, berr := isBlankImage(res.Shot); berr == nil && blank {
-			res.Problems = append(res.Problems, "撮った絵が 1 色だけ (何も描かれていない): "+res.Shot)
+			res.Problems = append(res.Problems, "撮った絵が 1 色だけで、何も描かれていません ("+res.Shot+")。")
 		}
-		fmt.Printf("dist --check: 最後のフレーム → %s (ログ %s)\n", res.Shot, res.Log)
+		fmt.Printf("最後のフレームを %s に保存しました (ログは %s です)。\n", res.Shot, res.Log)
 	} else {
-		res.Problems = append(res.Problems, "絵を 1 枚も撮れなかった")
+		res.Problems = append(res.Problems, "絵を 1 枚も撮れませんでした。")
 	}
 	if len(res.Problems) > 0 {
-		return fmt.Errorf("dist --check: 配布物の中身が欠けている\n  %s", strings.Join(res.Problems, "\n  "))
+		return fmt.Errorf("配布物に欠けているものがあります。\n  %s", strings.Join(res.Problems, "\n  "))
 	}
-	fmt.Println("dist --check: OK (欠けの知らせ無し、終了コード 0)")
+	fmt.Println("配布物は開発用の環境が無くても動きました。欠けの知らせは無く、終了コードは 0 です。")
 	return nil
 }

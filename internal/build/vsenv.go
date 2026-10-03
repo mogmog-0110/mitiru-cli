@@ -14,6 +14,8 @@ import (
 	"os/exec"
 	"strings"
 	"sync"
+
+	"github.com/mogmog-0110/mitiru-cli/internal/console"
 )
 
 // vsEnvMarker は vcvars 評価 batch の出力から PATH 行を拾うための目印。
@@ -89,12 +91,14 @@ func parseVsEnvPath(out string) (string, bool) {
 // HostEnv は host 子プロセス用の環境変数 slice を返す。VS toolchain の PATH を
 // 前置することで Debug CRT を loader に解決させる。vcvars が無い環境では
 // 黙って素の環境を返す (Release では不要なため起動自体は妨げない)。
+// -v のときは host にも詳しい表示を頼む。
 func HostEnv() []string {
+	env := console.ChildEnv(os.Environ())
 	p, err := VsToolchainPath()
 	if err != nil || p == "" {
-		return os.Environ()
+		return env
 	}
-	return PrependPath(os.Environ(), p)
+	return PrependPath(env, p)
 }
 
 // PrependPath は env の PATH 変数 (大文字小文字不問) に prefix を前置した

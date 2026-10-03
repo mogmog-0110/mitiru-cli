@@ -121,15 +121,15 @@ func runLint(strict bool) error {
 	case fileExists(filepath.Join(projectRoot, filepath.FromSlash(legacySceneRel))):
 		report = legacySceneRel
 		findings = []bindFinding{{kind: "legacy-html",
-			detail: fmt.Sprintf("the engine no longer reads %s; rewrite it as %s", legacySceneRel, uiDocRel)}}
+			detail: fmt.Sprintf("今のエンジンは %s を読みません。%s に書き直してください。", legacySceneRel, uiDocRel)}}
 	default:
-		fmt.Printf("\n  --- bind lint ---\n  no UI document at %s (nothing to check)\n", docPath)
+		fmt.Printf("%s が無いので、調べるものはありません。\n", docPath)
 		return nil
 	}
 
 	total := printBindReport(report, findings)
 	if strict && total > 0 {
-		return fmt.Errorf("bind lint: %d finding(s)", total)
+		return fmt.Errorf("main.rml に直すところが %d 件あります。", total)
 	}
 	return nil
 }
@@ -144,7 +144,7 @@ func lintRML(doc string, produced map[string]bool) []bindFinding {
 		if !vars[name] {
 			findings = append(findings, bindFinding{
 				line: line, kind: "unpushed",
-				detail: fmt.Sprintf("%q is used in main.rml but the C++ never pushes %q (typo?)",
+				detail: fmt.Sprintf("main.rml は %q を使っていますが、C++ は %q を送っていません。綴りを確かめてください。",
 					name, uiModelName+"."+name),
 			})
 		}
@@ -152,7 +152,7 @@ func lintRML(doc string, produced map[string]bool) []bindFinding {
 	for _, key := range nested {
 		findings = append(findings, bindFinding{
 			kind: "nested-key",
-			detail: fmt.Sprintf("C++ pushes %q; RML cannot reach a name with a dot after %q — push it flat",
+			detail: fmt.Sprintf("C++ が送る %q は、%q の後ろに点があるので RML から読めません。点の無い名前で送ってください。",
 				key, uiModelName+"."),
 		})
 	}
@@ -194,7 +194,7 @@ func analyzeRML(doc string) (map[string]int, []bindFinding) {
 	if sawBinding && !sawModel {
 		structural = append(structural, bindFinding{
 			kind:   "no-model",
-			detail: fmt.Sprintf("bindings are used but no element has data-model=%q", uiModelName),
+			detail: fmt.Sprintf("値を表示する書き方を使っていますが、data-model=%q を持つ要素がありません。", uiModelName),
 		})
 	}
 	return consumed, structural
@@ -224,20 +224,20 @@ func lineChecks(raw string, line int, sawModel *bool) []bindFinding {
 		*sawModel = true
 		if m[1] != uiModelName {
 			out = append(out, bindFinding{line: line, kind: "model-name",
-				detail: fmt.Sprintf("data-model=%q: the engine pushes hud.set values into the model %q", m[1], uiModelName)})
+				detail: fmt.Sprintf("data-model=%q になっています。hud.set の値は %q に入るので、こちらの名前にしてください。", m[1], uiModelName)})
 		}
 	}
 	if strings.Count(raw, "{{") != strings.Count(raw, "}}") {
 		out = append(out, bindFinding{line: line, kind: "braces",
-			detail: "unbalanced {{ }} on this line"})
+			detail: "この行の {{ と }} の数が合いません。"})
 	}
 	if rmlDispatchEmpty.MatchString(raw) {
 		out = append(out, bindFinding{line: line, kind: "empty-action",
-			detail: "dispatch() has no action name"})
+			detail: "dispatch() にアクションの名前がありません。"})
 	}
 	if legacyBinderAttr.MatchString(raw) {
 		out = append(out, bindFinding{line: line, kind: "legacy-binder",
-			detail: "data-m-* belongs to the old HTML binder; use {{ }} / data-class-* / data-event-click=\"dispatch(...)\""})
+			detail: "data-m-* は以前の HTML の書き方です。{{ }}、data-class-*、data-event-click=\"dispatch(...)\" に書き直してください。"})
 	}
 	return out
 }
@@ -325,11 +325,8 @@ func producedViewVars(produced map[string]bool) (map[string]bool, []string) {
 }
 
 func printBindReport(doc string, findings []bindFinding) int {
-	fmt.Println()
-	fmt.Println("  --- bind lint ---")
-
 	if len(findings) == 0 {
-		fmt.Printf("  ok: every variable in %s is pushed from C++.\n", doc)
+		fmt.Printf("%s が使う値は、すべて C++ から送られています。\n", doc)
 		return 0
 	}
 
@@ -341,7 +338,6 @@ func printBindReport(doc string, findings []bindFinding) int {
 			fmt.Printf("  %s  %s\n", doc, f.detail)
 		}
 	}
-	fmt.Println()
-	fmt.Printf("  %d finding(s). A variable the C++ never pushes renders empty, without an error.\n", len(findings))
+	fmt.Printf("%d 件あります。C++ が送らない値はエラーにならず、空のまま表示されます。\n", len(findings))
 	return len(findings)
 }

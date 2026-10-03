@@ -8,6 +8,7 @@ import (
 
 	"github.com/mogmog-0110/mitiru-cli/internal/build"
 	"github.com/mogmog-0110/mitiru-cli/internal/config"
+	"github.com/mogmog-0110/mitiru-cli/internal/console"
 	"github.com/mogmog-0110/mitiru-cli/internal/engine"
 	"github.com/spf13/cobra"
 )
@@ -54,12 +55,13 @@ Examples:
 			// [build] bake = true (★4-1): 配置 JSON を焼いて起動時の再現性を上げる。
 			// standalone は Spawner 前提が無いので対象外。
 			if res.Config.Build.Bake && !res.Config.Standalone() {
-				if err := runBakeAll(res.Artifacts, os.Stdout); err != nil {
+				if err := runBakeAll(res.Artifacts, console.VerboseWriter(os.Stdout)); err != nil {
 					return err
 				}
 			}
-			// 受動的な更新通知 (コマンド末尾。watch のリビルドループには出さない)。
-			maybeNotifyUpdates(res.Config.Project.Engine, os.Stdout)
+			// 成功時に出すのは、できたものの場所の 1 行だけにする。
+			fmt.Printf("ビルドしました。%s にあります。\n", builtOutputPath(res.Artifacts))
+			maybeNotifyUpdates(res.Config.Project.Engine, console.VerboseWriter(os.Stdout))
 			return nil
 		},
 	}
@@ -118,7 +120,7 @@ func buildProject(stdout, stderr io.Writer, allowStandalone bool) (*buildResult,
 	if cfg.Standalone() {
 		if !allowStandalone {
 			return nil, fmt.Errorf(
-				"%s is a standalone project ([build] kind = \"standalone\"); only 'mitiru build' and 'mitiru run' work with it",
+				"%s は standalone のプロジェクト ([build] kind = \"standalone\") なので、使えるのは mitiru build と mitiru run だけです。",
 				cfg.Project.Name)
 		}
 		artifacts, err := build.RunStandalone(build.StandaloneOptions{
@@ -133,13 +135,13 @@ func buildProject(stdout, stderr io.Writer, allowStandalone bool) (*buildResult,
 		if err != nil {
 			return nil, err
 		}
-		fmt.Fprintf(stdout, "Build OK: %s\n", artifacts.HostExePath)
+		console.Fverbosef(stdout, "Build OK: %s\n", artifacts.HostExePath)
 		return &buildResult{ProjectRoot: projectRoot, Config: cfg, Artifacts: artifacts}, nil
 	}
 
 	engineRoot, err := engine.EnsureSource(cfg.EngineTag(), stdout)
 	if err != nil {
-		return nil, fmt.Errorf("fetch engine source: %w", err)
+		return nil, fmt.Errorf("エンジンのソースを用意できません。%w", err)
 	}
 
 	cfgName := resolveBuildConfig()
@@ -165,12 +167,20 @@ func buildProject(stdout, stderr io.Writer, allowStandalone bool) (*buildResult,
 		return nil, err
 	}
 
-	fmt.Fprintf(stdout, "Build OK: %s\n", artifacts.DllPath)
+	console.Fverbosef(stdout, "Build OK: %s\n", artifacts.DllPath)
 	return &buildResult{
 		ProjectRoot: projectRoot,
 		Config:      cfg,
 		Artifacts:   artifacts,
 	}, nil
+}
+
+// builtOutputPath は host 型なら game DLL、standalone 型なら exe を返す。
+func builtOutputPath(art *build.Artifacts) string {
+	if art.DllPath != "" {
+		return art.DllPath
+	}
+	return art.HostExePath
 }
 
 func resolveBuildConfig() string {

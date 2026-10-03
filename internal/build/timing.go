@@ -2,8 +2,8 @@ package build
 
 import (
 	"fmt"
+	"github.com/mogmog-0110/mitiru-cli/internal/console"
 	"io"
-	"os"
 	"strings"
 	"time"
 )
@@ -34,6 +34,5 @@ func (t *phaseTimer) report(w io.Writer) {
 
 // verboseOutput は -v (MITIRU_LOG=verbose) か、古い MITIRU_VERBOSE=1 のときに true。
 func verboseOutput() bool {
-	return strings.EqualFold(strings.TrimSpace(os.Getenv("MITIRU_LOG")), "verbose") ||
-		os.Getenv("MITIRU_VERBOSE") == "1"
+	return console.Verbose()
 }

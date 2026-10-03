@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/mogmog-0110/mitiru-cli/internal/build"
+	"github.com/mogmog-0110/mitiru-cli/internal/console"
 )
 
 // vcRuntimeDLLs は VC++ 再頒布パッケージの DLL。開発機には System32 にあるが、
@@ -280,7 +281,7 @@ func ensureDistRuntime(dataDir string, debug bool) (int, error) {
 			formatImportProblems(rep.Missing))
 	}
 	if len(rep.MissingVC) > 0 {
-		fmt.Printf("dist: VC ランタイムを同梱した (%s)\n", strings.Join(rep.MissingVC, ", "))
+		console.Verbosef("dist: bundled the VC runtime (%s)\n", strings.Join(rep.MissingVC, ", "))
 	}
 	return len(rep.MissingVC) + debugDLLs, nil
 }
@@ -306,7 +307,7 @@ func bundleDebugCRT(dataDir string, problems []importProblem) (int, error) {
 		names = append(names, low)
 	}
 	if len(names) > 0 {
-		fmt.Printf("dist --debug: 再頒布できない Debug 版ランタイムを同梱した (%s)\n", strings.Join(names, ", "))
+		console.Verbosef("dist --debug: bundled the non-redistributable Debug runtime (%s)\n", strings.Join(names, ", "))
 	}
 	return len(names), nil
 }
@@ -334,7 +335,7 @@ func checkStandaloneExe(path string) error {
 func formatImportProblems(ps []importProblem) string {
 	var b strings.Builder
 	for _, p := range ps {
-		fmt.Fprintf(&b, "  data/%s → %s (%s)\n", p.Importer, p.DLL, p.Reason)
+		fmt.Fprintf(&b, "  data/%s が使う %s (%s)\n", p.Importer, p.DLL, p.Reason)
 	}
 	return strings.TrimRight(b.String(), "\n")
 }

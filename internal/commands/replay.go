@@ -10,6 +10,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/mogmog-0110/mitiru-cli/internal/console"
 	"github.com/mogmog-0110/mitiru-cli/internal/hunt"
 	"github.com/spf13/cobra"
 )
@@ -242,7 +243,7 @@ func runReplaySuite() error {
 	}
 	art := result.Artifacts
 
-	fmt.Printf("replay-suite: %d 本\n\n", len(mtrrs))
+	console.Verbosef("replay-suite: %d recordings\n", len(mtrrs))
 	fails := 0
 	for _, m := range mtrrs {
 		c := exec.Command(art.HostExePath, art.DllRel, "--replay-test", m, "--json",
@@ -255,24 +256,27 @@ func runReplaySuite() error {
 		v, ok := parseReplayVerdict(stdout.Bytes())
 		switch {
 		case ok && v.Verdict == "PASS":
-			fmt.Printf("  [PASS] %s  bit-exact / %d frames\n", name, v.FramesCompared)
+			console.Verbosef("  [PASS] %s  bit-exact / %d frames\n", name, v.FramesCompared)
 		case ok:
 			detail := v.Reason
 			if v.DivergedFrame != nil {
-				detail = fmt.Sprintf("DIVERGED @frame %d", *v.DivergedFrame)
+				detail = fmt.Sprintf("%d フレーム目から食い違います", *v.DivergedFrame)
 			}
 			if len(v.Diff) > 0 {
-				detail += "  diff: " + string(v.Diff)
+				detail += "  " + string(v.Diff)
 			}
 			fmt.Printf("  [FAIL] %s  %s\n", name, detail)
 			fails++
 		default:
-			fmt.Printf("  [FAIL] %s  (no verdict)\n", name)
+			fmt.Printf("  [FAIL] %s  host が判定を返しませんでした\n", name)
 			fails++
 		}
 	}
-	fmt.Printf("\n%d/%d green%s\n", len(mtrrs)-fails, len(mtrrs),
-		map[bool]string{true: "  -- 全 green", false: fmt.Sprintf("  -- %d 本が回帰", fails)}[fails == 0])
+	if fails == 0 {
+		fmt.Printf("%d 本の記録がすべて元どおりに再生されました。\n", len(mtrrs))
+	} else {
+		fmt.Printf("%d 本のうち %d 本が元どおりに再生されませんでした。\n", len(mtrrs), fails)
+	}
 	if fails > 0 {
 		os.Exit(1)
 	}
@@ -321,13 +325,14 @@ func runReplayDiff(a, b string) error {
 			runErr, stdout.String())
 	}
 
-	fmt.Printf("replay --diff: %s vs %s\n", filepath.Base(absA), filepath.Base(absB))
 	if !d.Diverged {
-		fmt.Printf("  一致 ── %d frame とも GameMemory が byte-exact\n", d.TotalFrames)
+		fmt.Printf("%s と %s は、%d フレームとも GameMemory が 1 バイトも違いません。\n",
+			filepath.Base(absA), filepath.Base(absB), d.TotalFrames)
 		return nil
 	}
-	fmt.Printf("  最初に食い違った frame: %d (全 %d frame 中)\n", d.FirstDivergentFrame, d.TotalFrames)
-	fmt.Println("  差分フィールド名は出ません (byte 比較のみ、game の reflect schema 未読込)。")
+	fmt.Printf("%s と %s は、%d フレームのうち %d フレーム目で初めて食い違います。\n",
+		filepath.Base(absA), filepath.Base(absB), d.TotalFrames, d.FirstDivergentFrame)
+	fmt.Println("バイト単位で比べているので、フィールドの名前は出せません。")
 	printByteDiffRanges(absA, absB, d.FirstDivergentFrame)
 	os.Exit(1)
 	return nil
@@ -340,25 +345,25 @@ func printByteDiffRanges(pathA, pathB string, frameIdx uint32) {
 	stateA, errA := hunt.ReadStateAtFrame(pathA, frameIdx)
 	stateB, errB := hunt.ReadStateAtFrame(pathB, frameIdx)
 	if errA != nil || errB != nil {
-		fmt.Printf("  byte offset 範囲: 読み直し失敗 (%v / %v)\n", errA, errB)
+		fmt.Printf("違う場所を調べるために記録を読み直せませんでした (%v / %v)。\n", errA, errB)
 		return
 	}
 	if len(stateA) != len(stateB) {
-		fmt.Printf("  state サイズが frame %d で既に違います (%d vs %d バイト) — offset 範囲は共通長までのみ\n",
+		fmt.Printf("%d フレーム目で状態の大きさが違います (%d バイトと %d バイト)。短いほうの長さまでだけ比べます。\n",
 			frameIdx, len(stateA), len(stateB))
 	}
 	ranges := hunt.DiffByteRanges(stateA, stateB)
 	if len(ranges) == 0 {
-		fmt.Println("  byte offset 範囲: 共通長の範囲内では差分なし (末尾のサイズ差のみ)")
+		fmt.Println("短いほうの長さまでは同じで、違うのは末尾の大きさだけです。")
 		return
 	}
-	fmt.Printf("  差分 byte offset (%d 区間, フィールド名は不明):\n", len(ranges))
+	fmt.Printf("違うバイトの範囲は %d か所あります。\n", len(ranges))
 	const maxShown = 8
 	for i, r := range ranges {
 		if i >= maxShown {
-			fmt.Printf("    ... 他 %d 区間\n", len(ranges)-maxShown)
+			fmt.Printf("  ほかに %d か所あります。\n", len(ranges)-maxShown)
 			break
 		}
-		fmt.Printf("    [%d, %d) (%d bytes)\n", r.Start, r.End, r.End-r.Start)
+		fmt.Printf("  [%d, %d) (%d バイト)\n", r.Start, r.End, r.End-r.Start)
 	}
 }

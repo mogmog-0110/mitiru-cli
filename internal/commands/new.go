@@ -52,7 +52,7 @@ Example:
 
 func runNew(name string) error {
 	if !projectNamePattern.MatchString(name) {
-		return fmt.Errorf("new: invalid project name %q: must start with a letter and contain only A-Z, a-z, 0-9, '_', '-'", name)
+		return fmt.Errorf("プロジェクト名 %q は使えません。英字で始め、英数字と _ と - だけで書いてください。", name)
 	}
 
 	dstDir, err := filepath.Abs(name)
@@ -62,7 +62,7 @@ func runNew(name string) error {
 
 	if _, err := os.Stat(dstDir); err == nil {
 		if !newForce {
-			return fmt.Errorf("new: %s already exists (use --force to overwrite)", dstDir)
+			return fmt.Errorf("%s はもうあります。上書きするなら --force を付けてください。", dstDir)
 		}
 	} else if !os.IsNotExist(err) {
 		return fmt.Errorf("new: stat %s: %w", dstDir, err)
@@ -75,18 +75,14 @@ func runNew(name string) error {
 	}
 
 	if err := scaffold.Expand(newTemplateName, dstDir, data); err != nil {
-		return fmt.Errorf("new: expand template: %w", err)
+		return fmt.Errorf("テンプレートからプロジェクトを作れませんでした (%w)。", err)
 	}
 
-	fmt.Printf("Created %s\n\n", dstDir)
-	fmt.Println("Next:")
-	fmt.Printf("  cd %s\n\n", name)
-	fmt.Println("Try one of:")
-	fmt.Println("  mitiru run                 build + run (first build compiles the")
-	fmt.Println("                             engine: ~5-10 min; seconds after that)")
-	fmt.Println("  mitiru watch               auto-rebuild + hot-reload on src/ change")
-	fmt.Println("  mitiru run --inspect       also open a tool window (--inspect perf, mixer, ...)")
-	fmt.Println("")
-	fmt.Println("Stuck? Run 'mitiru doctor' to verify your toolchain.")
+	fmt.Printf("%s を作りました。cd %s で移ってから、次のどれかを実行してください。\n\n", dstDir, name)
+	fmt.Println("  mitiru run            ビルドして起動します。初回はエンジンのコンパイルに 5〜10 分かかり、2 回目からは数秒です。")
+	fmt.Println("  mitiru watch          src/ を保存するたびにビルドし直し、動いているゲームに反映します。")
+	fmt.Println("  mitiru run --inspect  ゲームと一緒に調べる窓を開きます。--inspect perf のように窓を選べます。")
+	fmt.Println()
+	fmt.Println("うまく動かないときは、mitiru doctor で必要な道具がそろっているか確かめてください。")
 	return nil
 }

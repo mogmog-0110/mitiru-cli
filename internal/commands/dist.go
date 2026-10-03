@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/mogmog-0110/mitiru-cli/internal/config"
+	"github.com/mogmog-0110/mitiru-cli/internal/console"
 	"github.com/spf13/cobra"
 )
 
@@ -199,7 +200,7 @@ func runDist() error {
 	buildOutDir = filepath.Join(projectRoot, "build", "dist-out")
 	if distDebug {
 		buildOutDir += "-debug"
-		fmt.Println("dist --debug: Debug ビルドを配る。Debug 版ランタイムは再頒布できないので、自分のテスト機だけで使う")
+		fmt.Println("--debug は Debug ビルドを配布物にします。Debug 版のランタイムは再頒布できないので、自分のテスト機だけで使ってください。")
 	}
 	buildExtraDefines = []string{"MITIRU_HOST_GUI=ON"}
 	defer func() { buildOutDir = ""; buildExtraDefines = nil }() // 後続コマンドへ漏らさない
@@ -285,7 +286,7 @@ func runDist() error {
 			// stub exe 自体の PE リソースにも埋める (explorer の顔)。失敗しても
 			// アイコン無し配布は正当なので警告のみで続行。
 			if err := embedExeIcon(stubDst, iconSrc); err != nil {
-				fmt.Printf("dist: warning: exe icon の埋め込みに失敗 (アイコン無しで続行): %v\n", err)
+				fmt.Printf("exe にアイコンを埋め込めませんでした (%v)。アイコン無しで続けます。\n", err)
 			}
 		}
 		if err := os.WriteFile(filepath.Join(dataDir, "launch.mtargs"),
@@ -361,13 +362,13 @@ func runDist() error {
 				return fmt.Errorf("dist --pack: remove loose assets: %w", rmErr)
 			}
 			if len(packed) == 0 {
-				fmt.Printf("dist --pack: pack に畳むアセットが無い (バラ置き %d 個)\n", loose)
+				console.Verbosef("dist --pack: nothing to pack (%d loose files)\n", loose)
 			} else {
-				fmt.Printf("Packed %d assets → %s (assets/ui/ と、ディスクから読む %d 個はバラ置き)\n",
+				console.Verbosef("Packed %d assets into %s (assets/ui/ and %d files read from disk stay loose)\n",
 					len(packed), packOut, loose)
 			}
 		} else {
-			fmt.Println("dist --pack: no assets/ to pack (skipped)")
+			console.Verbosef("dist --pack: no assets/ to pack\n")
 		}
 	}
 
@@ -427,8 +428,7 @@ func runDist() error {
 				return fmt.Errorf("dist --onefile: copy selfrun: %w", err)
 			}
 			if err := embedExeIcon(stub, iconSrc); err != nil {
-				fmt.Printf("dist --onefile: warning: exe icon の埋め込みに失敗 "+
-					"(アイコン無しで続行): %v\n", err)
+				fmt.Printf("exe にアイコンを埋め込めませんでした (%v)。アイコン無しで続けます。\n", err)
 			}
 			defer os.Remove(stub)
 		}
@@ -465,7 +465,7 @@ func runDist() error {
 			return err
 		}
 		info, _ := os.Stat(onefileExe)
-		fmt.Printf("Onefile OK: %s (%.1f MB)\n", onefileExe, float64(info.Size())/(1024*1024))
+		console.Verbosef("Onefile OK: %s (%.1f MB)\n", onefileExe, float64(info.Size())/(1024*1024))
 	}
 
 	if distZip && onefileExe != "" {
@@ -478,7 +478,7 @@ func runDist() error {
 		if err := zipFiles(members, zipPath); err != nil {
 			return err
 		}
-		fmt.Printf("Zipped: %s (README.txt は zip の外)\n", zipPath)
+		fmt.Printf("%s に zip でまとめました。README.txt は zip の外に置いてあります。\n", zipPath)
 	} else if distZip {
 		zipPath := bundleRoot + ".zip"
 		if err := zipDir(bundleRoot, filepath.Dir(bundleRoot), zipPath,
@@ -489,26 +489,22 @@ func runDist() error {
 			[]byte(readme), 0o644); err != nil {
 			return err
 		}
-		fmt.Printf("Zipped: %s (README.txt は zip の外)\n", zipPath)
+		fmt.Printf("%s に zip でまとめました。README.txt は zip の外に置いてあります。\n", zipPath)
 	}
 
-	mode := "UI は RmlUi (assets/ui/)"
 	launch := primary
-	if stubUsed {
-		launch = primary + " (コンソール窓なし)"
-		if writeBat {
-			launch += " / " + batName
-		}
+	if stubUsed && writeBat {
+		launch += " か " + batName
 	}
 	if onefileExe != "" {
 		info, _ := os.Stat(onefileExe)
-		fmt.Printf("\nDist OK: %s\n  単一 exe %.1f MB / %s\n  配るのは %s と README.txt の 2 つ\n  起動: ダブルクリック (初回に展開)\n",
-			filepath.Dir(bundleRoot), float64(info.Size())/(1024*1024), mode,
-			filepath.Base(onefileExe))
+		fmt.Printf("%s に配布物を作りました。配るのは %s (%.1f MB) と README.txt の 2 つで、"+
+			"ダブルクリックで起動します (初回だけ中身を展開します)。\n",
+			filepath.Dir(bundleRoot), filepath.Base(onefileExe), float64(info.Size())/(1024*1024))
 		return nil
 	}
-	fmt.Printf("\nDist OK: %s\n  %d files / %s\n  トップは %s + README + data/ のみ\n  起動: %s\n",
-		bundleRoot, n, mode, primary, launch)
+	fmt.Printf("%s に配布物を作りました (%d 個のファイル)。%s をダブルクリックすると起動します。\n",
+		bundleRoot, n, launch)
 	return nil
 }
 
