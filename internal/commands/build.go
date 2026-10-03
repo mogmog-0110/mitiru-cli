@@ -30,6 +30,18 @@ func newBuildCommand() *cobra.Command {
 Looks for mitiru.toml in the current directory (or any parent), fetches the
 requested MitiruEngine source into ~/.mitiru/cache/ if needed, generates a
 CMakeLists.txt under build/cmake/, then invokes cmake configure + build.
+Configure runs only when its inputs changed (the generated CMakeLists.txt,
+mitiru.toml, the engine, the compiler); -v prints how long each step took.
+
+Parts of the engine that are not built by default are turned on in mitiru.toml:
+
+  [engine]
+  features = ["nav", "online"]
+
+  nav       navmesh paths and crowds (Detour) in the game DLL
+  navbake   bake navmeshes inside the game DLL (Recast)
+  jolt      check that the engine was fetched with Jolt Physics
+  online    online co-op in mitiru_host (--net, hud.net*; rollback via GekkoNet)
 
 Examples:
   mitiru build              # Debug build (default)

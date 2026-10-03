@@ -96,6 +96,8 @@ type templateData struct {
 	LegacyCEF bool
 	// Features は [engine] features を引いたもの。DLL に link する target と、無いときの直し方。
 	Features []config.EngineFeature
+	// FeatureOptions は feature が要る engine の CMake option と、その値。
+	FeatureOptions []config.FeatureOption
 	// Nav は [nav] source があるときだけ非 nil。
 	Nav *navBake
 	// Lighting は [lighting] source があるときだけ非 nil。
@@ -148,7 +150,8 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 # Engine source (cached by mitiru-cli)
 set(MITIRU_ENGINE_ROOT "{{.EngineRoot}}")
 set(MITIRU_HEADER_ONLY ON)
-add_subdirectory("${MITIRU_ENGINE_ROOT}" mitiru-engine)
+{{range .FeatureOptions}}set({{.Name}} {{if .On}}ON{{else}}OFF{{end}} CACHE BOOL "" FORCE)   # mitiru.toml engine.features
+{{end}}add_subdirectory("${MITIRU_ENGINE_ROOT}" mitiru-engine)
 {{if .LegacyCEF}}
 include("${MITIRU_ENGINE_ROOT}/cmake/MitiruCef.cmake")
 {{end}}
@@ -166,6 +169,9 @@ if(TARGET {{.Target}})
 {{- if .Link}}
     target_link_libraries({{$.TargetName}} PRIVATE {{.Target}})
 {{- end}}
+{{- if .Host}}
+    list(APPEND _mitiru_host_links {{.Target}})
+{{- end}}
 else()
     message(FATAL_ERROR "mitiru.toml: [engine] features has \"{{.Name}}\", but this engine has no CMake target {{.Target}}.\n"
         "  {{.Missing}}\n"
@@ -174,7 +180,7 @@ endif()
 {{end}}
 # ── Host launcher (compiled from engine reference impl) ───────────
 add_executable(mitiru_host "{{.HostMainAbs}}")
-target_link_libraries(mitiru_host PRIVATE Mitiru::mitiru)
+target_link_libraries(mitiru_host PRIVATE Mitiru::mitiru ${_mitiru_host_links})
 if(MSVC)
     target_compile_options(mitiru_host PRIVATE /bigobj)
 endif()
@@ -520,6 +526,7 @@ func Configure(opts Options) (cmakeSrcDir, cmakeOutDir string, err error) {
 		SelfpackMainAbs: selfpackMainAbs,
 		LegacyCEF:       engine.UsesLegacyCEF(opts.EngineRoot),
 		Features:        features,
+		FeatureOptions:  config.FeatureOptions(features),
 		Nav:             nav,
 		Lighting:        lighting,
 	}

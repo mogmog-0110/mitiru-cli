@@ -18,7 +18,8 @@ backend = "auto"
 [engine]
 # engine 本体に入っていない部品のうち、ゲーム DLL へ link するもの。
 # nav = ナビメッシュを読んで経路を引く (NavCrowd も入る) / navbake = DLL の中でメッシュからナビメッシュを焼く /
-# jolt = Jolt Physics (engine が Jolt 付きで取得されているかを configure で確かめる)
+# jolt = Jolt Physics (engine が Jolt 付きで取得されているかを configure で確かめる) /
+# online = オンライン協力プレイ (mitiru_host --net と hud.net*。engine を GekkoNet 付きで作る)
 features = ["nav"]
 
 [nav]

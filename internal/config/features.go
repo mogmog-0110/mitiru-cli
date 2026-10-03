@@ -32,6 +32,11 @@ type EngineFeature struct {
 	Link bool
 	// Missing は Target が無いときに直し方として出す 1 行。
 	Missing string
+	// Option は engine が既定で作らない部品を作らせる CMake の option (空なら要らない)。
+	// 生成 CMake が engine を取り込む前に ON にし、feature を外したら OFF に戻す。
+	Option string
+	// Host が true なら Target を mitiru_host にも link する (host が実行する機能)。
+	Host bool
 }
 
 var engineFeatures = []EngineFeature{
@@ -47,18 +52,51 @@ var engineFeatures = []EngineFeature{
 		Name: "jolt", Target: "Jolt", Link: false,
 		Missing: "the engine was fetched without external/jolt (git submodule update --init external/jolt)",
 	},
+	{
+		// オンライン協力プレイ (mitiru_host --net、hud.net*) は host が動かす。GekkoNet は
+		// 静的ライブラリで、通信は Windows の Winsock を使うので、配布物に足す DLL は無い。
+		Name: "online", Target: "mitiru_rollback_net", Link: false, Host: true,
+		Option:  "MITIRU_WITH_GEKKONET",
+		Missing: "online play needs an engine with MITIRU_WITH_GEKKONET and external/GekkoNet (git submodule update --init external/GekkoNet)",
+	},
+}
+
+// FeatureOptions は Option を持つ feature ごとに、selected に含まれるかを返す (表の順)。
+// 生成 CMake はこれで option を ON / OFF に固定する。
+func FeatureOptions(selected []EngineFeature) []FeatureOption {
+	on := map[string]bool{}
+	for _, f := range selected {
+		on[f.Name] = true
+	}
+	var out []FeatureOption
+	for _, f := range engineFeatures {
+		if f.Option != "" {
+			out = append(out, FeatureOption{Name: f.Option, On: on[f.Name]})
+		}
+	}
+	return out
+}
+
+// FeatureOption は engine の CMake option 1 つの値。
+type FeatureOption struct {
+	Name string
+	On   bool
 }
 
 // 間違えやすい名前には、正しい名前を添えて返す。
 var featureHints = map[string]string{
-	"crowd":   `NavCrowd is part of "nav"`,
-	"detour":  `use "nav"`,
-	"navmesh": `use "nav" to load a .navmesh, and [nav] source to bake one at build time`,
-	"recast":  `use "navbake" (bake a navmesh inside the DLL)`,
-	"physics": `use "jolt"`,
-	"fbx":     "FBX import is always part of the engine; remove it",
-	"gameai":  `mitiru/gameai is header-only; add "nav" only if enemies follow a navmesh`,
-	"action":  "mitiru/action is header-only; remove it",
+	"crowd":    `NavCrowd is part of "nav"`,
+	"detour":   `use "nav"`,
+	"navmesh":  `use "nav" to load a .navmesh, and [nav] source to bake one at build time`,
+	"recast":   `use "navbake" (bake a navmesh inside the DLL)`,
+	"physics":  `use "jolt"`,
+	"net":      `use "online"`,
+	"netplay":  `use "online"`,
+	"rollback": `use "online"`,
+	"gekkonet": `use "online"`,
+	"fbx":      "FBX import is always part of the engine; remove it",
+	"gameai":   `mitiru/gameai is header-only; add "nav" only if enemies follow a navmesh`,
+	"action":   "mitiru/action is header-only; remove it",
 }
 
 var navSourceExts = map[string]bool{".obj": true, ".gltf": true, ".glb": true}

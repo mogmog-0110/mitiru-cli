@@ -139,3 +139,37 @@ func TestConfigure_NavSourceOnOldEngineFailsAtConfigure(t *testing.T) {
 		t.Error("missing the configure-time error for old engines")
 	}
 }
+
+// online は engine に GekkoNet を作らせ、host に link する。外したら option を OFF に戻す。
+func TestConfigure_OnlineTurnsOnGekkoNetAndLinksTheHost(t *testing.T) {
+	projectRoot, engineRoot := fakeProject(t)
+	cmake, err := generatedCMakeWith(t, projectRoot, engineRoot, func(o *Options) {
+		o.Features = []string{"online"}
+	})
+	if err != nil {
+		t.Fatalf("Configure: %v", err)
+	}
+	on := `set(MITIRU_WITH_GEKKONET ON CACHE BOOL "" FORCE)`
+	if i, j := strings.Index(cmake, on), strings.Index(cmake, "add_subdirectory(\"${MITIRU_ENGINE_ROOT}\""); i < 0 || j < 0 || i > j {
+		t.Errorf("the option must be set before the engine is added:\n%s", cmake)
+	}
+	for _, want := range []string{
+		"if(TARGET mitiru_rollback_net)\n    list(APPEND _mitiru_host_links mitiru_rollback_net)\nelse()",
+		"target_link_libraries(mitiru_host PRIVATE Mitiru::mitiru ${_mitiru_host_links})",
+	} {
+		if !strings.Contains(cmake, want) {
+			t.Errorf("generated CMake is missing:\n%s", want)
+		}
+	}
+	if strings.Contains(cmake, "PRIVATE mitiru_rollback_net") {
+		t.Error("the game DLL does not need the netcode; only the host runs it")
+	}
+
+	off, err := generatedCMakeWith(t, projectRoot, engineRoot, func(o *Options) {})
+	if err != nil {
+		t.Fatalf("Configure: %v", err)
+	}
+	if !strings.Contains(off, `set(MITIRU_WITH_GEKKONET OFF CACHE BOOL "" FORCE)`) {
+		t.Error("removing online must turn the engine option off again")
+	}
+}
