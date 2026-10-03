@@ -5,7 +5,7 @@
 #include <mitiru/module/AutoReflect.hpp>
 using namespace mitiru;
 
-struct {{.ProjectIdent}}Game
+struct MyGame
 {
     int count = 0;
 
@@ -24,6 +24,6 @@ struct {{.ProjectIdent}}Game
 };
 
 // GameMemory を巻き戻し・観測 inspector に自動反射する (フィールド列挙不要)。
-MITIRU_REFLECT_AUTO({{.ProjectIdent}}Game);
+MITIRU_REFLECT_AUTO(MyGame);
 
-MITIRU_GAME({{.ProjectIdent}}Game)
+MITIRU_GAME(MyGame)

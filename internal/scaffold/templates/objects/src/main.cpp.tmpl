@@ -11,7 +11,7 @@
 using namespace mitiru;
 
 // ── 進行データ: ここに置いたものだけがセーブとロードで戻る ──
-struct {{.ProjectIdent}}Progress
+struct MyProgress
 {
     int           stage    = 1;
     int           score    = 0;
@@ -23,21 +23,21 @@ struct {{.ProjectIdent}}Progress
         return rngState;
     }
 };
-MITIRU_REFLECT_AUTO({{.ProjectIdent}}Progress);
+MITIRU_REFLECT_AUTO(MyProgress);
 
 // ── ゲーム内オブジェクト: 継承と仮想関数で書く ──
 struct GameObject
 {
     float x = 0.0f, y = 0.0f, radius = 24.0f;
     virtual ~GameObject() = default;
-    virtual void update({{.ProjectIdent}}Progress& progress, float dt) = 0;
+    virtual void update(MyProgress& progress, float dt) = 0;
     virtual void draw(Screen& s) const = 0;
 };
 
 struct Bouncer final : GameObject
 {
     float vy = 0.0f;
-    void update({{.ProjectIdent}}Progress&, float dt) override
+    void update(MyProgress&, float dt) override
     {
         vy += 900.0f * dt;
         y  += vy * dt;
@@ -47,12 +47,12 @@ struct Bouncer final : GameObject
 };
 
 // ── 場面: DLL の中に 1 個だけ生きる。進行データから組み立てる ──
-struct {{.ProjectIdent}}Scene
+struct MyScene
 {
     std::vector<std::unique_ptr<GameObject>> objects;
 
     // 初回・ホットリロード後・ロード後・さいしょから の後に呼ばれる。読むだけ (const)。
-    void build(const {{.ProjectIdent}}Progress& progress)
+    void build(const MyProgress& progress)
     {
         objects.clear();
         for (int i = 0; i < progress.stage; ++i)
@@ -64,7 +64,7 @@ struct {{.ProjectIdent}}Scene
         }
     }
 
-    void update({{.ProjectIdent}}Progress& progress, Input in, Hud hud, float dt)
+    void update(MyProgress& progress, Input in, Hud hud, float dt)
     {
         if (in.mousePressed()) { progress.score += 1 + static_cast<int>(progress.nextRandom() % 3u); }
         if (in.pressed(Key::Up) && progress.stage < 6) { progress.stage += 1; build(progress); }
@@ -77,11 +77,11 @@ struct {{.ProjectIdent}}Scene
         hud.set("view.stage", progress.stage);
     }
 
-    void draw(const {{.ProjectIdent}}Progress&, Screen& s)
+    void draw(const MyProgress&, Screen& s)
     {
         s.fillScreen(hex(0x14182A));
         for (const auto& object : objects) { object->draw(s); }
     }
 };
 
-MITIRU_GAME_OBJECTS({{.ProjectIdent}}Scene, {{.ProjectIdent}}Progress)
+MITIRU_GAME_OBJECTS(MyScene, MyProgress)

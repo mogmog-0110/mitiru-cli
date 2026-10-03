@@ -102,7 +102,7 @@ float starHash(int i, int salt)
 
 }  // namespace
 
-struct {{.ProjectIdent}}Game
+struct MyGame
 {
     float px = kFieldW * 0.5f;
     float py = kFieldH - 70.0f;
@@ -135,7 +135,7 @@ struct {{.ProjectIdent}}Game
     {
         ++tick;
         if (in.pressed(Key::Escape)) { hud.quit(); }
-        if (in.pressed(Key::R))      { *this = {{.ProjectIdent}}Game{}; }   // リスタート
+        if (in.pressed(Key::R))      { *this = MyGame{}; }   // リスタート
 
         if (!gameOver && !won)
         {
@@ -459,6 +459,6 @@ private:
 // 合計 176 要素) では ModuleApi の反射フィールド上限を超え、超過分は黙って切り捨てられる
 // (host が起動時に 1 回 warnOnce する。巻き戻し自体は GameMemory の生バイト列を使うため
 // 影響しない — 削られるのは Inspector 表示の一部だけ)。
-MITIRU_REFLECT_AUTO({{.ProjectIdent}}Game);
+MITIRU_REFLECT_AUTO(MyGame);
 
-MITIRU_GAME({{.ProjectIdent}}Game);
+MITIRU_GAME(MyGame);

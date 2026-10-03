@@ -27,7 +27,7 @@ struct Part { float x, y, vx, vy, life; std::uint32_t col; }; // 粒 (life<=0 �
 
 }  // namespace
 
-struct {{.ProjectIdent}}Game
+struct MyGame
 {
     float t      = 0.0f;     // 経過秒
     int   count  = 0;        // count ボタンの回数
@@ -186,6 +186,6 @@ struct {{.ProjectIdent}}Game
 };
 
 // GameMemory を巻き戻し・観測 inspector に自動反射する (フィールド列挙不要)。
-MITIRU_REFLECT_AUTO({{.ProjectIdent}}Game);
+MITIRU_REFLECT_AUTO(MyGame);
 
-MITIRU_GAME({{.ProjectIdent}}Game)
+MITIRU_GAME(MyGame)
