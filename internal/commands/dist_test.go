@@ -167,3 +167,25 @@ func TestPackKeepsDiskReadAssetsLoose(t *testing.T) {
 		t.Errorf("packed models/hero.png must be removed (err=%v)", err)
 	}
 }
+
+func TestIsDistEngineAsset(t *testing.T) {
+	cases := map[string]bool{
+		"assets/ui/base.rcss":                     true,
+		"assets/ui/crash_consent.rml":             true,
+		"assets/ui/strings_ja.json":               true,
+		"assets/ui/notes.txt":                     false,
+		"assets/glyphs/xbox_a.png":                true,
+		"assets/glyphs/LICENSE.txt":               true,
+		"assets/glyphs/README.md":                 false,
+		"assets/glyphs/source.svg":                false,
+		"assets/fonts/MPLUSRounded1c-Regular.ttf": true,
+		"assets/fonts/OFL.txt":                    true,
+		"assets/fonts/Pacifico-Regular.ttf":       false,
+		"assets/samples/demo.png":                 false,
+	}
+	for rel, want := range cases {
+		if got := isDistEngineAsset(rel); got != want {
+			t.Errorf("isDistEngineAsset(%q) = %v, want %v", rel, got, want)
+		}
+	}
+}

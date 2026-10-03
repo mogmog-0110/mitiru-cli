@@ -646,11 +646,17 @@ func zipDir(root, base, zipPath string, skip ...string) error {
 }
 
 // isDistEngineAsset は host の隣の assets/ (engine の同梱物) のうち、配布に要るものかを返す。
-// RML の mitiru:*.rcss と、UI の既定書体 (M PLUS Rounded 1c) とそのライセンスだけを配る。
+// 配るのは RML の mitiru:*.rcss、engine 自身の画面 (クラッシュ報告の同意など) の RML と文言表の JSON、
+// RML の <img src="glyph:..."> が読むボタン絵とそのライセンス、UI の既定書体 (M PLUS Rounded 1c) と
+// そのライセンスだけだ。
 func isDistEngineAsset(rel string) bool {
 	low := strings.ToLower(filepath.ToSlash(rel))
 	switch {
-	case strings.HasPrefix(low, "assets/ui/") && strings.HasSuffix(low, ".rcss"):
+	case strings.HasPrefix(low, "assets/ui/") && (strings.HasSuffix(low, ".rcss") ||
+		strings.HasSuffix(low, ".rml") || strings.HasSuffix(low, ".json")):
+		return true
+	case strings.HasPrefix(low, "assets/glyphs/") && strings.HasSuffix(low, ".png"),
+		low == "assets/glyphs/license.txt":
 		return true
 	case strings.HasPrefix(low, "assets/fonts/mplusrounded1c-") && strings.HasSuffix(low, ".ttf"):
 		return true
