@@ -762,11 +762,17 @@ func runCMakeConfigure(vcvars, generator, srcDir, outDir string, opts Options) e
 // vcvarsPrelude は cmake を駆動する全 batch script に必要な boilerplate を出す:
 // VS Installer dir を PATH に載せ (vcvars64.bat が "is not recognized" noise を
 // 出さずに vswhere.exe を見つけられるように)、その後 vcvars64.bat を有効化する。
-// VSLANG=1033 は cl 出力を英語に固定する — 日本語 cl だと CMake が /showIncludes
-// prefix を console CP 依存で焼き、ninja の header 依存追跡が全滅する (#deps 0) 根治。
+//
+// ninja は cl の /showIncludes の行を、configure で CMake が控えた接頭辞とバイト列で
+// 比べて header 依存を拾う。日本語の cl はこの接頭辞を「メモ: インクルード ファイル:」と
+// 出し、英語の言語パックが無ければ VSLANG=1033 でも変わらない。cl はコンソールの
+// 出力コードページで書き、CMake は入力コードページで読むので、mitiru が出力だけを
+// UTF-8 にした窓では接頭辞が化け、どの object も #deps 0 になる。chcp で入出力を
+// 同じ UTF-8 にそろえ、configure と build で cl の出すバイト列を一致させる。
 func vcvarsPrelude(vcvars string) string {
 	return fmt.Sprintf(
 		"@echo off\r\n"+
+			"chcp 65001 >NUL\r\n"+
 			"set \"PATH=C:\\Program Files (x86)\\Microsoft Visual Studio\\Installer;%%PATH%%\"\r\n"+
 			"set \"VSLANG=1033\"\r\n"+
 			"call \"%s\" >NUL\r\n"+

@@ -118,18 +118,27 @@ func configureIfNeeded(vcvars, generator, srcDir, outDir string, opts Options, t
 		Vcvars:      vcvars,
 	})
 	dryRun := os.Getenv("MITIRU_DRY_RUN") == "1"
-	if !dryRun && configureUpToDate(outDir, key) {
+	schemeOK := depsSchemeCurrent(outDir)
+	if !dryRun && schemeOK && configureUpToDate(outDir, key) {
 		timer.mark("configure (skipped)")
 		return nil
 	}
 	console.Fverbosef(opts.Stdout, "Configuring %s (%s)...\n", opts.ProjectName, opts.Config)
 	clearConfigureStamp(outDir)
+	if !dryRun && !schemeOK {
+		if err := resetCompilerDetection(outDir); err != nil {
+			return err
+		}
+	}
 	if err := runCMakeConfigure(vcvars, generator, srcDir, outDir, opts); err != nil {
 		return err
 	}
 	timer.mark("configure")
 	if dryRun {
 		return nil
+	}
+	if err := writeDepsScheme(outDir); err != nil {
+		return fmt.Errorf("write %s: %w", depsSchemeFile, err)
 	}
 	if err := writeConfigureStamp(outDir, key); err != nil {
 		return fmt.Errorf("write %s: %w", configureStampFile, err)
