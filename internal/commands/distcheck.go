@@ -33,6 +33,7 @@ type distCheckResult struct {
 	Problems []string // 欠けを示すログの行
 	Shot     string   // 最後に撮った絵 (無ければ空)
 	Log      string   // host のログを書いた先
+	I18n     i18nReport
 }
 
 // splitMtargs は launch.mtargs の 1 行を引数に分ける (mtargsJoin の逆。"..." で囲んだ所は 1 つ)。
@@ -97,9 +98,12 @@ func findDistProblems(log string) []string {
 }
 
 // distCheckRun は --check で何フレーム回し、どの入力を流すか。Script は絶対パスか空。
+// AssetsDir はプロジェクトの assets (訳の表を探す所)、StrictI18n は訳の抜けを失敗にするか。
 type distCheckRun struct {
-	Frames int
-	Script string
+	Frames     int
+	Script     string
+	AssetsDir  string
+	StrictI18n bool
 }
 
 // distCheckHostArgs は launch.mtargs の引数に、headless で回して最後のフレームを撮る引数を足す。
@@ -166,7 +170,8 @@ func runDistCheck(bundleRoot, shotOut string, run distCheckRun) (distCheckResult
 	if res.ExitCode != 0 {
 		res.Problems = append(res.Problems, exitCodeText(uint32(res.ExitCode)))
 	}
-	return res, nil
+	res.I18n, err = runI18nCheck(filepath.Join(data, "mitiru_host.exe"), run.AssetsDir)
+	return res, err
 }
 
 // exitCodeText は host の終了コードを、何が起きたかの文にする。
@@ -237,5 +242,8 @@ func checkDistBundle(bundleRoot, shotOut string, run distCheckRun) error {
 		return fmt.Errorf("配布物に欠けているものがあります。\n  %s", strings.Join(res.Problems, "\n  "))
 	}
 	fmt.Println("配布物は開発用の環境が無くても動きました。欠けの知らせは無く、終了コードは 0 です。")
-	return nil
+	if run.AssetsDir == "" {
+		return nil
+	}
+	return i18nVerdict(res.I18n, run.StrictI18n)
 }
