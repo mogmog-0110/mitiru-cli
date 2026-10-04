@@ -86,6 +86,10 @@ the resulting executable with the project root as its working directory.
 
 Standard output, standard error, and exit code are forwarded.
 
+The deployed assets/ folder is passed to the host as --watch-assets, so
+editing a tuning JSON there reaches the running game as asset.reloaded
+([run] watch_assets = false in mitiru.toml turns it off).
+
 With --inspect, also opens a tool window alongside the game and
 shuts it down when the game exits. Bare --inspect opens the gameplay
 inspector; a window name selects another tool:
@@ -207,6 +211,7 @@ func runRun() error {
 
 	// mitiru.toml の [window] サイズ / [font] atlas を host へ渡す。
 	hostArgs = append(hostArgs, tomlHostArgs()...)
+	hostArgs = append(hostArgs, watchAssetsArgs(result.Config, art, result.EngineRoot)...)
 
 	// --console: control panel を既定ブラウザで自動表示する。
 	if runWithConsole {

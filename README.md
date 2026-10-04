@@ -119,6 +119,13 @@ backend = "auto"        # auto / dx11 / dx12 / vulkan / opengl / webgl2 / null
 
 `mitiru build` はこの TOML を読み込み、設定を C++ ヘッダへ埋め込みます。`src/main.cpp` で `mitiru::EngineConfig` の `title`、`windowWidth`、`windowHeight` を設定する必要はありません。
 
+`mitiru run` と `mitiru watch` は、配置した `assets/` を host の `--watch-assets` に渡します。走らせたまま `build/out/<project>/assets` の JSON を書き換えると、ゲームに `asset.reloaded` が届きます (`mitiru watch` は `assets/` の変更をそこへ写します)。切るときは次のように書きます。
+
+```toml
+[run]
+watch_assets = false
+```
+
 古い `mitiru.toml` の `[cef]` は読み捨てます (警告を 1 行出す)。UI は DLL の隣の `assets/ui/main.rml` があれば host が自動で重ねます。
 
 ### engine の追加ライブラリ (`[engine]` と `[nav]`)

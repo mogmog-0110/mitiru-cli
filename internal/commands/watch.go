@@ -39,6 +39,8 @@ state survives the swap.
 
   src/**/*.{cpp,h,hpp,...} change → rebuild DLL → host hot-reloads
   assets/**/*.{rml,rcss,png,...}  → synced to the deploy dir; the engine reloads it
+                                    (JSON and models also reach the game as asset.reloaded;
+                                     [run] watch_assets = false in mitiru.toml turns it off)
 
 Press Ctrl-C to stop watching (also closes the game window). Saves
 during a rebuild are coalesced so a burst of writes only triggers one
@@ -328,6 +330,8 @@ func (s *gameState) firstBuildAndLaunch() error {
 	// リビルド失敗時のエラー帯: host にエラーファイルの場所を教える。engine が
 	// 存在をポーリングし、ファイルがある間だけゲーム画面上部に帯を描く。
 	watchArgs = append(watchArgs, "--error-file", build.BuildErrorFilePath(s.projectRoot))
+	// 配置した assets/ を host にも見させ、調整値の JSON の書き換えをゲームへ届ける
+	watchArgs = append(watchArgs, watchAssetsArgs(result.Config, art, result.EngineRoot)...)
 	cmd := exec.Command(art.HostExePath, watchArgs...)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr

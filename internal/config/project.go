@@ -26,6 +26,7 @@ type ProjectConfig struct {
 	Engine   EngineSection   `toml:"engine"`
 	Nav      NavSection      `toml:"nav"`
 	Lighting LightingSection `toml:"lighting"`
+	Run      RunSection      `toml:"run"`
 }
 
 type ProjectSection struct {
@@ -33,6 +34,16 @@ type ProjectSection struct {
 	Version string `toml:"version"`
 	Engine  string `toml:"engine"`
 }
+
+// RunSection は mitiru run と mitiru watch が host を起動するときの設定。
+type RunSection struct {
+	// WatchAssets は配置した assets/ を host の --watch-assets に渡すか。渡すと調整値の JSON を
+	// 書き換えたときにゲームへ asset.reloaded が届く。未指定は true。
+	WatchAssets *bool `toml:"watch_assets"`
+}
+
+// WatchAssets は [run] watch_assets の値。書いていなければ true。
+func (c *ProjectConfig) WatchAssets() bool { return c.Run.WatchAssets == nil || *c.Run.WatchAssets }
 
 // DistSection は配布物だけに効く設定。project.name は DLL 名や CMake の target 名に
 // 使う ASCII 識別子なので、遊ぶ側が受け取るファイルの名前とは分けている。

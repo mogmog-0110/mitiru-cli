@@ -80,6 +80,7 @@ type buildResult struct {
 	ProjectRoot string
 	Config      *config.ProjectConfig
 	Artifacts   *build.Artifacts
+	EngineRoot  string // host 型のときだけ。standalone では空
 }
 
 // runBuild は host 型の project を build する。standalone 型は断る: 呼ぶ側は
@@ -172,6 +173,7 @@ func buildProject(stdout, stderr io.Writer, allowStandalone bool) (*buildResult,
 		ProjectRoot: projectRoot,
 		Config:      cfg,
 		Artifacts:   artifacts,
+		EngineRoot:  engineRoot,
 	}, nil
 }
 
