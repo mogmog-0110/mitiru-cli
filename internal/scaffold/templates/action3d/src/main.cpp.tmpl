@@ -155,7 +155,7 @@ struct MyGame
     {
         s.clear(hex(0xEAF1F8));
         if (loading != 0) { return; }
-        s.camera3D(view.eye, view.target, view.up, view.fovDeg, 0.1f, 80.0f);
+        s.camera3D(view.eye, view.target, view.up, Deg{view.fovDeg}, 0.1f, 80.0f);
         s.light3D({-0.5f, -1.0f, -0.35f}, hex(0xFFFBF2));
         s.skybox3D(hex(0x63A5E8), hex(0xEAF3FB));
         s.drawModel(kLevelPath, {0.0f, 0.0f, 0.0f});
