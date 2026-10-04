@@ -95,6 +95,10 @@ type templateData struct {
 	// LegacyCEF は pin した engine が CEF 世代 (0.33 以前) のとき true。CEF の deploy と
 	// HTML 用の JS の同梱はその世代だけに出す。
 	LegacyCEF bool
+	// UserWarnings は利用者の DLL を /W3 でコンパイルするか。エンジンのヘッダが /W3 で
+	// 警告を出さない世代 (include/mitiru/core/Env.hpp がある) だけ立てる。古い engine の
+	// ヘッダの警告で利用者の出力が埋まらないようにするため。
+	UserWarnings bool
 	// Features は [engine] features を引いたもの。DLL に link する target と、無いときの直し方。
 	Features []config.EngineFeature
 	// FeatureOptions は feature が要る engine の CMake option と、その値。
@@ -162,7 +166,7 @@ set(MITIRU_PROJECT_ROOT "{{.ProjectRoot}}")
 add_library({{.TargetName}} SHARED "{{.MainCppAbs}}")
 target_link_libraries({{.TargetName}} PRIVATE Mitiru::mitiru)
 if(MSVC)
-    target_compile_options({{.TargetName}} PRIVATE /bigobj)
+    target_compile_options({{.TargetName}} PRIVATE /bigobj{{if .UserWarnings}} /W3{{end}})
 endif()
 {{range .Features}}
 # [engine] features = "{{.Name}}"
@@ -526,6 +530,7 @@ func Configure(opts Options) (cmakeSrcDir, cmakeOutDir string, err error) {
 		SelfrunMainAbs:  selfrunMainAbs,
 		SelfpackMainAbs: selfpackMainAbs,
 		LegacyCEF:       engine.UsesLegacyCEF(opts.EngineRoot),
+		UserWarnings:    engine.HeadersCleanAtW3(opts.EngineRoot),
 		Features:        features,
 		FeatureOptions:  config.FeatureOptions(features),
 		Nav:             nav,

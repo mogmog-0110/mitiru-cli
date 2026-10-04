@@ -162,3 +162,30 @@ func TestConfigure_LaunchersUseStaticCRT(t *testing.T) {
 		}
 	}
 }
+
+// 利用者の DLL は /W3 でコンパイルする (非推奨の呼び出しと書き間違いを見せる)。ただし engine の
+// ヘッダが /W3 で静かな世代 (core/Env.hpp がある) だけ。host と engine の target には付けない。
+func TestConfigure_UserTargetWarnsAtW3OnCleanEngines(t *testing.T) {
+	projectRoot, engineRoot := fakeProject(t)
+	userOpts := "target_compile_options(my_first_game PRIVATE /bigobj"
+
+	old := generatedCMake(t, projectRoot, engineRoot)
+	if !strings.Contains(old, userOpts+")") || strings.Contains(old, "/W3") {
+		t.Fatalf("engine without core/Env.hpp must keep the default warning level:\n%s", old)
+	}
+
+	env := filepath.Join(engineRoot, "include", "mitiru", "core", "Env.hpp")
+	if err := os.MkdirAll(filepath.Dir(env), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(env, []byte("#pragma once\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	clean := generatedCMake(t, projectRoot, engineRoot)
+	if !strings.Contains(clean, userOpts+" /W3)") {
+		t.Errorf("user DLL target must compile at /W3:\n%s", clean)
+	}
+	if strings.Count(clean, "/W3") != 1 {
+		t.Errorf("/W3 must apply to the user target only, got %d uses", strings.Count(clean, "/W3"))
+	}
+}
