@@ -877,7 +877,8 @@ func runCMakeBuild(vcvars, outDir string, opts Options) error {
 	}
 
 	// 既定では進捗の 1 行だけを出し、診断行は失敗したときにまとめて出す。
-	pf := newQuietBuildProgressFilter(opts.Stdout, TargetName(opts.ProjectName))
+	// 利用者のコードを指す警告だけは成功しても出す。
+	pf := newQuietBuildProgressFilter(opts.Stdout, TargetName(opts.ProjectName), opts.ProjectRoot)
 	var errBuf bytes.Buffer
 	filtered.Stdout = pf
 	filtered.Stderr = &errBuf

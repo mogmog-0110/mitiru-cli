@@ -82,11 +82,11 @@ func TestBuildProgressFilterBucketsEngineVsUser(t *testing.T) {
 
 func TestQuietBuildProgressFilterLeavesNothingOnSuccess(t *testing.T) {
 	var out bytes.Buffer
-	f := newQuietBuildProgressFilter(&out, "probe")
+	f := newQuietBuildProgressFilter(&out, "probe", `E:\game`)
 
 	lines := []string{
 		`[1/2] Building CXX object CMakeFiles/probe.dir/src/main.cpp.obj`,
-		`E:\proj\src\main.cpp(3): warning C4100: 'x': unreferenced formal parameter`,
+		`E:\engine\include\mitiru\x.hpp(3): warning C4100: 'x': unreferenced formal parameter`,
 		`ninja: no work to do.`,
 		`[2/2] Linking CXX shared library probe\probe.dll`,
 	}
@@ -107,7 +107,7 @@ func TestQuietBuildProgressFilterLeavesNothingOnSuccess(t *testing.T) {
 
 func TestQuietBuildProgressFilterShowsHeldLinesOnFailure(t *testing.T) {
 	var out bytes.Buffer
-	f := newQuietBuildProgressFilter(&out, "probe")
+	f := newQuietBuildProgressFilter(&out, "probe", `E:\game`)
 
 	lines := []string{
 		`[1/2] Building CXX object CMakeFiles/probe.dir/src/main.cpp.obj`,
@@ -122,5 +122,36 @@ func TestQuietBuildProgressFilterShowsHeldLinesOnFailure(t *testing.T) {
 	got := out.String()
 	if !strings.Contains(got, "error C2065") || !strings.Contains(got, "FAILED:") {
 		t.Errorf("held error lines should appear on failure, got %q", got)
+	}
+}
+
+// 利用者のコードを指す警告 (非推奨の角度の関数など) は、成功したビルドでも出す。
+// エンジンや第三者のコードの警告は今までどおり出さない。
+func TestQuietBuildProgressFilterShowsUserWarningsOnSuccess(t *testing.T) {
+	var out bytes.Buffer
+	f := newQuietBuildProgressFilter(&out, "probe", `E:/Tmp/Game`)
+
+	user := `e:\tmp\game\src\main.cpp(157): warning C4996: 'mitiru::Screen::pushRotation': deprecated`
+	lines := []string{
+		`[1/3] Building CXX object CMakeFiles/probe.dir/src/main.cpp.obj`,
+		user,
+		`E:\tmp\gamekit\src\other.cpp(1): warning C4100: 'y': unreferenced formal parameter`,
+		`E:\engine\include\mitiru\x.hpp(3): warning C4100: 'x': unreferenced formal parameter`,
+		`E:\tmp\game\src\main.cpp(9): note: see declaration`,
+		`[3/3] Linking CXX shared library probe\probe.dll`,
+	}
+	_, _ = f.Write([]byte(strings.Join(lines, "\r\n") + "\r\n"))
+	if err := f.Finish(true); err != nil {
+		t.Fatalf("Finish: %v", err)
+	}
+
+	got := out.String()
+	if !strings.Contains(got, user+"\n") {
+		t.Errorf("a warning in the project must be shown on success, got %q", got)
+	}
+	for _, hidden := range []string{"gamekit", `mitiru\x.hpp`, "note:"} {
+		if strings.Contains(got, hidden) {
+			t.Errorf("%q is outside the project's warnings and must stay hidden, got %q", hidden, got)
+		}
 	}
 }

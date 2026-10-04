@@ -44,6 +44,11 @@ type buildProgressFilter struct {
 	hold bool
 	held bytes.Buffer
 
+	// userRoot はプロジェクトの場所 (小文字、区切りは \)。hold 中でも、ここを指す警告
+	// (利用者が書いたコードの非推奨の呼び出しや書き間違い) は成功したときにも出す。
+	userRoot     string
+	userWarnings bytes.Buffer
+
 	buf            bytes.Buffer
 	engineDone     int
 	userDone       int
@@ -75,10 +80,23 @@ func isTerminal(w io.Writer) bool {
 	return err == nil && st.Mode()&os.ModeCharDevice != 0
 }
 
-func newQuietBuildProgressFilter(underlying io.Writer, targetName string) *buildProgressFilter {
+func newQuietBuildProgressFilter(underlying io.Writer, targetName, projectRoot string) *buildProgressFilter {
 	f := newBuildProgressFilter(underlying, targetName)
 	f.hold = true
+	if projectRoot != "" {
+		f.userRoot = strings.TrimSuffix(normalizeWinPath(projectRoot), `\`) + `\`
+	}
 	return f
+}
+
+func normalizeWinPath(p string) string {
+	return strings.ToLower(strings.ReplaceAll(p, "/", `\`))
+}
+
+// isUserWarning は MSVC の警告の行が、プロジェクトの中のファイルを指しているかを見る。
+func (f *buildProgressFilter) isUserWarning(line string) bool {
+	return f.userRoot != "" && strings.Contains(line, ": warning C") &&
+		strings.HasPrefix(normalizeWinPath(line), f.userRoot)
 }
 
 func (f *buildProgressFilter) Write(p []byte) (int, error) {
@@ -114,6 +132,8 @@ func (f *buildProgressFilter) Finish(ok bool) error {
 			f.onProgressLine = false
 		}
 		f.held.Reset()
+		f.writeRaw(f.userWarnings.String())
+		f.userWarnings.Reset()
 		return f.err
 	}
 	if f.onProgressLine {
@@ -158,6 +178,10 @@ func (f *buildProgressFilter) handleLine(line string) {
 	if f.hold {
 		f.held.WriteString(line)
 		f.held.WriteString("\n")
+		if f.isUserWarning(line) {
+			f.userWarnings.WriteString(line)
+			f.userWarnings.WriteString("\n")
+		}
 		return
 	}
 	// 通常の診断行 (warning / error / cmake message)。進捗行の上に重ねて
