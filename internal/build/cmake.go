@@ -46,7 +46,7 @@ type Options struct {
 	// 例: dist が "MITIRU_HOST_GUI=ON" を渡す。
 	ExtraDefines []string
 
-	// OutDir は build 出力 dir の上書き (空なら build/out)。dist は dev build を
+	// OutDir は build 出力 dir の上書き (空なら構成ごとの OutDir)。dist は dev build を
 	// 汚さない別 dir を渡す (configure-time オプションの thrash 回避)。
 	OutDir string
 
@@ -125,7 +125,7 @@ type navBake struct {
 //	                  ${MITIRU_ENGINE_ROOT}/apps/mitiru_host/main.cpp から compile。
 //	                  旧 engine snapshot では examples/mitiru_host/main.cpp)。
 //
-// <projectRoot>/build/out/<Config>/ 内の layout:
+// OutDir (Debug は <projectRoot>/build/out) の中の layout (multi-config generator では <Config>/ の下):
 //
 //	mitiru_host.exe
 //	assets/ui/*.rcss, assets/fonts/   (RML の mitiru:base.rcss と UI の書体)
@@ -449,12 +449,21 @@ func cmakeQuote(s string) string {
 
 // BuildDirs は projectRoot に対する build artefact の標準 layout を算出する:
 //
-//	<projectRoot>/build/cmake/      ← 生成された CMakeLists.txt の source tree
-//	<projectRoot>/build/out/        ← cmake -B の output directory
-func BuildDirs(projectRoot string) (cmakeSrcDir, cmakeOutDir string) {
-	cmakeSrcDir = filepath.Join(projectRoot, "build", "cmake")
-	cmakeOutDir = filepath.Join(projectRoot, "build", "out")
-	return
+//	<projectRoot>/build/cmake/          ← 生成された CMakeLists.txt の source tree
+//	<projectRoot>/build/out/            ← Debug の cmake -B の output directory
+//	<projectRoot>/build/out-release/    ← Release (ほかの構成は out-<構成の小文字>)
+func BuildDirs(projectRoot, config string) (cmakeSrcDir, cmakeOutDir string) {
+	return filepath.Join(projectRoot, "build", "cmake"), OutDir(projectRoot, config)
+}
+
+// OutDir は構成ごとの cmake -B。Ninja の build dir は構成を 1 つしか持てないので、
+// 同じ dir で構成を替えると Debug の DLL と host が Release で上書きされる。
+// Debug は今までどおり build/out に置き、ほかの構成は隣の dir に分ける。
+func OutDir(projectRoot, config string) string {
+	if config == "" || strings.EqualFold(config, "Debug") {
+		return filepath.Join(projectRoot, "build", "out")
+	}
+	return filepath.Join(projectRoot, "build", "out-"+strings.ToLower(config))
 }
 
 // Configure は <projectRoot>/build/cmake/ に CMakeLists.txt を生成し、
@@ -463,7 +472,7 @@ func BuildDirs(projectRoot string) (cmakeSrcDir, cmakeOutDir string) {
 var engineRootRe = regexp.MustCompile(`set\(MITIRU_ENGINE_ROOT "([^"]+)"\)`)
 
 func Configure(opts Options) (cmakeSrcDir, cmakeOutDir string, err error) {
-	cmakeSrcDir, cmakeOutDir = BuildDirs(opts.ProjectRoot)
+	cmakeSrcDir, cmakeOutDir = BuildDirs(opts.ProjectRoot, opts.Config)
 	if opts.OutDir != "" {
 		cmakeOutDir = opts.OutDir // dist は別 out dir で dev build を汚さない
 	}

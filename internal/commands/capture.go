@@ -16,15 +16,16 @@ func newCaptureCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "capture",
 		Short: "Run the game headless for some frames and save PNGs, without opening a window",
-		Long: `Build the project, run this project's own mitiru_host (from build/out)
-headless on DX12, and save a PNG every --every frames. With --script the game
-plays an input script (engine docs/INPUT_SCRIPT.md), so the frames show what a
-player would see.
+		Long: `Build the project, run this project's own mitiru_host (from build/out, or
+build/out-release with --release) headless on DX12, and save a PNG every
+--every frames. With --script the game plays an input script (engine
+docs/INPUT_SCRIPT.md), so the frames show what a player would see.
 
   mitiru capture                          120 frames, a PNG every 30 → build/capture/
   mitiru capture --frames 600 --every 60  run longer
   mitiru capture --script play.txt        play scripted input while capturing
   mitiru capture --out shots              choose the output folder
+  mitiru capture --release                capture the Release build (the Debug build is kept)
 
 For a single frame of the RML UI, ` + "`mitiru ui`" + ` is shorter.`,
 		Args: cobra.NoArgs,
@@ -36,6 +37,9 @@ For a single frame of the RML UI, ` + "`mitiru ui`" + ` is shorter.`,
 	cmd.Flags().IntVar(&every, "every", 30, "save a PNG every N frames")
 	cmd.Flags().StringVar(&outDir, "out", "", "output folder (default build/capture)")
 	cmd.Flags().StringVar(&script, "script", "", "input script to play while capturing")
+	cmd.Flags().BoolVar(&buildRelease, "release", false, "build + capture with Release configuration")
+	cmd.Flags().StringVar(&buildConfigName, "config", "",
+		"explicit CMake configuration (Debug|Release|RelWithDebInfo); overrides --release")
 	return cmd
 }
 

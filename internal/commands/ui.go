@@ -106,7 +106,7 @@ func absOrEmpty(p string) (string, error) {
 	return filepath.Abs(p)
 }
 
-// runHostCapture は、ビルドした host (build/out の、このプロジェクトのもの) を captureHostArgs で回す。
+// runHostCapture は、ビルドした host (構成ごとの build.OutDir の、このプロジェクトのもの) を captureHostArgs で回す。
 func runHostCapture(art *build.Artifacts, captureDir string, every, maxFrames int, inputScript string) error {
 	c := exec.Command(art.HostExePath, captureHostArgs(art.DllRel, captureDir, every, maxFrames, inputScript)...)
 	c.Dir = art.DeployDir

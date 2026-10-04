@@ -46,7 +46,7 @@ Parts of the engine that are not built by default are turned on in mitiru.toml:
 
 Examples:
   mitiru build              # Debug build (default)
-  mitiru build --release    # Release build`,
+  mitiru build --release    # Release build (build/out-release; the Debug build in build/out is kept)`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			res, err := runAnyBuild()
 			if err != nil {
@@ -152,7 +152,7 @@ func buildProject(stdout, stderr io.Writer, allowStandalone bool) (*buildResult,
 		Config:          cfgName,
 		Generator:       buildGenerator,
 		ExtraDefines:    buildExtraDefines, // dist が GUI subsystem のフラグを注入 (通常は空)
-		OutDir:          buildOutDir,       // dist は別 out dir (通常は空 = build/out)
+		OutDir:          buildOutDir,       // dist は別 out dir (通常は空 = 構成ごとの build.OutDir)
 		Features:        cfg.Engine.Features,
 		NavSource:       cfg.Nav.Source,
 		NavArgs:         cfg.Nav.Args,

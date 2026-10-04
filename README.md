@@ -54,7 +54,7 @@ mitiru run
 | `mitiru version` | バージョンを表示 |
 | `mitiru`（引数なし） | 番号でコマンドを選ぶ対話メニューを表示 |
 
-`mitiru build` と `mitiru run` には、`--release` または `--config <Debug|Release|RelWithDebInfo>` を指定できます。
+`mitiru build`、`mitiru run`、`mitiru capture` には、`--release` または `--config <Debug|Release|RelWithDebInfo>` を指定できます。ビルドツリーは構成ごとに分かれ、Debug は `build/out`、Release は `build/out-release` に置きます。Release で組んでも Debug の DLL と host は残ります。
 
 `mitiru debug` は常に `--config Debug` を使用します。
 
@@ -92,7 +92,8 @@ my-game/
 
 ```text
 my-game/
-├── build/              # CMake のビルドツリー（mitiru build が生成）
+├── build/out/          # Debug のビルドツリー（mitiru build が生成）
+├── build/out-release/  # Release のビルドツリー（--release のとき）
 └── build/cmake/        # 自動生成された CMakeLists.txt（編集不要）
 ```
 

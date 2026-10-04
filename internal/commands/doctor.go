@@ -142,12 +142,13 @@ func printSymptomTable() {
 // host の隣にパッドの DLL (SDL3.dll、古い engine は SDL2.dll) と UI の RCSS が居るか、Debug CRT が VS toolchain PATH で
 // 解決できるかを表示する。host 未ビルドなら黙って skip。warn のみで fail させない。
 func printRuntimeChecks(projectRoot string) {
-	outDir := filepath.Join(projectRoot, "build", "out")
+	debugOut, releaseOut := build.OutDir(projectRoot, "Debug"), build.OutDir(projectRoot, "Release")
 	hostExe := ""
 	for _, c := range []string{
-		filepath.Join(outDir, "mitiru_host.exe"),
-		filepath.Join(outDir, "Debug", "mitiru_host.exe"),
-		filepath.Join(outDir, "Release", "mitiru_host.exe"),
+		filepath.Join(debugOut, "mitiru_host.exe"),
+		filepath.Join(debugOut, "Debug", "mitiru_host.exe"),
+		filepath.Join(releaseOut, "mitiru_host.exe"),
+		filepath.Join(releaseOut, "Release", "mitiru_host.exe"),
 	} {
 		if _, err := os.Stat(c); err == nil {
 			hostExe = c
