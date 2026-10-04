@@ -2,6 +2,7 @@
 <head>
 <title>{{.ProjectName}}</title>
 <link type="text/rcss" href="mitiru:base.rcss"/>
+<link type="text/rcss" href="mitiru:loading.rcss"/>
 <style>
   /* 3D の庭は C++ が描く。この文書は体力と敵の様子を重ねるだけ。値は C++ の hud.set("view.hp", ...) から届く */
   body { pointer-events: none; color: #222831; }
@@ -9,13 +10,12 @@
            background-color: #ffffffd9; font-size: 16px; }
   .panel b { color: #e0405a; }
   .state { font-size: 20px; font-weight: bold; margin-top: 4px; }
-  .loading { position: absolute; left: 0; right: 0; top: 45%; text-align: center; font-size: 24px; }
   .hint { position: absolute; left: 16px; bottom: 14px; padding: 4px 10px; border-radius: 6px;
           background-color: #1a1d24b3; font-size: 15px; color: #ffffff; }
 </style>
 </head>
 <body data-model="view">
-  <div class="loading" data-if="loading">読み込み中…</div>
+  <include src="mitiru:loading.rml"/>
   <div class="panel" data-if="!loading">
     <div>体力 <b>{{"{{ hp }}"}}</b>　敵 <b>{{"{{ enemy_hp }}"}}</b></div>
     <div class="state">{{"{{ state }}"}}</div>

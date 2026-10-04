@@ -298,9 +298,21 @@ func scanProducedKeys(srcDir string) map[string]bool {
 		for _, m := range quotedDotted.FindAllStringSubmatch(string(data), -1) {
 			produced[m[1]] = true
 		}
+		for helper, keys := range helperKeys {
+			if strings.Contains(string(data), helper) {
+				for _, k := range keys {
+					produced[k] = true
+				}
+			}
+		}
 		return nil
 	})
 	return produced
+}
+
+// helperKeys はエンジンの手助けがゲームの代わりに送る値。ゲームのソースには文字列で現れない。
+var helperKeys = map[string][]string{
+	"StageLoader": {"view.loading"},
 }
 
 // producedViewVars は "view.x" のキーから RML の変数名 x の集合を作る。"view.a.b" のように

@@ -1,10 +1,30 @@
 package commands
 
 import (
+	"os"
+	"path/filepath"
 	"reflect"
 	"sort"
 	"testing"
 )
+
+// エンジンの手助け (StageLoader) が毎フレーム送る値は、ゲームのソースに文字列で現れなくても送られた扱いにする。
+func TestScanProducedKeysCountsStageLoader(t *testing.T) {
+	dir := t.TempDir()
+	src := "#include <mitiru/module/StageLoader.hpp>\nstruct G { mitiru::StageLoader loader{}; };\n"
+	if err := os.WriteFile(filepath.Join(dir, "main.cpp"), []byte(src), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if !scanProducedKeys(dir)["view.loading"] {
+		t.Error("view.loading from StageLoader is not counted as produced")
+	}
+	if err := os.WriteFile(filepath.Join(dir, "main.cpp"), []byte("struct G {};\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if scanProducedKeys(dir)["view.loading"] {
+		t.Error("view.loading must not be produced without StageLoader")
+	}
+}
 
 func TestExprVars(t *testing.T) {
 	cases := []struct {

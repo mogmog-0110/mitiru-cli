@@ -4,6 +4,7 @@
 // 表示する数字は RML / RCSS (assets/ui/main.rml)。スクリプトは書かない。
 
 #include <mitiru/module/Game.hpp>
+#include <mitiru/module/StageLoader.hpp>
 #include <mitiru/action/CameraRig.hpp>
 #include <mitiru/action/CharacterController.hpp>
 #include <mitiru/action/CollisionLevelLoad.hpp>
@@ -19,6 +20,8 @@ namespace ai  = mitiru::gameai;
 // パスは mitiru_host.exe の隣からの相対 (DLL は {{.TargetName}}/ に置かれる)
 constexpr const char* kLevelPath = "{{.TargetName}}/assets/level.obj";
 constexpr const char* kNavPath   = "{{.TargetName}}/assets/level.navmesh";
+// 描く前に読ませる資産。読み終わるまで StageLoader がロード画面 (assets/ui/main.rml の mitiru:loading.rml) を出す
+constexpr const char* kStageAssets[] = {kLevelPath};
 
 constexpr act::CharacterConfig kBody{};
 constexpr act::CameraRigConfig kCam{};
@@ -55,7 +58,8 @@ struct MyGame
     ai::AttackTimeline  swing{};
     std::uint32_t       frame = 0, heroHitUntil = 0, enemyHitUntil = 0;
     std::int32_t        heroHp = 5, enemyHp = 3;
-    std::uint32_t       enemySees = 0, loading = 1;   // loading: 1 = これから頼む、2 = 読み終わり待ち
+    std::uint32_t       enemySees = 0;
+    StageLoader         loader{};
 
     void init()
     {
@@ -74,13 +78,9 @@ struct MyGame
     void play(Input in, Hud hud, float dt)
     {
         if (in.cancelPressed()) { hud.quit(); }
-        // 地形を描く前に読ませ、読み終わるまでロード画面を出す。終わりは頼んだ次のフレームから in.preloadPending() で分かる
-        if (loading == 1) { hud.preload(kLevelPath); loading = 2; }
-        else if (loading == 2 && in.preloadPending() == 0) { loading = 0; }
-        hud.set("view.loading", loading != 0);
-        if (loading != 0) { return; }
+        if (!loader.update(in, hud, kStageAssets)) { return; }
         hud.music("bgm", true, 0.4f);   // assets/audio/bgm.wav。同じ曲なら毎フレーム呼んでも鳴らし直さない
-        if (in.pressed(Key::R)) { init(); loading = 0; }
+        if (in.pressed(Key::R)) { const StageLoader kept = loader; init(); loader = kept; }   // 読んだ資産はそのまま使う
         ++frame;
         const act::CollisionWorld world(&stage().collision);
 
@@ -154,7 +154,7 @@ struct MyGame
     void draw(Screen& s) const
     {
         s.clear(hex(0xEAF1F8));
-        if (loading != 0) { return; }
+        if (!loader.ready()) { return; }
         s.camera3D(view.eye, view.target, view.up, Deg{view.fovDeg}, 0.1f, 80.0f);
         s.light3D({-0.5f, -1.0f, -0.35f}, hex(0xFFFBF2));
         s.skybox3D(hex(0x63A5E8), hex(0xEAF3FB));
