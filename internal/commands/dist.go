@@ -28,6 +28,8 @@ var (
 	// distCheckScript と distCheckFrames は --check で流す入力の台本と回すフレーム数
 	distCheckScript string
 	distCheckFrames int
+	// distStrictI18n は --check の訳の点検で、訳の抜けと書体に無い字を失敗にする
+	distStrictI18n bool
 )
 
 // distShipExe は top-level で配布してよい exe (host と、CEF 世代の engine の helper)。他のツール exe
@@ -129,6 +131,12 @@ development environment variables and PATH removed, and fails when the host
 reports a missing file, exits with an error, or draws a blank frame. By
 default it runs 90 frames with no input; --check-script plays an input script
 (engine docs/INPUT_SCRIPT.md) and --check-frames sets how long it runs.
+--check also reads every strings.json under assets/ (the RML translation
+tables) with the bundled host and lists, by file, language and key, the
+translations that are missing and the characters no shipped font has. The
+list is a warning: a missing translation still shows the fallback language,
+and shipping some languages unfinished is a normal choice. --strict-i18n
+makes any entry fail the check (and implies --check).
 
 Examples:
   mitiru dist                 # → dist/<name>/  (no-console <name>.exe)
@@ -138,9 +146,10 @@ Examples:
   mitiru dist --sign          # Authenticode-sign our own binaries
   mitiru dist --no-bake       # skip the cache pre-bake (no GPU on this machine)
   mitiru dist --check --check-script play.txt --check-frames 600
+  mitiru dist --strict-i18n   # --check, and fail on missing translations
   mitiru dist --out build/ship`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if distCheckScript != "" || cmd.Flags().Changed("check-frames") {
+			if distCheckScript != "" || cmd.Flags().Changed("check-frames") || distStrictI18n {
 				distCheck = true
 			}
 			return runDist()
@@ -167,6 +176,8 @@ Examples:
 		"input script that --check plays (implies --check)")
 	cmd.Flags().IntVar(&distCheckFrames, "check-frames", defaultDistCheckFrames,
 		"frames that --check runs (implies --check when set)")
+	cmd.Flags().BoolVar(&distStrictI18n, "strict-i18n", false,
+		"fail --check when a strings.json lacks a translation or uses a character no shipped font has (implies --check)")
 	cmd.Flags().BoolVar(&distNoBake, "no-bake", false,
 		"skip pre-baking the load caches (converted models, BC-compressed textures, compiled shaders) into the bundle")
 	cmd.Flags().BoolVar(&distSign, "sign", false,
@@ -209,6 +220,8 @@ func runDist() error {
 	if err != nil {
 		return err
 	}
+	checkRun.AssetsDir = filepath.Join(projectRoot, "assets")
+	checkRun.StrictI18n = distStrictI18n
 	if !fileExists(filepath.Join(buildOutDir, "CMakeCache.txt")) {
 		fmt.Println(distColdBuildNotice(distDebug))
 	}
