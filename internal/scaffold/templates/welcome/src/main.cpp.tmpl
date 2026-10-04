@@ -60,14 +60,15 @@ struct MyGame
     float fx       = 640.0f, fy = 360.0f;        // マウスを追う蛍
     struct Ripple { float x = 0.0f, y = 0.0f, age = 9.0f; };
     Ripple ripples[5] = {};
-    bool  prevClick = false;
 
     float speed    = 120.0f;   // 赤べこの歩く速さ (UI のスライダー、20..300)
     int   count    = 0;        // ボタンを押した回数
-    bool  petalsOn = true;     // 桜を降らせるか (UI のチェック)
     float gauge    = 0.0f;     // ゲージ (0..1)
-    bool  draining = false;    // 満タン後、0 へ減っている最中か
     float holdT    = 0.0f;     // 満タンの静止時間
+    bool  petalsOn = true;     // 桜を降らせるか (UI のチェック)
+    bool  draining = false;    // 満タン後、0 へ減っている最中か
+    bool  prevClick = false;
+    std::uint8_t _pad[1] = {};   // 暗黙の詰め物を残さない (状態をバイト単位で比べるため)
 
     void init()
     {
@@ -205,6 +206,8 @@ struct MyGame
         s.fillCircle(fx, fy,  6.0f, kFirefly.withAlpha(0.90f));
     }
 };
+
+MITIRU_ASSERT_NO_PADDING(MyGame);
 
 // GameMemory を巻き戻し・観測 inspector に自動反射する (フィールド列挙不要)。
 MITIRU_REFLECT_AUTO(MyGame);

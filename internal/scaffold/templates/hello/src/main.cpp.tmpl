@@ -32,13 +32,14 @@ struct MyGame
     float t      = 0.0f;     // 経過秒
     int   count  = 0;        // count ボタンの回数
     bool  locked = false;    // Lock チェック (物理を止める)
+    bool  ready  = false;    // ボール初期化済みか
+    std::uint8_t _pad[2] = {};   // 暗黙の詰め物を残さない (状態をバイト単位で比べるため)
     float speed  = 240.0f;   // speed スライダー = 重力の強さ (0..600)
     float curX   = 980.0f;   // マウス追従の赤い円(イージング後)
     float curY   = 360.0f;
     Ball  balls[kBalls];     // 物理ボール
     Part  parts[kParts];     // パーティクル
     int   partHead = 0;      // パーティクルのリング buffer 書き込み位置
-    bool  ready    = false;  // ボール初期化済みか
     std::uint32_t rng = 0x2545F4A3u;
 
     // 0..1 のかんたんな乱数 (決定的)。
@@ -184,6 +185,8 @@ struct MyGame
         s.drawCircleFrame({curX, curY}, 30.0f, hexa(0xFFFFFFB0), 2.0f);
     }
 };
+
+MITIRU_ASSERT_NO_PADDING(MyGame);
 
 // GameMemory を巻き戻し・観測 inspector に自動反射する (フィールド列挙不要)。
 MITIRU_REFLECT_AUTO(MyGame);

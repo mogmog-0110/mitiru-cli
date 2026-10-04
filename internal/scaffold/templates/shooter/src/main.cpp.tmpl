@@ -45,7 +45,7 @@ constexpr int   kBossHp    = 150;
 struct Bullet  { float x = 0, y = 0, vx = 0, vy = 0; };
 struct Enemy   { float x = 0, y = 0, x0 = 0, age = 0; int kind = 0; int hp = 0; };
 struct Powerup { float x = 0, y = 0; int kind = 0; };
-struct Boss    { float x = 0, y = 0, age = 0; int hp = 0; bool active = false; bool entering = false; float fireCd = 0; };
+struct Boss    { float x = 0, y = 0, age = 0; int hp = 0; float fireCd = 0; bool active = false; bool entering = false; std::uint8_t _pad[2] = {}; };
 
 // ── 出現スケジュール (完全固定。time 秒に kind の敵を count 体、form 配置で出す) ──
 // form: 0=横一列  1=左から斜め  2=右から斜め  3=param の x に単体
@@ -115,11 +115,12 @@ struct MyGame
     int   waveIdx  = 0;      // 次に出すウェーブ
     int   dropCycle = 0;     // キャリアが落とすアイテム種別の循環
     int   tick = 0;
-    // bool 3 つをまとめて置く (AutoReflect の padding 警告対策。バラバラだと
-    // float/int の 4 byte alignment で隙間が空く)。
+    // bool 3 つをまとめて置き、残りの 1 byte を _pad で埋める (バラバラだと
+    // float/int の 4 byte alignment で隙間が空き、状態をバイト単位で比べられない)。
     bool  gameOver = false;
     bool  won      = false;
     bool  bossSpawned = false;
+    std::uint8_t _pad[1] = {};
     Boss  boss;
 
     Pool<Bullet, kMaxBullets>   bullets;
@@ -297,7 +298,7 @@ private:
         while (waveIdx < kNumWaves && kWaves[waveIdx].time <= elapsed) { spawnWave(kWaves[waveIdx]); ++waveIdx; }
         if (!bossSpawned && elapsed >= kBossTime)
         {
-            boss = {kFieldW * 0.5f, -60.0f, 0.0f, kBossHp, true, true, 1.2f};
+            boss = {kFieldW * 0.5f, -60.0f, 0.0f, kBossHp, 1.2f, true, true};
             bossSpawned = true;
         }
     }
@@ -453,6 +454,8 @@ private:
         hud.set("view.state", won ? "clear" : (gameOver ? "over" : ""));
     }
 };
+
+MITIRU_ASSERT_NO_PADDING(MyGame);
 
 // GameMemory (この構造体自身) を巻き戻し・観測 inspector に自動反射する。
 // Pool<T,N> は要素ごとに展開されるため、この規模 (bullets/enemies/ebullets/powerups
