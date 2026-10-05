@@ -210,6 +210,7 @@ func runDist() error {
 	buildRelease = !distDebug
 	buildOutDir = filepath.Join(projectRoot, "build", "dist-out")
 	if distDebug {
+		buildConfigName = "Debug"
 		buildOutDir += "-debug"
 		fmt.Println("--debug は Debug ビルドを配布物にします。Debug 版のランタイムは再頒布できないので、自分のテスト機だけで使ってください。")
 	}

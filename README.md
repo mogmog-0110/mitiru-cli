@@ -119,6 +119,13 @@ backend = "auto"        # auto / dx11 / dx12 / vulkan / opengl / webgl2 / null
 
 `mitiru build` はこの TOML を読み込み、設定を C++ ヘッダへ埋め込みます。`src/main.cpp` で `mitiru::EngineConfig` の `title`、`windowWidth`、`windowHeight` を設定する必要はありません。
 
+`mitiru build`、`run`、`watch`、`capture` の構成は既定で Debug です。毎フレームの計算が重いゲームは、Debug では最適化されずに 60 fps を割ります。そのときは普段の構成を `[build] config` で変えます。`--config` と `--release` はこれより先に効きます。止めて調べるときは `mitiru debug` を使います。
+
+```toml
+[build]
+config = "RelWithDebInfo"   # Debug / Release / RelWithDebInfo。RelWithDebInfo は最適化して記号も残す
+```
+
 `mitiru run` と `mitiru watch` は、配置した `assets/` を host の `--watch-assets` に渡します。走らせたまま `build/out/<project>/assets` の JSON を書き換えると、ゲームに `asset.reloaded` が届きます (`mitiru watch` は `assets/` の変更をそこへ写します)。切るときは次のように書きます。
 
 ```toml

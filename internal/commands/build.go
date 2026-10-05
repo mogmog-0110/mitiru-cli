@@ -128,7 +128,7 @@ func buildProject(stdout, stderr io.Writer, allowStandalone bool) (*buildResult,
 			ProjectRoot: projectRoot,
 			SourceDir:   filepath.Join(projectRoot, filepath.FromSlash(cfg.Build.Source)),
 			Target:      cfg.Build.Target,
-			Config:      resolveBuildConfig(),
+			Config:      resolveBuildConfig(cfg),
 			Generator:   buildGenerator,
 			Stdout:      stdout,
 			Stderr:      stderr,
@@ -145,7 +145,7 @@ func buildProject(stdout, stderr io.Writer, allowStandalone bool) (*buildResult,
 		return nil, fmt.Errorf("エンジンのソースを用意できません。%w", err)
 	}
 
-	cfgName := resolveBuildConfig()
+	cfgName := resolveBuildConfig(cfg)
 	opts := build.Options{
 		ProjectRoot:     projectRoot,
 		ProjectName:     cfg.Project.Name,
@@ -185,12 +185,16 @@ func builtOutputPath(art *build.Artifacts) string {
 	return art.HostExePath
 }
 
-func resolveBuildConfig() string {
+// resolveBuildConfig は --config、--release、mitiru.toml の [build] config、Debug の順に決める。
+func resolveBuildConfig(cfg *config.ProjectConfig) string {
 	if buildConfigName != "" {
 		return buildConfigName
 	}
 	if buildRelease {
 		return "Release"
+	}
+	if cfg != nil && cfg.Build.Config != "" {
+		return cfg.Build.Config
 	}
 	return "Debug"
 }
