@@ -16,6 +16,7 @@ import (
 	"runtime"
 	"strings"
 	"text/template"
+	"time"
 
 	"github.com/mogmog-0110/mitiru-cli/internal/config"
 	"github.com/mogmog-0110/mitiru-cli/internal/console"
@@ -654,6 +655,10 @@ func Run(opts Options) (*Artifacts, error) {
 		return nil, err
 	}
 
+	if err := ensureCacheServer(vcvars, opts); err != nil {
+		return nil, err
+	}
+
 	timer := newPhaseTimer()
 	if err := configureIfNeeded(vcvars, generator, cmakeSrcDir, cmakeOutDir, opts, timer); err != nil {
 		return nil, err
@@ -663,7 +668,11 @@ func Run(opts Options) (*Artifacts, error) {
 	}
 
 	console.Fverbosef(opts.Stdout, "Building %s (%s)...\n", opts.ProjectName, opts.Config)
+	buildStart := time.Now().Add(-2 * time.Second)
 	if err := runCMakeBuild(vcvars, cmakeOutDir, opts); err != nil {
+		return nil, err
+	}
+	if err := verifyDepsRecorded(vcvars, cmakeOutDir, buildStart, opts); err != nil {
 		return nil, err
 	}
 	timer.mark("build")

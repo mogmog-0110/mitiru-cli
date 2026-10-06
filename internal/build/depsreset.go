@@ -13,7 +13,7 @@ import (
 // 接頭辞を控えたままの可能性があるので、検出の結果と ninja の依存の記録を消して作り直す。
 const depsSchemeFile = "mitiru_deps.stamp"
 
-const depsScheme = "showincludes-utf8-v1"
+const depsScheme = "showincludes-utf8-v2"
 
 func depsSchemeCurrent(outDir string) bool {
 	data, err := os.ReadFile(filepath.Join(outDir, depsSchemeFile))
