@@ -46,6 +46,9 @@ type Options struct {
 	// 例: dist が "MITIRU_HOST_GUI=ON" を渡す。
 	ExtraDefines []string
 
+	// Cache は mitiru.toml の [build] cache。"none" で compiler cache を使わない。
+	Cache string
+
 	// OutDir は build 出力 dir の上書き (空なら構成ごとの OutDir)。dist は dev build を
 	// 汚さない別 dir を渡す (configure-time オプションの thrash 回避)。
 	OutDir string
@@ -742,7 +745,7 @@ func configureCommand(generator, srcDir, outDir string, opts Options) string {
 
 	// dist 等が渡す追加 cache 変数 (例 MITIRU_HOST_GUI=ON)。
 	var defs string
-	for _, d := range opts.ExtraDefines {
+	for _, d := range append(compilerCacheDefines(opts.Config, opts.Cache), opts.ExtraDefines...) {
 		defs += " -D" + d
 	}
 	return fmt.Sprintf("cmake -S \"%s\" -B \"%s\" -G \"%s\" %s%s",

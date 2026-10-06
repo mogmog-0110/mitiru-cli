@@ -130,6 +130,7 @@ func buildProject(stdout, stderr io.Writer, allowStandalone bool) (*buildResult,
 			Target:      cfg.Build.Target,
 			Config:      resolveBuildConfig(cfg),
 			Generator:   buildGenerator,
+			Cache:       cfg.Build.Cache,
 			Stdout:      stdout,
 			Stderr:      stderr,
 		})
@@ -152,6 +153,7 @@ func buildProject(stdout, stderr io.Writer, allowStandalone bool) (*buildResult,
 		EngineRoot:      engineRoot,
 		Config:          cfgName,
 		Generator:       buildGenerator,
+		Cache:           cfg.Build.Cache,
 		ExtraDefines:    buildExtraDefines, // dist が GUI subsystem のフラグを注入 (通常は空)
 		OutDir:          buildOutDir,       // dist は別 out dir (通常は空 = 構成ごとの build.OutDir)
 		Features:        cfg.Engine.Features,

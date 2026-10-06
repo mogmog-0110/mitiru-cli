@@ -208,6 +208,21 @@ assets/field.region.json     # 区画の world.json も全部焼く
 
 読めない資産が 1 つでもあれば (host の終了コード 4)、その資産を並べて dist を止める。そのまま配ると遊ぶ側でも読めないからだ。DX12 の GPU が無いなどで host が走れないときは、警告を出して cache 無しで続ける。`--no-bake` を付けると焼き込みを飛ばす。
 
+## コンパイルの cache (sccache)
+
+[sccache](https://github.com/mozilla/sccache) が見つかれば、`mitiru` は configure でそれをコンパイラの前に挟む。worktree を増やしても、同じ engine のソースは 2 つ目からは cache から戻る。PATH、`MITIRU_SCCACHE` (exe のパス)、winget の置き場所の順に探し、無ければ何もしない。
+
+sccache は共有 PDB (`/Zi`) のコンパイルを cache できないので、Debug と RelWithDebInfo では `/Z7` に替える。PDB はリンクで今までどおり出るので、デバッガは変わらない。
+
+置き場所と上限は環境変数で決める。
+
+```bat
+setx SCCACHE_DIR E:\sccache
+setx SCCACHE_CACHE_SIZE 20G
+```
+
+切るときは `MITIRU_SCCACHE=off` か、`mitiru.toml` の `[build] cache = "none"`。数字は `sccache --show-stats`。
+
 ## ビルドと実行の流れ
 
 ```text

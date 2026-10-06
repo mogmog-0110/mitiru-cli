@@ -66,6 +66,8 @@ type BuildSection struct {
 	// (Debug / Release / RelWithDebInfo)。空なら Debug。重いゲームが普段の mitiru run で 60 fps を保てるよう、
 	// 最適化して記号も残す RelWithDebInfo を選べる
 	Config string `toml:"config"`
+	// Cache は "none" で compiler cache (sccache) を使わない。空なら sccache が見つかったときだけ使う
+	Cache string `toml:"cache"`
 	// Kind は project の形。"host" (既定) は mitiru が CMakeLists.txt を生成し
 	// mitiru_host が game DLL を駆動する。"standalone" は project が自前の
 	// CMakeLists.txt と exe を持ち、mitiru は configure / build / 起動だけを担う

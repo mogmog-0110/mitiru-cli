@@ -25,6 +25,8 @@ type StandaloneOptions struct {
 	Config string
 	// Generator は明示的な CMake generator の上書き。空なら Ninja。
 	Generator string
+	// Cache は mitiru.toml の [build] cache。
+	Cache string
 	// Stdout / Stderr は progress と cmake の出力を受け取る。
 	Stdout io.Writer
 	Stderr io.Writer
@@ -83,6 +85,7 @@ func RunStandalone(opts StandaloneOptions) (*Artifacts, error) {
 		ProjectName: opts.Target,
 		Config:      opts.Config,
 		Generator:   generator,
+		Cache:       opts.Cache,
 		Target:      opts.Target,
 		Stdout:      opts.Stdout,
 		Stderr:      opts.Stderr,
