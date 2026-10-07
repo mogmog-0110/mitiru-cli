@@ -43,6 +43,10 @@ func findSccache(setting string) string {
 	if strings.EqualFold(setting, "none") {
 		return ""
 	}
+	// 日本語の Windows では sccache 越しの /showIncludes が化けて依存が落ちるので、明示したときだけ使う
+	if !strings.EqualFold(setting, "sccache") && strings.TrimSpace(os.Getenv("MITIRU_SCCACHE")) == "" {
+		return ""
+	}
 	if env := strings.TrimSpace(os.Getenv("MITIRU_SCCACHE")); env != "" {
 		switch strings.ToLower(env) {
 		case "off", "0", "none":
