@@ -20,7 +20,13 @@ import (
 func compilerCacheDefines(config, setting string) []string {
 	exe := findSccache(setting)
 	if exe == "" {
-		return nil
+		// 前に sccache で設定した build dir の cache 変数を戻す。残ると launcher が付いたままになる
+		return []string{
+			"CMAKE_C_COMPILER_LAUNCHER=",
+			"CMAKE_CXX_COMPILER_LAUNCHER=",
+			"CMAKE_DISABLE_PRECOMPILE_HEADERS=OFF",
+			"GENERATE_DEBUG_SYMBOLS=ON",
+		}
 	}
 	defs := []string{
 		"CMAKE_C_COMPILER_LAUNCHER=" + exe,

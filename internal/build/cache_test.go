@@ -38,15 +38,28 @@ func TestCompilerCacheDefinesUseZ7ForDebugInfoConfigs(t *testing.T) {
 
 func TestCompilerCacheDefinesOffSwitches(t *testing.T) {
 	fakeSccache(t)
-	if got := compilerCacheDefines("Debug", "none"); got != nil {
+	if got := compilerCacheDefines("Debug", "none"); usesLauncher(got) {
 		t.Errorf("cache = none で切れていない: %v", got)
 	}
 	t.Setenv("MITIRU_SCCACHE", "off")
-	if got := compilerCacheDefines("Debug", ""); got != nil {
+	if got := compilerCacheDefines("Debug", ""); usesLauncher(got) {
 		t.Errorf("MITIRU_SCCACHE=off で切れていない: %v", got)
 	}
 	t.Setenv("MITIRU_SCCACHE", filepath.Join(t.TempDir(), "missing.exe"))
-	if got := compilerCacheDefines("Debug", ""); got != nil {
+	if got := compilerCacheDefines("Debug", ""); usesLauncher(got) {
 		t.Errorf("存在しない exe を指したら使わない: %v", got)
 	}
+}
+
+// usesLauncher は defines が sccache を compiler launcher に指しているか
+func usesLauncher(defs []string) bool {
+	for _, d := range defs {
+		if d == "CMAKE_CXX_COMPILER_LAUNCHER=" || d == "CMAKE_C_COMPILER_LAUNCHER=" {
+			continue
+		}
+		if strings.HasPrefix(d, "CMAKE_CXX_COMPILER_LAUNCHER=") || strings.HasPrefix(d, "CMAKE_C_COMPILER_LAUNCHER=") {
+			return true
+		}
+	}
+	return false
 }
