@@ -73,11 +73,29 @@ type Options struct {
 	// LightingArgs は [lighting] args。mitiru_lightbake にそのまま渡す。
 	LightingArgs []string
 
+	// EngineFromEnv は EngineRoot を環境変数 MITIRU_ENGINE_ROOT が決めたか。
+	EngineFromEnv bool
+
+	// EngineSwitchExplicit は engine の場所を --engine-root で明示したか。
+	// 環境変数だけの切り替えは止め、明示された切り替えだけ通す。
+	EngineSwitchExplicit bool
+
 	// Stdout は progress と cmake の出力を受け取る。
 	Stdout io.Writer
 
 	// Stderr は error 出力を受け取る。
 	Stderr io.Writer
+}
+
+// EngineSwitchError は環境変数が engine の場所を黙って切り替えようとしたときの error。
+type EngineSwitchError struct {
+	Previous, Next string
+}
+
+func (e EngineSwitchError) Error() string {
+	return fmt.Sprintf("環境変数 MITIRU_ENGINE_ROOT が engine を %s から %s に切り替えるので止めた。\n"+
+		"  切り替えるなら --engine-root %s を付ける。心当たりがなければ、このシェルの MITIRU_ENGINE_ROOT を消す。",
+		e.Previous, e.Next, e.Next)
 }
 
 type templateData struct {
@@ -550,17 +568,17 @@ func Configure(opts Options) (cmakeSrcDir, cmakeOutDir string, err error) {
 		Lighting:        lighting,
 	}
 
-	// engine 源の切り替わりは全ターゲットの作り直しになる。黙って始めると
-	// 「毎回 400 近いコンパイルが走る」ようにしか見えないので、原因を先に言う。
-	// 典型は、古いターミナルに残った MITIRU_ENGINE_ROOT が mitiru.toml のピンと
-	// 交互に効いてしまうケース。
+	// engine 源の切り替わりは全ターゲットの作り直しになり、検証が別の engine を測る原因にもなる。
+	// 典型は、古いターミナルに残った MITIRU_ENGINE_ROOT が mitiru.toml の pin と交互に効くケース。
+	// 環境変数だけが切り替えの原因なら、生成物を書き換える前に止める。
 	if prev, readErr := os.ReadFile(filepath.Join(cmakeSrcDir, "CMakeLists.txt")); readErr == nil {
-		if m := engineRootRe.FindSubmatch(prev); m != nil && string(m[1]) != data.EngineRoot {
+		if m := engineRootRe.FindSubmatch(prev); m != nil && !engine.SamePath(string(m[1]), data.EngineRoot) {
+			if opts.EngineFromEnv && !opts.EngineSwitchExplicit {
+				return "", "", EngineSwitchError{Previous: string(m[1]), Next: data.EngineRoot}
+			}
 			if opts.Stdout != nil {
 				fmt.Fprintf(opts.Stdout,
-					"エンジンの場所が %s から %s に変わったので、エンジン全体を作り直します。"+
-						"心当たりがなければ、このターミナルに古い MITIRU_ENGINE_ROOT が残っていないか確かめてください"+
-						" (この環境変数は mitiru.toml の指定より優先されます)。\n",
+					"エンジンの場所が %s から %s に変わったので、エンジン全体を作り直します。\n",
 					string(m[1]), data.EngineRoot)
 			}
 		}

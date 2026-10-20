@@ -2,6 +2,7 @@ package commands
 
 import (
 	"github.com/mogmog-0110/mitiru-cli/internal/console"
+	"github.com/mogmog-0110/mitiru-cli/internal/engine"
 	"github.com/spf13/cobra"
 )
 
@@ -20,7 +21,10 @@ const (
 // self-update がこの値と最新 release を比較する (ADR 0010)。
 var cliVersion = "0.12.8"
 
-var rootVerbose bool
+var (
+	rootVerbose    bool
+	rootEngineRoot string
+)
 
 func NewRootCommand() *cobra.Command {
 	// 前回の self-update が残した <exe>.old を best-effort で掃除する (ADR 0010 #8)。
@@ -68,12 +72,18 @@ build progress and diagnostics from the CLI and the game.`,
 			return runMenu()
 		},
 		// 子コマンドが PersistentPreRun を持たないので、ここで全コマンドに効く。
-		PersistentPreRun: func(cmd *cobra.Command, args []string) {
+		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 			console.SetVerbose(rootVerbose)
+			if rootEngineRoot != "" {
+				return engine.UseExplicitRoot(rootEngineRoot)
+			}
+			return nil
 		},
 	}
 	root.PersistentFlags().BoolVarP(&rootVerbose, "verbose", "v", false,
 		"also print build progress and diagnostics (same as MITIRU_LOG=verbose)")
+	root.PersistentFlags().StringVar(&rootEngineRoot, "engine-root", "",
+		"build against this MitiruEngine checkout instead of the mitiru.toml pin (a changed MITIRU_ENGINE_ROOT alone stops the build)")
 
 	root.AddCommand(newMenuCommand())
 	root.AddCommand(newNewCommand())

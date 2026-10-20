@@ -18,6 +18,7 @@ import (
 
 	"github.com/mogmog-0110/mitiru-cli/internal/build"
 	"github.com/mogmog-0110/mitiru-cli/internal/console"
+	"github.com/mogmog-0110/mitiru-cli/internal/deeppath"
 	"github.com/mogmog-0110/mitiru-cli/internal/hunt"
 	"github.com/spf13/cobra"
 )
@@ -228,6 +229,9 @@ func resolveHuntArtifacts(gamePath string) (*build.Artifacts, error) {
 		dllRel, err := filepath.Rel(deployDir, dllAbs)
 		if err != nil {
 			continue
+		}
+		if err := deeppath.Check(hostExe); err != nil {
+			return nil, err
 		}
 		return &build.Artifacts{DeployDir: deployDir, HostExePath: hostExe, DllPath: dllAbs, DllRel: dllRel}, nil
 	}

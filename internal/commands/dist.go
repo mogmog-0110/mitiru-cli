@@ -11,6 +11,7 @@ import (
 
 	"github.com/mogmog-0110/mitiru-cli/internal/config"
 	"github.com/mogmog-0110/mitiru-cli/internal/console"
+	"github.com/mogmog-0110/mitiru-cli/internal/deeppath"
 	"github.com/spf13/cobra"
 )
 
@@ -191,9 +192,12 @@ Examples:
 
 func runDist() error {
 	cwd, _ := os.Getwd()
-	_, projectRoot, ferr := config.FindManifest(cwd)
+	manifestPath, projectRoot, ferr := config.FindManifest(cwd)
 	if ferr != nil {
 		return ferr
+	}
+	if err := checkDistPlace(manifestPath); err != nil {
+		return err
 	}
 	var signCfg signConfig
 	if distSign {
@@ -538,6 +542,29 @@ func writeExeLauncher(bundleRoot, name, dllRel string, hostArgs []string) error 
 		args += " " + mtargsJoin(hostArgs)
 	}
 	return os.WriteFile(filepath.Join(bundleRoot, name+".mtargs"), []byte(args+"\n"), 0o644)
+}
+
+// checkDistPlace は配布物を置く場所で host を起動できるかを、組む前に確かめる。
+// 深すぎる置き場では --bake-caches も --check も GPU のドライバーを壊しうる。
+func checkDistPlace(manifestPath string) error {
+	cfg, err := config.Load(manifestPath)
+	if err != nil {
+		return err
+	}
+	bundleRoot, err := filepath.Abs(filepath.Join(distOut, distBundleName(cfg.Project.Name)))
+	if err != nil {
+		return fmt.Errorf("dist: resolve out dir: %w", err)
+	}
+	exes := []string{"mitiru_host.exe"}
+	if distExe {
+		exes = append(exes, distBundleName(cfg.Project.Name)+".exe")
+	}
+	for _, exe := range exes {
+		if err := deeppath.Check(filepath.Join(bundleRoot, "data", exe)); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // distBundleName は配布フォルダ名を ASCII-safe にする (zip / bat 名で安全)。

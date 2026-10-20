@@ -11,6 +11,7 @@ import (
 	"github.com/mogmog-0110/mitiru-cli/internal/build"
 	"github.com/mogmog-0110/mitiru-cli/internal/config"
 	"github.com/mogmog-0110/mitiru-cli/internal/console"
+	"github.com/mogmog-0110/mitiru-cli/internal/deeppath"
 	"github.com/mogmog-0110/mitiru-cli/internal/engine"
 )
 
@@ -111,7 +112,7 @@ func firstExisting(paths []string) string {
 func findOrBuildEngineExe(engineRoot, target, exeName string) (string, error) {
 	candidates := engineExeCandidates(engineRoot, target, exeName)
 	if c := firstExisting(candidates); c != "" {
-		return c, nil
+		return c, deeppath.Check(c)
 	}
 
 	fmt.Fprintf(os.Stderr, "%s をエンジンからビルドしています。初回だけ数分かかります。\n", target)
@@ -122,7 +123,7 @@ func findOrBuildEngineExe(engineRoot, target, exeName string) (string, error) {
 		return "", err
 	}
 	if c := firstExisting(candidates); c != "" {
-		return c, nil
+		return c, deeppath.Check(c)
 	}
 	return "", fmt.Errorf("%s をビルドしましたが、%s の下に実行ファイルが見つかりません。",
 		target, filepath.Join(engineRoot, "build", "{apps,examples}", target))

@@ -5,10 +5,12 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/mogmog-0110/mitiru-cli/internal/build"
 	"github.com/mogmog-0110/mitiru-cli/internal/config"
 	"github.com/mogmog-0110/mitiru-cli/internal/console"
+	"github.com/mogmog-0110/mitiru-cli/internal/deeppath"
 	"github.com/mogmog-0110/mitiru-cli/internal/engine"
 	"github.com/spf13/cobra"
 )
@@ -44,12 +46,16 @@ Parts of the engine that are not built by default are turned on in mitiru.toml:
   jolt      check that the engine was fetched with Jolt Physics
   online    online co-op in mitiru_host (--net, hud.net*; rollback via GekkoNet)
   dawn      WebGPU (Dawn) rendering layer; needs MITIRU_DAWN_DIR and a Release or RelWithDebInfo build
+  onnx      NeuralStyle / NeuralDepth (ONNX Runtime; adds onnxruntime.dll and DirectML.dll to dist)
+  directml  DirectML neural post-process in the DX12 frame (adds DirectML.dll to dist)
+  effekseer .efkefc effects through drawModel (Effekseer)
+  cubism    Live2D models (Cubism SDK)
 
 Examples:
   mitiru build              # Debug build (default)
   mitiru build --release    # Release build (build/out-release; the Debug build in build/out is kept)`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			res, err := runAnyBuild()
+			res, err := runBuildOnly()
 			if err != nil {
 				return err
 			}
@@ -93,17 +99,25 @@ func runBuild() (*buildResult, error) {
 // runAnyBuild は host 型も standalone 型も build する。`mitiru build` と
 // `mitiru run` だけがこちらを使う。
 func runAnyBuild() (*buildResult, error) {
-	return buildProject(os.Stdout, os.Stderr, true)
+	return buildProject(os.Stdout, os.Stderr, true, true)
+}
+
+// runBuildOnly は組むだけで起動しない `mitiru build` 用。深すぎる置き場は起動できないので、
+// 止めずに知らせるだけにする (組んだ物を別の場所へ移して使える)。
+func runBuildOnly() (*buildResult, error) {
+	return buildProject(os.Stdout, os.Stderr, true, false)
 }
 
 // runBuildTo は build の進捗 / cmake 出力を任意の writer に流す。watch は
 // io.MultiWriter で console + buffer に tee し、失敗時に buffer からエラー行を
 // 抽出してエラーファイルへ書く (ビルドエラーのゲーム画面表示)。
 func runBuildTo(stdout, stderr io.Writer) (*buildResult, error) {
-	return buildProject(stdout, stderr, false)
+	return buildProject(stdout, stderr, false, true)
 }
 
-func buildProject(stdout, stderr io.Writer, allowStandalone bool) (*buildResult, error) {
+// buildProject の launch は、組んだ host をこの後で起動する呼び出しか。起動する呼び出しは、
+// 置き場が GPU のドライバーを壊すほど深いとき、組む前に止める (internal/deeppath)。
+func buildProject(stdout, stderr io.Writer, allowStandalone, launch bool) (*buildResult, error) {
 	cwd, err := os.Getwd()
 	if err != nil {
 		return nil, fmt.Errorf("getwd: %w", err)
@@ -138,6 +152,9 @@ func buildProject(stdout, stderr io.Writer, allowStandalone bool) (*buildResult,
 		if err != nil {
 			return nil, err
 		}
+		if err := checkHostPlace(artifacts.HostExePath, launch, stderr); err != nil {
+			return nil, err
+		}
 		console.Fverbosef(stdout, "Build OK: %s\n", artifacts.HostExePath)
 		return &buildResult{ProjectRoot: projectRoot, Config: cfg, Artifacts: artifacts}, nil
 	}
@@ -148,6 +165,14 @@ func buildProject(stdout, stderr io.Writer, allowStandalone bool) (*buildResult,
 	}
 
 	cfgName := resolveBuildConfig(cfg)
+	// 組む前に置き場を測る。深すぎる所で数十分組んでも、できた host は起動できない。
+	// dist (buildOutDir あり) はこの host を起動せず、配布物の置き場を自分で測る。
+	if buildOutDir == "" {
+		predictedHost := filepath.Join(build.OutDir(projectRoot, cfgName), "Release", "mitiru_host.exe")
+		if err := checkHostPlace(predictedHost, launch, stderr); err != nil {
+			return nil, err
+		}
+	}
 	opts := build.Options{
 		ProjectRoot:     projectRoot,
 		ProjectName:     cfg.Project.Name,
@@ -165,12 +190,20 @@ func buildProject(stdout, stderr io.Writer, allowStandalone bool) (*buildResult,
 		Stdout:          stdout,
 		Stderr:          stderr,
 	}
+	if envRoot, explicit, ok := engine.OverrideRoot(); ok && sameDir(envRoot, engineRoot) {
+		opts.EngineFromEnv, opts.EngineSwitchExplicit = true, explicit
+	}
 
 	artifacts, err := build.Run(opts)
 	if err != nil {
 		return nil, err
 	}
 
+	if buildOutDir == "" {
+		if err := checkHostPlace(artifacts.HostExePath, launch, stderr); err != nil {
+			return nil, err
+		}
+	}
 	console.Fverbosef(stdout, "Build OK: %s\n", artifacts.DllPath)
 	return &buildResult{
 		ProjectRoot: projectRoot,
@@ -178,6 +211,22 @@ func buildProject(stdout, stderr io.Writer, allowStandalone bool) (*buildResult,
 		Artifacts:   artifacts,
 		EngineRoot:  engineRoot,
 	}, nil
+}
+
+// sameDir は 2 つのパスが同じ場所を指すかを、区切りと大文字小文字を無視して返す。
+func sameDir(a, b string) bool {
+	return strings.EqualFold(filepath.Clean(a), filepath.Clean(b))
+}
+
+// checkHostPlace は host の置き場が深すぎないかを見る。launch なら error で止め、
+// 組むだけなら警告にとどめる。
+func checkHostPlace(hostExe string, launch bool, stderr io.Writer) error {
+	err := deeppath.Check(hostExe)
+	if err == nil || launch {
+		return err
+	}
+	fmt.Fprintf(stderr, "警告: %v\n", err)
+	return nil
 }
 
 // builtOutputPath は host 型なら game DLL、standalone 型なら exe を返す。

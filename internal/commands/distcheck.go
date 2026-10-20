@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/mogmog-0110/mitiru-cli/internal/console"
+	"github.com/mogmog-0110/mitiru-cli/internal/deeppath"
 )
 
 // defaultDistCheckFrames は --check で回すフレーム数の既定。3D の取り込み (.clod の変換) が終わって、
@@ -133,6 +134,9 @@ func runDistCheck(bundleRoot, shotOut string, run distCheckRun) (distCheckResult
 		return res, fmt.Errorf("dist --check: copy bundle: %w", err)
 	}
 	data := filepath.Join(tmp, "data")
+	if err := deeppath.Check(filepath.Join(data, "mitiru_host.exe")); err != nil {
+		return res, fmt.Errorf("dist --check は一時フォルダで host を動かすが、環境変数 TEMP の場所が深い。TEMP を浅い所にして。%w", err)
+	}
 	launch, err := os.ReadFile(filepath.Join(data, "launch.mtargs"))
 	if err != nil {
 		return res, fmt.Errorf("dist --check: launch.mtargs が無い (ランチャ stub の無い engine では確かめられない): %w", err)
