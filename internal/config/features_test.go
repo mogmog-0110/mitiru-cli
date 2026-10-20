@@ -42,6 +42,28 @@ args = ["--radius", "0.4"]
 	}
 }
 
+func TestResolveFeatures_DawnOnlySetsTheEngineOption(t *testing.T) {
+	got, err := ResolveFeatures([]string{"Dawn", "jolt"})
+	if err != nil {
+		t.Fatalf("ResolveFeatures: %v", err)
+	}
+	if len(got) != 2 || got[0].Name != "jolt" || got[1].Name != "dawn" {
+		t.Fatalf("features = %+v (the order follows the table)", got)
+	}
+	if got[1].Link || got[1].Host {
+		t.Error("the Dawn layer is already linked into mitiru; it should only be checked")
+	}
+	var dawnOn bool
+	for _, o := range FeatureOptions(got) {
+		if o.Name == "MITIRU_WITH_DAWN" {
+			dawnOn = o.On
+		}
+	}
+	if !dawnOn {
+		t.Error("dawn must turn MITIRU_WITH_DAWN on")
+	}
+}
+
 func TestLoad_NoEngineSectionIsFine(t *testing.T) {
 	cfg, err := Load(writeManifest(t, hostHeader))
 	if err != nil {
@@ -59,7 +81,7 @@ func TestLoad_EngineErrors(t *testing.T) {
 	}{
 		{"unknown feature lists the known ones", `
 [engine]
-features = ["rocket"]`, []string{`unknown feature "rocket"`, "nav, navbake, jolt"}},
+features = ["rocket"]`, []string{`unknown feature "rocket"`, "nav, navbake, jolt, online, dawn"}},
 		{"common mistake gets a hint", `
 [engine]
 features = ["crowd"]`, []string{`"crowd"`, `NavCrowd is part of "nav"`}},

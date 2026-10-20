@@ -154,6 +154,7 @@ source = "assets/level.obj"         # .obj / .gltf / .glb
 | `navbake` | `mitiru_nav_bake` (Recast、`nav` を含む) | DLL の中でメッシュからナビメッシュを焼く |
 | `jolt` | なし (engine が Jolt 付きなら本体に入っている) | Jolt を使う DLL で、engine が Jolt 付きかを configure の時点で確かめる |
 | `online` | なし (`mitiru_host` に `mitiru_rollback_net` を link し、engine を `-DMITIRU_WITH_GEKKONET=ON` で作る) | オンライン協力プレイ (`mitiru_host --net`、`hud.net*`)。GekkoNet は静的ライブラリで、通信は Windows の Winsock なので、`mitiru dist` の配布物に足す DLL は無い |
+| `dawn` | なし (engine を `-DMITIRU_WITH_DAWN=ON` で作る。Dawn は静的に exe へ入る) | WebGPU (Dawn) の描画の層。D3D12 の無い PC で D3D11 に自動で落とす。Dawn のビルド済みの展開先を環境変数 `MITIRU_DAWN_DIR` で指す。ビルド済みは Release の CRT なので `--release` か `--config RelWithDebInfo` で使う (Debug は engine の CMake が警告し、リンクで落ちる) |
 
 知らない名前を書くと `mitiru build` が使える名前の一覧を出して止まる。`crowd` や `fbx` のように間違えやすい名前には、代わりの書き方も出す。FBX の取り込みは engine 本体に入っているので、名前を書かなくても使える。engine がその target を持っていない (取得した engine に submodule が無い) ときは、CMake の configure が直し方を出して止まる。
 

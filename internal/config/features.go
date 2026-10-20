@@ -59,6 +59,14 @@ var engineFeatures = []EngineFeature{
 		Option:  "MITIRU_WITH_GEKKONET",
 		Missing: "online play needs an engine with MITIRU_WITH_GEKKONET and external/GekkoNet (git submodule update --init external/GekkoNet)",
 	},
+	{
+		// WebGPU (Dawn) の描画の層。Dawn は静的リンクで exe に入るので、配布物に足す DLL は無い。
+		// engine は Dawn の展開先を環境変数 MITIRU_DAWN_DIR (または cache の同名の変数) から読む。
+		// Dawn のビルド済みは Release の CRT なので、Debug の構成では使えない。
+		Name: "dawn", Target: "mitiru_dawn", Link: false,
+		Option:  "MITIRU_WITH_DAWN",
+		Missing: "the WebGPU layer needs an engine with src/dawn (ADR 0087) and a prebuilt Dawn: set MITIRU_DAWN_DIR to its folder, and build with --release or --config RelWithDebInfo",
+	},
 }
 
 // FeatureOptions は Option を持つ feature ごとに、selected に含まれるかを返す (表の順)。

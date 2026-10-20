@@ -173,3 +173,39 @@ func TestConfigure_OnlineTurnsOnGekkoNetAndLinksTheHost(t *testing.T) {
 		t.Error("removing online must turn the engine option off again")
 	}
 }
+
+// dawn は engine に WebGPU の層を作らせるだけで、DLL にも host にも何も足さない (Dawn は engine が静的に持つ)。
+// engine に層が無いときは configure で止め、外したら option を OFF に戻す。
+func TestConfigure_DawnTurnsOnTheOptionAndChecksTheTarget(t *testing.T) {
+	projectRoot, engineRoot := fakeProject(t)
+	cmake, err := generatedCMakeWith(t, projectRoot, engineRoot, func(o *Options) {
+		o.Features = []string{"dawn"}
+	})
+	if err != nil {
+		t.Fatalf("Configure: %v", err)
+	}
+	on := `set(MITIRU_WITH_DAWN ON CACHE BOOL "" FORCE)`
+	if i, j := strings.Index(cmake, on), strings.Index(cmake, "add_subdirectory(\"${MITIRU_ENGINE_ROOT}\""); i < 0 || j < 0 || i > j {
+		t.Errorf("the option must be set before the engine is added:\n%s", cmake)
+	}
+	for _, want := range []string{
+		"if(TARGET mitiru_dawn)\nelse()",
+		`message(FATAL_ERROR "mitiru.toml: [engine] features has \"dawn\", but this engine has no CMake target mitiru_dawn.\n"`,
+		"set MITIRU_DAWN_DIR",
+	} {
+		if !strings.Contains(cmake, want) {
+			t.Errorf("generated CMake is missing:\n%s", want)
+		}
+	}
+	if strings.Contains(cmake, "PRIVATE mitiru_dawn") || strings.Contains(cmake, "_mitiru_host_links mitiru_dawn") {
+		t.Error("mitiru already links the Dawn layer; neither the DLL nor the host should link it again")
+	}
+
+	off, err := generatedCMakeWith(t, projectRoot, engineRoot, func(o *Options) {})
+	if err != nil {
+		t.Fatalf("Configure: %v", err)
+	}
+	if !strings.Contains(off, `set(MITIRU_WITH_DAWN OFF CACHE BOOL "" FORCE)`) {
+		t.Error("removing dawn must turn the engine option off again")
+	}
+}

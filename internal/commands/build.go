@@ -43,6 +43,7 @@ Parts of the engine that are not built by default are turned on in mitiru.toml:
   navbake   bake navmeshes inside the game DLL (Recast)
   jolt      check that the engine was fetched with Jolt Physics
   online    online co-op in mitiru_host (--net, hud.net*; rollback via GekkoNet)
+  dawn      WebGPU (Dawn) rendering layer; needs MITIRU_DAWN_DIR and a Release or RelWithDebInfo build
 
 Examples:
   mitiru build              # Debug build (default)
