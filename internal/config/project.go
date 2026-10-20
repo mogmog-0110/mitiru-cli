@@ -26,6 +26,7 @@ type ProjectConfig struct {
 	Engine   EngineSection   `toml:"engine"`
 	Nav      NavSection      `toml:"nav"`
 	Lighting LightingSection `toml:"lighting"`
+	Render   RenderSection   `toml:"render"`
 	Run      RunSection      `toml:"run"`
 }
 
@@ -150,6 +151,7 @@ func Load(path string) (*ProjectConfig, error) {
 	if md.IsDefined("cef") {
 		warnCEFSection(path)
 	}
+	cfg.Render.NeedsSet = md.IsDefined("render", "needs")
 
 	if err := cfg.validate(path); err != nil {
 		return nil, err
@@ -190,7 +192,10 @@ func (c *ProjectConfig) validate(path string) error {
 	if err := c.validateEngine(path); err != nil {
 		return err
 	}
-	return c.validateLighting(path)
+	if err := c.validateLighting(path); err != nil {
+		return err
+	}
+	return c.validateRender(path)
 }
 
 func (c *ProjectConfig) applyDefaults() {

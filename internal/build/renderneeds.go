@@ -1,0 +1,206 @@
+package build
+
+import (
+	"fmt"
+	"os"
+	"path/filepath"
+	"regexp"
+	"strings"
+)
+
+// renderFeaturesHeader は engine が 3D 描画の機能の表を持つヘッダー (engine の include からの相対)。
+// mitiru_host --render-features --json はこの表から作られるので、同じ表を読めば同じ名前の集まりになる。
+// host を組み終えるのを待たずに、configure の時点で名前の誤りを止められる。
+const renderFeaturesHeader = "include/mitiru/render/RenderFeatures.hpp"
+
+// renderNeedsExport は DLL に埋める宣言の export (mitiru_module_render_needs) を書いた生成ソース。
+type renderNeedsExport struct {
+	SourceAbs string // 生成した .cpp (CMake の書き方)
+}
+
+// featureRowInfo は engine の機能の表の 1 行のうち、宣言の検査に要る部分。
+type featureRowInfo struct {
+	Key      string
+	Declared bool   // 宣言できる行 (Region::Declared)
+	Build    string // BuildFlag の名前 (None / Effekseer / Onnx / DirectMl / Fsr3)
+}
+
+var (
+	featureRowKeyRe    = regexp.MustCompile(`^\w+,\s*"([^"]+)"`)
+	featureRowRegionRe = regexp.MustCompile(`Region::(Core|Declared)`)
+	featureRowBuildRe  = regexp.MustCompile(`BuildFlag::(\w+)`)
+)
+
+// readFeatureTable は engine の RenderFeatures.hpp から表の行を読む。ヘッダーが無い engine は os.ErrNotExist。
+func readFeatureTable(engineRoot string) ([]featureRowInfo, error) {
+	body, err := os.ReadFile(filepath.Join(engineRoot, filepath.FromSlash(renderFeaturesHeader)))
+	if err != nil {
+		return nil, err
+	}
+	chunks := strings.Split(stripLineComments(string(body)), "FeatureRow{Feature::")
+	var rows []featureRowInfo
+	for _, chunk := range chunks[1:] {
+		key := featureRowKeyRe.FindStringSubmatch(chunk)
+		region := featureRowRegionRe.FindStringSubmatch(chunk)
+		build := featureRowBuildRe.FindStringSubmatch(chunk)
+		if key == nil || region == nil || build == nil {
+			return nil, fmt.Errorf("%s: 表の行を読めません: %.60s", renderFeaturesHeader, chunk)
+		}
+		rows = append(rows, featureRowInfo{Key: key[1], Declared: region[1] == "Declared", Build: build[1]})
+	}
+	if len(rows) == 0 {
+		return nil, fmt.Errorf("%s: 表の行がありません", renderFeaturesHeader)
+	}
+	return rows, nil
+}
+
+// stripLineComments は // の行末までの注釈を消す。文字列の中の // は残す。表の行の書式を説明する注釈が、行の目印と
+// 同じ字面を含んでも、行として読まないため。
+func stripLineComments(text string) string {
+	var out strings.Builder
+	inString := false
+	for i := 0; i < len(text); i++ {
+		c := text[i]
+		switch {
+		case inString:
+			out.WriteByte(c)
+			if c == '\\' && i+1 < len(text) {
+				i++
+				out.WriteByte(text[i])
+			} else if c == '"' {
+				inString = false
+			}
+		case c == '"':
+			inString = true
+			out.WriteByte(c)
+		case c == '/' && i+1 < len(text) && text[i+1] == '/':
+			for i < len(text) && text[i] != '\n' {
+				i++
+			}
+			out.WriteByte('\n')
+		default:
+			out.WriteByte(c)
+		}
+	}
+	return out.String()
+}
+
+// buildFeatureFor は build つきの行を、それを組み込む [engine] features の名前に結ぶ。
+// fsr3 は engine の configure (MITIRU_WITH_FSR3) で決まり、mitiru.toml の feature にはまだ無い。
+var buildFeatureFor = map[string]string{
+	"Effekseer": "effekseer",
+	"Onnx":      "onnx",
+	"DirectMl":  "directml",
+}
+
+// resolveRenderNeeds は [render] needs を engine の表で検査し、DLL に埋める export のソースを書く。
+// 表に無い名前はここで止める (host が黙って無視するより先に、綴りの誤りが分かるように)。
+// build つきの行は、それを組み込む feature を足して返す (宣言したのに描けない状態を作らない)。
+func resolveRenderNeeds(opts Options, cmakeSrcDir string) (*renderNeedsExport, []string, error) {
+	if !opts.RenderNeedsSet {
+		return nil, nil, nil
+	}
+	table, err := readFeatureTable(opts.EngineRoot)
+	if os.IsNotExist(err) {
+		if opts.Stderr != nil {
+			fmt.Fprintf(opts.Stderr, "警告: この engine は [render] needs を読めないので、宣言は埋めません。project.engine を新しい版にしてください\n")
+		}
+		return nil, nil, nil
+	}
+	if err != nil {
+		return nil, nil, fmt.Errorf("[render] needs: engine の機能の表を読めません: %w", err)
+	}
+	byKey := make(map[string]featureRowInfo, len(table))
+	keys := make([]string, 0, len(table))
+	for _, row := range table {
+		byKey[row.Key] = row
+		keys = append(keys, row.Key)
+	}
+
+	var names, features []string
+	seen := map[string]bool{}
+	for _, raw := range opts.RenderNeeds {
+		name := strings.ToLower(strings.TrimSpace(raw))
+		row, ok := byKey[name]
+		if !ok {
+			return nil, nil, unknownNeedError(name, keys)
+		}
+		if seen[name] {
+			continue
+		}
+		seen[name] = true
+		if !row.Declared {
+			if opts.Stderr != nil {
+				fmt.Fprintf(opts.Stderr, "警告: [render] needs の %s は基本の機能なので、書かなくても使えます\n", name)
+			}
+			continue
+		}
+		names = append(names, name)
+		switch feature, hasFeature := buildFeatureFor[row.Build]; {
+		case hasFeature:
+			features = append(features, feature)
+		case row.Build != "None":
+			if opts.Stderr != nil {
+				fmt.Fprintf(opts.Stderr, "警告: [render] needs の %s は engine の configure で組み込む部品を要ります。mitiru.toml からは足せません\n", name)
+			}
+		}
+	}
+
+	src := filepath.Join(cmakeSrcDir, "mitiru_render_needs.cpp")
+	if err := writeFileIfChanged(src, []byte(renderNeedsSource(names))); err != nil {
+		return nil, nil, fmt.Errorf("[render] needs の export を書けません: %w", err)
+	}
+	return &renderNeedsExport{SourceAbs: toCMakePath(src)}, features, nil
+}
+
+// renderNeedsSource は mitiru_module_render_needs を export する DLL のソース。engine のヘッダーを引かず、
+// MITIRU_RENDER_NEEDS と同じ関数を単独で定義する。
+func renderNeedsSource(names []string) string {
+	return "// Generated by mitiru-cli from mitiru.toml [render] needs. Do not edit by hand.\n" +
+		"#if defined(_WIN32)\n" +
+		"#  define MITIRU_RENDER_NEEDS_EXPORT __declspec(dllexport)\n" +
+		"#else\n" +
+		"#  define MITIRU_RENDER_NEEDS_EXPORT __attribute__((visibility(\"default\")))\n" +
+		"#endif\n" +
+		"extern \"C\" MITIRU_RENDER_NEEDS_EXPORT const char* mitiru_module_render_needs()\n" +
+		"{\n" +
+		"\treturn \"" + strings.Join(names, ",") + "\";\n" +
+		"}\n"
+}
+
+// unknownNeedError は表に無い名前の error。近い名前があれば添える。
+func unknownNeedError(name string, keys []string) error {
+	limit := max(3, len(name)/3)
+	best, bestDist := "", limit+1
+	for _, k := range keys {
+		if d := editDistance(name, k); d < bestDist {
+			best, bestDist = k, d
+		}
+	}
+	msg := fmt.Sprintf("[render] needs: %q は 3D 描画の機能の表にありません", name)
+	if best != "" {
+		msg += fmt.Sprintf("。%q の綴りでは?", best)
+	}
+	return fmt.Errorf("%s\n  使える名前は mitiru_host --render-features で見られます", msg)
+}
+
+// editDistance は 2 つの文字列の編集距離 (挿入・削除・置換が各 1)。
+func editDistance(a, b string) int {
+	prev := make([]int, len(b)+1)
+	cur := make([]int, len(b)+1)
+	for j := range prev {
+		prev[j] = j
+	}
+	for i := 1; i <= len(a); i++ {
+		cur[0] = i
+		for j := 1; j <= len(b); j++ {
+			cost := 1
+			if a[i-1] == b[j-1] {
+				cost = 0
+			}
+			cur[j] = min(prev[j]+1, cur[j-1]+1, prev[j-1]+cost)
+		}
+		prev, cur = cur, prev
+	}
+	return prev[len(b)]
+}

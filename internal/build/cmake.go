@@ -77,6 +77,10 @@ type Options struct {
 	// LightingArgs は [lighting] args。mitiru_lightbake にそのまま渡す。
 	LightingArgs []string
 
+	// RenderNeeds は [render] needs (3D 描画で宣言する機能の key)。RenderNeedsSet が false なら DLL に宣言を埋めない。
+	RenderNeeds    []string
+	RenderNeedsSet bool
+
 	// EngineFromEnv は EngineRoot を環境変数 MITIRU_ENGINE_ROOT が決めたか。
 	EngineFromEnv bool
 
@@ -135,6 +139,8 @@ type templateData struct {
 	Nav *navBake
 	// Lighting は [lighting] source があるときだけ非 nil。
 	Lighting *lightingBake
+	// RenderNeeds は [render] needs があるときだけ非 nil。DLL に足す宣言の export のソース。
+	RenderNeeds *renderNeedsExport
 }
 
 // navBake はビルドの一工程でナビメッシュを焼くための値。
@@ -197,7 +203,10 @@ target_link_libraries({{.TargetName}} PRIVATE Mitiru::mitiru)
 if(MSVC)
     target_compile_options({{.TargetName}} PRIVATE /bigobj{{if .UserWarnings}} /W3{{end}})
 endif()
-{{range .Features}}
+{{with .RenderNeeds}}
+# mitiru.toml [render] needs: 宣言した 3D 描画の機能を DLL の export (mitiru_module_render_needs) で host へ渡す
+target_sources({{$.TargetName}} PRIVATE "{{.SourceAbs}}")
+{{end}}{{range .Features}}
 # [engine] features = "{{.Name}}"
 if(TARGET {{.Target}})
 {{- if .Link}}
@@ -544,7 +553,12 @@ func Configure(opts Options) (cmakeSrcDir, cmakeOutDir string, err error) {
 		selfpackMainAbs = toCMakePath(p)
 	}
 
-	features, err := config.ResolveFeatures(opts.Features)
+	renderNeeds, needFeatures, err := resolveRenderNeeds(opts, cmakeSrcDir)
+	if err != nil {
+		return "", "", err
+	}
+	// 宣言した行が外部の部品を要るなら、それを組み込む feature を足す (宣言したのに描けない状態を作らない)
+	features, err := config.ResolveFeatures(append(append([]string{}, opts.Features...), needFeatures...))
 	if err != nil {
 		return "", "", err
 	}
@@ -574,6 +588,7 @@ func Configure(opts Options) (cmakeSrcDir, cmakeOutDir string, err error) {
 		DawnDir:         dawnDirFor(opts, features),
 		Nav:             nav,
 		Lighting:        lighting,
+		RenderNeeds:     renderNeeds,
 	}
 
 	// engine 源の切り替わりは全ターゲットの作り直しになり、検証が別の engine を測る原因にもなる。
