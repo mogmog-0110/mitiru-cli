@@ -4,93 +4,14 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"regexp"
 	"strings"
-)
 
-// renderFeaturesHeader は engine が 3D 描画の機能の表を持つヘッダー (engine の include からの相対)。
-// mitiru_host --render-features --json はこの表から作られるので、同じ表を読めば同じ名前の集まりになる。
-// host を組み終えるのを待たずに、configure の時点で名前の誤りを止められる。
-const renderFeaturesHeader = "include/mitiru/render/RenderFeatures.hpp"
+	"github.com/mogmog-0110/mitiru-cli/internal/config"
+)
 
 // renderNeedsExport は DLL に埋める宣言の export (mitiru_module_render_needs) を書いた生成ソース。
 type renderNeedsExport struct {
 	SourceAbs string // 生成した .cpp (CMake の書き方)
-}
-
-// featureRowInfo は engine の機能の表の 1 行のうち、宣言の検査に要る部分。
-type featureRowInfo struct {
-	Key      string
-	Declared bool   // 宣言できる行 (Region::Declared)
-	Build    string // BuildFlag の名前 (None / Effekseer / Onnx / DirectMl / Fsr3)
-}
-
-var (
-	featureRowKeyRe    = regexp.MustCompile(`^\w+,\s*"([^"]+)"`)
-	featureRowRegionRe = regexp.MustCompile(`Region::(Core|Declared)`)
-	featureRowBuildRe  = regexp.MustCompile(`BuildFlag::(\w+)`)
-)
-
-// readFeatureTable は engine の RenderFeatures.hpp から表の行を読む。ヘッダーが無い engine は os.ErrNotExist。
-func readFeatureTable(engineRoot string) ([]featureRowInfo, error) {
-	body, err := os.ReadFile(filepath.Join(engineRoot, filepath.FromSlash(renderFeaturesHeader)))
-	if err != nil {
-		return nil, err
-	}
-	chunks := strings.Split(stripLineComments(string(body)), "FeatureRow{Feature::")
-	var rows []featureRowInfo
-	for _, chunk := range chunks[1:] {
-		key := featureRowKeyRe.FindStringSubmatch(chunk)
-		region := featureRowRegionRe.FindStringSubmatch(chunk)
-		build := featureRowBuildRe.FindStringSubmatch(chunk)
-		if key == nil || region == nil || build == nil {
-			return nil, fmt.Errorf("%s: 表の行を読めません: %.60s", renderFeaturesHeader, chunk)
-		}
-		rows = append(rows, featureRowInfo{Key: key[1], Declared: region[1] == "Declared", Build: build[1]})
-	}
-	if len(rows) == 0 {
-		return nil, fmt.Errorf("%s: 表の行がありません", renderFeaturesHeader)
-	}
-	return rows, nil
-}
-
-// stripLineComments は // の行末までの注釈を消す。文字列の中の // は残す。表の行の書式を説明する注釈が、行の目印と
-// 同じ字面を含んでも、行として読まないため。
-func stripLineComments(text string) string {
-	var out strings.Builder
-	inString := false
-	for i := 0; i < len(text); i++ {
-		c := text[i]
-		switch {
-		case inString:
-			out.WriteByte(c)
-			if c == '\\' && i+1 < len(text) {
-				i++
-				out.WriteByte(text[i])
-			} else if c == '"' {
-				inString = false
-			}
-		case c == '"':
-			inString = true
-			out.WriteByte(c)
-		case c == '/' && i+1 < len(text) && text[i+1] == '/':
-			for i < len(text) && text[i] != '\n' {
-				i++
-			}
-			out.WriteByte('\n')
-		default:
-			out.WriteByte(c)
-		}
-	}
-	return out.String()
-}
-
-// buildFeatureFor は build つきの行を、それを組み込む [engine] features の名前に結ぶ。
-// fsr3 は engine の configure (MITIRU_WITH_FSR3) で決まり、mitiru.toml の feature にはまだ無い。
-var buildFeatureFor = map[string]string{
-	"Effekseer": "effekseer",
-	"Onnx":      "onnx",
-	"DirectMl":  "directml",
 }
 
 // resolveRenderNeeds は [render] needs を engine の表で検査し、DLL に埋める export のソースを書く。
@@ -103,7 +24,7 @@ func resolveRenderNeeds(opts Options, cmakeSrcDir string) (*renderNeedsExport, [
 	table, err := readFeatureTable(opts.EngineRoot)
 	if os.IsNotExist(err) {
 		if opts.Stderr != nil {
-			fmt.Fprintf(opts.Stderr, "警告: この engine は [render] needs を読めないので、宣言は埋めません。project.engine を新しい版にしてください\n")
+			fmt.Fprintf(opts.Stderr, "警告: この engine は 3D 描画の機能の表 (render_features.json) を持たず、[render] needs を読めないので、宣言は埋めません。project.engine を新しい版にしてください\n")
 		}
 		return nil, nil, nil
 	}
@@ -129,17 +50,21 @@ func resolveRenderNeeds(opts Options, cmakeSrcDir string) (*renderNeedsExport, [
 			continue
 		}
 		seen[name] = true
-		if !row.Declared {
+		if !row.Declarable {
 			if opts.Stderr != nil {
 				fmt.Fprintf(opts.Stderr, "警告: [render] needs の %s は基本の機能なので、書かなくても使えます\n", name)
 			}
 			continue
 		}
 		names = append(names, name)
-		switch feature, hasFeature := buildFeatureFor[row.Build]; {
-		case hasFeature:
+		feature, err := buildFeatureOf(row)
+		if err != nil {
+			return nil, nil, err
+		}
+		switch {
+		case feature != "":
 			features = append(features, feature)
-		case row.Build != "None":
+		case row.Build != buildNone:
 			if opts.Stderr != nil {
 				fmt.Fprintf(opts.Stderr, "警告: [render] needs の %s は engine の configure で組み込む部品を要ります。mitiru.toml からは足せません\n", name)
 			}
@@ -151,6 +76,21 @@ func resolveRenderNeeds(opts Options, cmakeSrcDir string) (*renderNeedsExport, [
 		return nil, nil, fmt.Errorf("[render] needs の export を書けません: %w", err)
 	}
 	return &renderNeedsExport{SourceAbs: toCMakePath(src)}, features, nil
+}
+
+// buildFeatureOf は宣言した行が要る外部の部品を組み込む [engine] features の名前を返す (要らない行と、
+// mitiru.toml から足せない部品は空)。名前は engine の表が持つ。この CLI が知らない feature を要る行は、
+// 組んでも宣言どおりに描けないので止める。
+func buildFeatureOf(row featureRowInfo) (string, error) {
+	if row.Build == buildNone || row.EngineFeature == nil || *row.EngineFeature == "" {
+		return "", nil
+	}
+	feature := *row.EngineFeature
+	if _, err := config.ResolveFeatures([]string{feature}); err != nil {
+		return "", fmt.Errorf("[render] needs: %s は部品 %s (feature %q) を要りますが、この mitiru-cli は知りません。mitiru-cli を新しい版にしてください",
+			row.Key, row.Build, feature)
+	}
+	return feature, nil
 }
 
 // renderNeedsSource は mitiru_module_render_needs を export する DLL のソース。engine のヘッダーを引かず、

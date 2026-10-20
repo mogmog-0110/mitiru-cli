@@ -188,8 +188,8 @@ needs = ["sky_atmosphere", "volumetric_fog", "oit", "render_scale"]
 ```
 
 `mitiru build` が DLL に宣言の export (`mitiru_module_render_needs`) を足し、host が renderer を作る前に読む。`needs = []` は何も宣言しない書き方で、`[render]` ごと書かなければ今までどおり全部を作る。
-名前は pin した engine の機能の表 (`include/mitiru/render/RenderFeatures.hpp`) で組む前に調べ、表に無い名前は近い綴りを添えてエラーにする。基本の機能の名前は書かなくても使えるので警告にとどめる。
-`effekseer`、`neural_fx`、`neural_style_depth` のように外部の部品を要る行は、`[engine] features` の `effekseer` / `directml` / `onnx` を自動で足す。この宣言を読めない古い engine では、警告を出して export を足さない。
+名前は pin した engine の機能の表 (`include/mitiru/render/render_features.json`) で組む前に調べ、表に無い名前は近い綴りを添えてエラーにする。基本の機能の名前は書かなくても使えるので警告にとどめる。
+`effekseer`、`neural_fx`、`neural_style_depth` のように外部の部品を要る行は、`[engine] features` の `effekseer` / `directml` / `onnx` を自動で足す。部品を組み込む feature の名前も、この表が engine から教えてくれる。この表を持たない古い engine では、警告を出して export を足さない。
 host の環境変数 `MITIRU_RENDER_NEEDS` は、`legacy` で宣言を使わず今までどおり全部を作り、`none` で何も宣言しない形にし、名前の列ならその宣言に差し替える。絵を比べる検査と、census (`MITIRU_FEATURE_CENSUS=<file>`) のためで、利用者が設定するものではない。
 
 ### 自前の CMakeLists.txt を持つプロジェクト
