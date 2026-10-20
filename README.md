@@ -155,6 +155,10 @@ source = "assets/level.obj"         # .obj / .gltf / .glb
 | `jolt` | なし (engine が Jolt 付きなら本体に入っている) | Jolt を使う DLL で、engine が Jolt 付きかを configure の時点で確かめる |
 | `online` | なし (`mitiru_host` に `mitiru_rollback_net` を link し、engine を `-DMITIRU_WITH_GEKKONET=ON` で作る) | オンライン協力プレイ (`mitiru_host --net`、`hud.net*`)。GekkoNet は静的ライブラリで、通信は Windows の Winsock なので、`mitiru dist` の配布物に足す DLL は無い |
 | `dawn` | なし (engine を `-DMITIRU_WITH_DAWN=ON` で作る。Dawn は静的に exe へ入る) | WebGPU (Dawn) の描画の層。D3D12 の無い PC で D3D11 に自動で落とす。Dawn のビルド済みの展開先を環境変数 `MITIRU_DAWN_DIR` で指す。ビルド済みは Release の CRT なので `--release` か `--config RelWithDebInfo` で使う (Debug は engine の CMake が警告し、リンクで落ちる) |
+| `onnx` | なし (engine を `-DMITIRU_WITH_ONNX=ON` で作る) | `NeuralStyle.hpp` / `NeuralDepth.hpp` (ONNX Runtime)。入れると `mitiru dist` の配布物に `onnxruntime.dll` と `DirectML.dll` が加わる (約 36 MB) |
+| `directml` | なし (engine を `-DMITIRU_WITH_DIRECTML=ON` で作る) | `Screen::enableNeuralFx` など、DX12 のフレームの中で DirectML を使う後処理。入れると配布物に `DirectML.dll` が加わる |
+| `effekseer` | なし (engine を `-DMITIRU_WITH_EFFEKSEER=ON` で作る。静的に host へ入る) | `.efkefc` を `drawModel` で描く。使わないゲームでは外れていて host が小さい |
+| `cubism` | なし (engine を `-DMITIRU_WITH_CUBISM=ON` で作る。静的に host へ入る) | Live2D のモデル。Cubism SDK for Native を `external/cubism/` に置く。使うゲームだけが選ぶと、配布物に Live2D の表記が入らない |
 
 知らない名前を書くと `mitiru build` が使える名前の一覧を出して止まる。`crowd` や `fbx` のように間違えやすい名前には、代わりの書き方も出す。FBX の取り込みは engine 本体に入っているので、名前を書かなくても使える。engine がその target を持っていない (取得した engine に submodule が無い) ときは、CMake の configure が直し方を出して止まる。
 

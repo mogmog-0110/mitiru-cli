@@ -67,6 +67,30 @@ var engineFeatures = []EngineFeature{
 		Option:  "MITIRU_WITH_DAWN",
 		Missing: "the WebGPU layer needs an engine with src/dawn (ADR 0087) and a prebuilt Dawn: set MITIRU_DAWN_DIR to its folder, and build with --release or --config RelWithDebInfo",
 	},
+	{
+		// NeuralStyle.hpp / NeuralDepth.hpp。onnxruntime.dll と DirectML.dll が host の隣に要るので、使うゲームだけが opt-in する。
+		Name: "onnx", Target: "mitiru_onnx", Link: false,
+		Option:  "MITIRU_WITH_ONNX",
+		Missing: "the neural post-process needs an engine newer than v0.45 (it adds MITIRU_WITH_ONNX) and ONNX Runtime unpacked in external/onnxruntime (include, lib, bin)",
+	},
+	{
+		// DX12DirectML.hpp / DX12NeuralFx.hpp / DX12NeuralRelight.hpp。onnx とは別で、DirectML.dll だけを host の隣に置く。
+		Name: "directml", Target: "mitiru_directml", Link: false,
+		Option:  "MITIRU_WITH_DIRECTML",
+		Missing: "the DirectML post-process needs an engine newer than v0.45 (it adds MITIRU_WITH_DIRECTML) and the DirectML SDK unpacked in external/directml (include, lib)",
+	},
+	{
+		// .efkefc を drawModel で描く。Effekseer は静的リンクで host の exe に入るので、使わないゲームは外す。
+		Name: "effekseer", Target: "mitiru_effekseer", Link: false,
+		Option:  "MITIRU_WITH_EFFEKSEER",
+		Missing: "Effekseer effects need external/Effekseer and its LLGI (git submodule update --init --checkout --depth 1 external/Effekseer)",
+	},
+	{
+		// Live2D のモデルを描く。Cubism Core とその表記が配布物に入るので、使うゲームだけが opt-in する。
+		Name: "cubism", Target: "Live2DCubismFrameworkD3D", Link: false,
+		Option:  "MITIRU_WITH_CUBISM",
+		Missing: "Live2D needs the Cubism SDK for Native unpacked as external/cubism/CubismSdkForNative-*",
+	},
 }
 
 // FeatureOptions は Option を持つ feature ごとに、selected に含まれるかを返す (表の順)。
@@ -105,6 +129,10 @@ var featureHints = map[string]string{
 	"fbx":      "FBX import is always part of the engine; remove it",
 	"gameai":   `mitiru/gameai is header-only; add "nav" only if enemies follow a navmesh`,
 	"action":   "mitiru/action is header-only; remove it",
+	"ort":      `use "onnx" (NeuralStyle / NeuralDepth)`,
+	"neural":   `use "onnx" (NeuralStyle / NeuralDepth) or "directml" (neural post-process in the DX12 frame)`,
+	"efk":      `use "effekseer"`,
+	"live2d":   `use "cubism"`,
 }
 
 var navSourceExts = map[string]bool{".obj": true, ".gltf": true, ".glb": true}
