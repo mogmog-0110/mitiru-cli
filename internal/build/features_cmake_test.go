@@ -209,3 +209,31 @@ func TestConfigure_DawnTurnsOnTheOptionAndChecksTheTarget(t *testing.T) {
 		t.Error("removing dawn must turn the engine option off again")
 	}
 }
+
+// mitiru-cli が用意した Dawn の場所は生成 CMake が cache へ固定する。dawn を選んでいないときは渡さない
+// (Debug で外した構成に、前回の Dawn の場所を残さない)。
+func TestConfigure_DawnDirIsPinnedOnlyWhenDawnIsSelected(t *testing.T) {
+	projectRoot, engineRoot := fakeProject(t)
+	with, err := generatedCMakeWith(t, projectRoot, engineRoot, func(o *Options) {
+		o.Features = []string{"dawn"}
+		o.DawnDir = `C:\Users\x\.mitiru\cache\dawn-67d4d6e64b07`
+	})
+	if err != nil {
+		t.Fatalf("Configure: %v", err)
+	}
+	want := `set(MITIRU_DAWN_DIR "C:/Users/x/.mitiru/cache/dawn-67d4d6e64b07" CACHE PATH "" FORCE)`
+	i, j := strings.Index(with, want), strings.Index(with, "add_subdirectory(\"${MITIRU_ENGINE_ROOT}\"")
+	if i < 0 || j < 0 || i > j {
+		t.Errorf("MITIRU_DAWN_DIR must be set before the engine is added:\n%s", with)
+	}
+
+	without, err := generatedCMakeWith(t, projectRoot, engineRoot, func(o *Options) {
+		o.DawnDir = "C:/somewhere"
+	})
+	if err != nil {
+		t.Fatalf("Configure: %v", err)
+	}
+	if strings.Contains(without, "MITIRU_DAWN_DIR") {
+		t.Error("a build without dawn must not mention MITIRU_DAWN_DIR")
+	}
+}

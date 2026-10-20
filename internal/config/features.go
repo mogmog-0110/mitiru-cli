@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"path"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 )
@@ -37,6 +38,9 @@ type EngineFeature struct {
 	Option string
 	// Host が true なら Target を mitiru_host にも link する (host が実行する機能)。
 	Host bool
+	// ReleaseCRTOnly が true の feature は、Debug の構成では組めない (Release の CRT で作った
+	// ビルド済みを静的に持つため、リンクで _ITERATOR_DEBUG_LEVEL が食い違う)。
+	ReleaseCRTOnly bool
 }
 
 var engineFeatures = []EngineFeature{
@@ -63,9 +67,11 @@ var engineFeatures = []EngineFeature{
 		// WebGPU (Dawn) の描画の層。Dawn は静的リンクで exe に入るので、配布物に足す DLL は無い。
 		// engine は Dawn の展開先を環境変数 MITIRU_DAWN_DIR (または cache の同名の変数) から読む。
 		// Dawn のビルド済みは Release の CRT なので、Debug の構成では使えない。
-		Name: "dawn", Target: "mitiru_dawn", Link: false,
+		// mitiru-cli が固定した版を cache へ取ってきて MITIRU_DAWN_DIR を渡すので、利用者は何も用意しない。
+		// Debug の構成では外して組む (Dawn は D3D12 が無い PC への逃げ道で、開発の Debug では要らない)。
+		Name: "dawn", Target: "mitiru_dawn", Link: false, ReleaseCRTOnly: true,
 		Option:  "MITIRU_WITH_DAWN",
-		Missing: "the WebGPU layer needs an engine with src/dawn (ADR 0087) and a prebuilt Dawn: set MITIRU_DAWN_DIR to its folder, and build with --release or --config RelWithDebInfo",
+		Missing: "the WebGPU layer needs an engine with src/dawn (ADR 0087); mitiru fetches the prebuilt Dawn the engine pins, or set MITIRU_DAWN_DIR to an unpacked one",
 	},
 	{
 		// NeuralStyle.hpp / NeuralDepth.hpp。onnxruntime.dll と DirectML.dll が host の隣に要るので、使うゲームだけが opt-in する。
@@ -91,6 +97,30 @@ var engineFeatures = []EngineFeature{
 		Option:  "MITIRU_WITH_CUBISM",
 		Missing: "Live2D needs the Cubism SDK for Native unpacked as external/cubism/CubismSdkForNative-*",
 	},
+}
+
+// DropForConfig は buildConfig では組めない feature を外した名前の並びと、外した feature の名前を返す。
+// 外すのは Debug だけ (MinSizeRel などは Release の CRT なので組める)。
+func DropForConfig(names []string, buildConfig string) (kept, dropped []string) {
+	if buildConfig != "" && !strings.EqualFold(buildConfig, "Debug") {
+		return names, nil
+	}
+	releaseOnly := map[string]bool{}
+	for _, f := range engineFeatures {
+		if f.ReleaseCRTOnly {
+			releaseOnly[f.Name] = true
+		}
+	}
+	for _, raw := range names {
+		if name := strings.ToLower(strings.TrimSpace(raw)); releaseOnly[name] {
+			if !slices.Contains(dropped, name) {
+				dropped = append(dropped, name)
+			}
+			continue
+		}
+		kept = append(kept, raw)
+	}
+	return kept, dropped
 }
 
 // FeatureOptions は Option を持つ feature ごとに、selected に含まれるかを返す (表の順)。

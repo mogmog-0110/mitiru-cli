@@ -238,3 +238,17 @@ func TestLightingBinPathFor(t *testing.T) {
 		}
 	}
 }
+
+func TestDropForConfig_OnlyDebugLosesDawn(t *testing.T) {
+	in := []string{"nav", "Dawn", "dawn", "jolt"}
+	kept, dropped := DropForConfig(in, "Debug")
+	if strings.Join(kept, ",") != "nav,jolt" || strings.Join(dropped, ",") != "dawn" {
+		t.Errorf("Debug: kept=%v dropped=%v", kept, dropped)
+	}
+	for _, cfg := range []string{"Release", "RelWithDebInfo", "MinSizeRel"} {
+		kept, dropped := DropForConfig(in, cfg)
+		if len(kept) != len(in) || len(dropped) != 0 {
+			t.Errorf("%s は外さない: kept=%v dropped=%v", cfg, kept, dropped)
+		}
+	}
+}

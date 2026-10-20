@@ -61,6 +61,10 @@ type Options struct {
 	// Features は mitiru.toml の [engine] features。名前は config.ResolveFeatures が引く。
 	Features []string
 
+	// DawnDir は Dawn のビルド済みの展開先。Features に dawn があるときだけ使い、
+	// 生成 CMake が MITIRU_DAWN_DIR として engine に渡す。
+	DawnDir string
+
 	// NavSource は [nav] source (project root からの相対)。空ならナビメッシュを焼かない。
 	NavSource string
 
@@ -125,6 +129,8 @@ type templateData struct {
 	Features []config.EngineFeature
 	// FeatureOptions は feature が要る engine の CMake option と、その値。
 	FeatureOptions []config.FeatureOption
+	// DawnDir は dawn が選ばれたときの Dawn の展開先 (CMake の書き方)。無ければ空。
+	DawnDir string
 	// Nav は [nav] source があるときだけ非 nil。
 	Nav *navBake
 	// Lighting は [lighting] source があるときだけ非 nil。
@@ -178,6 +184,7 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 set(MITIRU_ENGINE_ROOT "{{.EngineRoot}}")
 set(MITIRU_HEADER_ONLY ON)
 {{range .FeatureOptions}}set({{.Name}} {{if .On}}ON{{else}}OFF{{end}} CACHE BOOL "" FORCE)   # mitiru.toml engine.features
+{{end}}{{if .DawnDir}}set(MITIRU_DAWN_DIR "{{.DawnDir}}" CACHE PATH "" FORCE)   # mitiru-cli が用意した Dawn
 {{end}}add_subdirectory("${MITIRU_ENGINE_ROOT}" mitiru-engine)
 {{if .LegacyCEF}}
 include("${MITIRU_ENGINE_ROOT}/cmake/MitiruCef.cmake")
@@ -564,6 +571,7 @@ func Configure(opts Options) (cmakeSrcDir, cmakeOutDir string, err error) {
 		UserWarnings:    engine.HeadersCleanAtW3(opts.EngineRoot),
 		Features:        features,
 		FeatureOptions:  config.FeatureOptions(features),
+		DawnDir:         dawnDirFor(opts, features),
 		Nav:             nav,
 		Lighting:        lighting,
 	}
@@ -599,6 +607,19 @@ func Configure(opts Options) (cmakeSrcDir, cmakeOutDir string, err error) {
 		return "", "", fmt.Errorf("write generated CMakeLists.txt: %w", err)
 	}
 	return cmakeSrcDir, cmakeOutDir, nil
+}
+
+// dawnDirFor は dawn が選ばれていて展開先が分かっているときだけ、その場所を CMake の書き方で返す。
+func dawnDirFor(opts Options, features []config.EngineFeature) string {
+	if opts.DawnDir == "" {
+		return ""
+	}
+	for _, f := range features {
+		if f.Name == "dawn" {
+			return toCMakePath(opts.DawnDir)
+		}
+	}
+	return ""
 }
 
 // Artifacts は build pipeline が生み出すもの — user の DLL と、それを駆動する

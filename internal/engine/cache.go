@@ -25,6 +25,9 @@ const (
 	// httpTimeout は単一の network request の上限。tarball は ~10 MB なので、
 	// 遅い corporate proxy でも足りるよう default は余裕を持たせる。
 	httpTimeout = 5 * time.Minute
+
+	// dawnHTTPTimeout は Dawn のビルド済み (約 114 MB) の取得全体の上限。
+	dawnHTTPTimeout = 15 * time.Minute
 )
 
 // CacheRoot は on-disk engine cache root の absolute path を返す。

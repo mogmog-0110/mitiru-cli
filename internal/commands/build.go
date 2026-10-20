@@ -1,10 +1,12 @@
 package commands
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/mogmog-0110/mitiru-cli/internal/build"
@@ -45,7 +47,7 @@ Parts of the engine that are not built by default are turned on in mitiru.toml:
   navbake   bake navmeshes inside the game DLL (Recast)
   jolt      check that the engine was fetched with Jolt Physics
   online    online co-op in mitiru_host (--net, hud.net*; rollback via GekkoNet)
-  dawn      WebGPU (Dawn) rendering layer; needs MITIRU_DAWN_DIR and a Release or RelWithDebInfo build
+  dawn      WebGPU (Dawn) rendering layer; fetched on first use; left out of Debug builds
   onnx      NeuralStyle / NeuralDepth (ONNX Runtime; adds onnxruntime.dll and DirectML.dll to dist)
   directml  DirectML neural post-process in the DX12 frame (adds DirectML.dll to dist)
   effekseer .efkefc effects through drawModel (Effekseer)
@@ -165,6 +167,10 @@ func buildProject(stdout, stderr io.Writer, allowStandalone, launch bool) (*buil
 	}
 
 	cfgName := resolveBuildConfig(cfg)
+	features, dawnDir, err := resolveFeatures(cfg, cfgName, engineRoot, stdout)
+	if err != nil {
+		return nil, err
+	}
 	// 組む前に置き場を測る。深すぎる所で数十分組んでも、できた host は起動できない。
 	// dist (buildOutDir あり) はこの host を起動せず、配布物の置き場を自分で測る。
 	if buildOutDir == "" {
@@ -182,7 +188,8 @@ func buildProject(stdout, stderr io.Writer, allowStandalone, launch bool) (*buil
 		Cache:           cfg.Build.Cache,
 		ExtraDefines:    buildExtraDefines, // dist が GUI subsystem のフラグを注入 (通常は空)
 		OutDir:          buildOutDir,       // dist は別 out dir (通常は空 = 構成ごとの build.OutDir)
-		Features:        cfg.Engine.Features,
+		Features:        features,
+		DawnDir:         dawnDir,
 		NavSource:       cfg.Nav.Source,
 		NavArgs:         cfg.Nav.Args,
 		LightingSources: cfg.Lighting.Source,
@@ -249,4 +256,24 @@ func resolveBuildConfig(cfg *config.ProjectConfig) string {
 		return cfg.Build.Config
 	}
 	return "Debug"
+}
+
+// resolveFeatures は [engine] features を、この構成で組める形にして返す。
+// Debug の構成では Dawn を外して 1 行だけ知らせる。Release 系で dawn が残っているときは
+// 固定した版の Dawn を用意し、その場所を返す (環境変数も手作業も要らない)。
+func resolveFeatures(cfg *config.ProjectConfig, buildConfig, engineRoot string, stdout io.Writer) (features []string, dawnDir string, err error) {
+	features, dropped := config.DropForConfig(cfg.Engine.Features, buildConfig)
+	if len(dropped) > 0 {
+		fmt.Fprintf(stdout, "%s の構成なので、%s を外して組みます。Release と RelWithDebInfo では入ります。\n",
+			buildConfig, strings.Join(dropped, ", "))
+	}
+	if !slices.ContainsFunc(features, func(n string) bool { return strings.EqualFold(strings.TrimSpace(n), "dawn") }) {
+		return features, "", nil
+	}
+	dawnDir, err = engine.EnsureDawn(engineRoot, stdout)
+	if errors.Is(err, engine.ErrNoDawnPin) {
+		// Dawn の層を持たない engine。engine 自身の案内 (target が無い) に任せる
+		return features, "", nil
+	}
+	return features, dawnDir, err
 }
