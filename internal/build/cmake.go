@@ -1026,7 +1026,16 @@ func batchFailure(prefix string, err error) error {
 // FindVcvars64 は `mitiru doctor` と同じ candidate set を使って vcvars64.bat を
 // 探す。leaf package からの back-reference を避けるため、(internal/commands を
 // import せず) ここに置いている。
+//
+// MITIRU_VCVARS に vcvars64.bat の path があれば、探さずにそれを使う。Visual Studio が複数入った機械で、
+// 新しい方の cl が通らないゲームを古い方で組むため、また別の版の cl で組み時間を比べるために使う。
 func FindVcvars64() (string, error) {
+	if p := os.Getenv("MITIRU_VCVARS"); p != "" {
+		if _, err := os.Stat(p); err != nil {
+			return "", fmt.Errorf("MITIRU_VCVARS の %s が無い", p)
+		}
+		return p, nil
+	}
 	candidates := []string{
 		`C:\Program Files\Microsoft Visual Studio\18\Community\VC\Auxiliary\Build\vcvars64.bat`,
 		`C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Auxiliary\Build\vcvars64.bat`,
