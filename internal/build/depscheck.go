@@ -45,7 +45,7 @@ func parseObjectDeps(out string) []objectDeps {
 func brokenDeps(compiled []objectDeps, gameDir string) []string {
 	var empty []objectDeps
 	for _, o := range compiled {
-		if o.Count == 0 {
+		if o.Count == 0 && !strings.HasSuffix(o.Path, "/"+renderNeedsSourceName+".obj") {
 			empty = append(empty, o)
 		}
 	}

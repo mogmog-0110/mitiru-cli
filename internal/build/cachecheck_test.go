@@ -51,6 +51,21 @@ func TestBrokenDeps(t *testing.T) {
 	}
 }
 
+func TestBrokenDepsIgnoresTheGeneratedRenderNeedsSource(t *testing.T) {
+	// [render] needs の生成ソースは header を include しないので、依存が空でも壊れではない
+	objs := []objectDeps{
+		{Path: "CMakeFiles/game.dir/main.cpp.obj", Count: 12},
+		{Path: "CMakeFiles/game.dir/" + renderNeedsSourceName + ".obj"},
+	}
+	if got := brokenDeps(objs, "CMakeFiles/game.dir/"); len(got) != 0 {
+		t.Errorf("生成ソースを壊れ扱いにした: %v", got)
+	}
+	objs[0].Count = 0
+	if got := brokenDeps(objs, "CMakeFiles/game.dir/"); len(got) != 1 {
+		t.Errorf("ゲームの本物の source の空は拾うはず: %v", got)
+	}
+}
+
 func TestParseCacheDir(t *testing.T) {
 	stats := `Cache location                  Local disk: "E:\\sccache"` + "\nBase directories (none)\n"
 	if got := parseCacheDir(stats); got != `E:\sccache` {

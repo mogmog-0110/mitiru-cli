@@ -9,6 +9,10 @@ import (
 	"github.com/mogmog-0110/mitiru-cli/internal/config"
 )
 
+// renderNeedsSourceName は生成ソースの名前。header を 1 つも include しないので、依存が記録されないのが正常
+// (depscheck.go の検査から外す)。
+const renderNeedsSourceName = "mitiru_render_needs.cpp"
+
 // renderNeedsExport は DLL に埋める宣言の export (mitiru_module_render_needs) を書いた生成ソース。
 type renderNeedsExport struct {
 	SourceAbs string // 生成した .cpp (CMake の書き方)
@@ -71,7 +75,7 @@ func resolveRenderNeeds(opts Options, cmakeSrcDir string) (*renderNeedsExport, [
 		}
 	}
 
-	src := filepath.Join(cmakeSrcDir, "mitiru_render_needs.cpp")
+	src := filepath.Join(cmakeSrcDir, renderNeedsSourceName)
 	if err := writeFileIfChanged(src, []byte(renderNeedsSource(names))); err != nil {
 		return nil, nil, fmt.Errorf("[render] needs の export を書けません: %w", err)
 	}
