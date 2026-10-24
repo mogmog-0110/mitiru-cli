@@ -119,7 +119,9 @@ BC-compressed textures (.dds) and compiled shaders (data/shader_cache/) ship
 inside the bundle: the first run does not stall and a read-only install
 works. The list comes from assets/bake.txt when present, otherwise from a
 scan of assets/. An asset that fails to load fails the dist; a host that
-cannot run (no DX12 GPU) only warns. --no-bake skips this step.
+cannot run (no DX12 GPU) only warns. With the dawn feature the host also runs
+on Dawn (D3D11, standard and compat) to bake Dawn's shader translations into
+the same shader_cache; a Dawn failure only warns. --no-bake skips this step.
 
 --sign signs the launcher, host and game DLL (and the --onefile exe) with
 signtool from the Windows SDK. The certificate comes from environment
@@ -347,7 +349,7 @@ func runDist() error {
 
 	// cache は pack に畳む前に、バラ置きの資産の隣へ作る。DDS・clod・glb は pack に入らずバラ置きで残る
 	if !distNoBake {
-		if err := bakeDistCaches(dataDir, art.DllRel, gameDir, hostArgsFromConfig(cfg),
+		if err := bakeDistCaches(dataDir, art.DllRel, gameDir, hostArgsFromConfig(cfg), cfg.HasFeature("dawn"),
 			execDistBakeRunner, os.Stdout); err != nil {
 			return err
 		}

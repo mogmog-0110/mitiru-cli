@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -131,7 +132,7 @@ func TestBakeDistCachesSuccess(t *testing.T) {
 		return []byte("[mitiru_host] bake: 1 assets, 0 failed\n"), 0, nil
 	}
 	var out bytes.Buffer
-	if err := bakeDistCaches(data, filepath.Join("g", "g.dll"), "g", []string{"--lofi"}, run, &out); err != nil {
+	if err := bakeDistCaches(data, filepath.Join("g", "g.dll"), "g", []string{"--lofi"}, false, run, &out); err != nil {
 		t.Fatal(err)
 	}
 	if len(gotArgs) == 0 || gotArgs[0] != "g/g.dll" || gotArgs[len(gotArgs)-1] != "--lofi" {
@@ -154,7 +155,7 @@ func TestBakeDistCachesFailsOnUnreadableAsset(t *testing.T) {
 		return []byte("[clod] importing level.obj\nmitiru_host: --bake-caches で読めない: g/assets/level.obj\n" +
 			"[mitiru_host] bake: 1 assets, 1 failed\n"), 4, nil
 	}
-	err := bakeDistCaches(data, "g/g.dll", "g", nil, run, &bytes.Buffer{})
+	err := bakeDistCaches(data, "g/g.dll", "g", nil, false, run, &bytes.Buffer{})
 	if err == nil || !strings.Contains(err.Error(), "--bake-caches で読めない: g/assets/level.obj") {
 		t.Fatalf("err = %v, want the unreadable asset", err)
 	}
@@ -178,7 +179,7 @@ func TestBakeDistCachesWarnsWhenHostCannotRun(t *testing.T) {
 	for name, run := range cases {
 		data := fakeBakeData(t)
 		var out bytes.Buffer
-		if err := bakeDistCaches(data, "g/g.dll", "g", nil, run, &out); err != nil {
+		if err := bakeDistCaches(data, "g/g.dll", "g", nil, false, run, &out); err != nil {
 			t.Errorf("%s: dist should go on without caches: %v", name, err)
 		}
 		if !strings.Contains(out.String(), "cache 無しで続けます") {
@@ -196,7 +197,7 @@ func TestBakeDistCachesSkipsWithoutHost(t *testing.T) {
 		called = true
 		return nil, 0, nil
 	}
-	if err := bakeDistCaches(t.TempDir(), "g/g.dll", "g", nil, run, &bytes.Buffer{}); err != nil || called {
+	if err := bakeDistCaches(t.TempDir(), "g/g.dll", "g", nil, false, run, &bytes.Buffer{}); err != nil || called {
 		t.Errorf("err=%v called=%v", err, called)
 	}
 }
@@ -206,5 +207,159 @@ func TestBakedSidecarsStayLooseWhenPacked(t *testing.T) {
 		if !keepLooseInDist(rel) {
 			t.Errorf("%s would be folded into the pack, where the engine does not look for caches", rel)
 		}
+	}
+}
+
+func TestDawnBakeEntriesKeepsOnlyModels(t *testing.T) {
+	got := dawnBakeEntries([]string{
+		"model:g/assets/pine.glb", "clod:g/assets/pine.glb", "g/assets/hero.fbx", "g/assets/island.world.json",
+		"g/assets/level.obj", "sound:town_bgm", "g/assets/stage.lighting.bin", "model: g/assets/x.vrm",
+	})
+	want := []string{"model:g/assets/pine.glb", "g/assets/hero.fbx", "model: g/assets/x.vrm"}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("got %q want %q", got, want)
+	}
+}
+
+type bakeCall struct {
+	args []string
+	env  []string
+	list string
+}
+
+// recordingRunner は呼ばれた順に引数と一覧を残し、起動ごとに結果を返す。
+func recordingRunner(calls *[]bakeCall, results func(n int, cache string) ([]byte, int, error)) distBakeRunner {
+	return func(_ context.Context, _ string, args []string, _ string, env []string) ([]byte, int, error) {
+		c := bakeCall{args: args, env: env}
+		for i, a := range args {
+			if a == "--bake-caches" {
+				b, _ := os.ReadFile(args[i+1])
+				c.list = string(b)
+			}
+		}
+		*calls = append(*calls, c)
+		return results(len(*calls), envValue(env, "MITIRU_SHADER_CACHE"))
+	}
+}
+
+func hasArgPair(args []string, a, b string) bool {
+	for i := 0; i+1 < len(args); i++ {
+		if args[i] == a && args[i+1] == b {
+			return true
+		}
+	}
+	return false
+}
+
+func saveDir(args []string) string {
+	for i := 0; i+1 < len(args); i++ {
+		if args[i] == "--save-dir" {
+			return args[i+1]
+		}
+	}
+	return ""
+}
+
+func TestBakeDistCachesBakesDawnAfterDX12(t *testing.T) {
+	defer console.ForceVerbose(true)()
+	data := t.TempDir()
+	writeFiles(t, data, "mitiru_host.exe", "g/g.dll", "g/assets/level.obj", "g/assets/pine.glb", "g/assets/island.world.json")
+	var calls []bakeCall
+	run := recordingRunner(&calls, func(n int, cache string) ([]byte, int, error) {
+		writeFiles(t, cache, fmt.Sprintf("pass%d.dxbc", n))
+		return nil, 0, nil
+	})
+	var out bytes.Buffer
+	if err := bakeDistCaches(data, "g/g.dll", "g", []string{"--lofi"}, true, run, &out); err != nil {
+		t.Fatal(err)
+	}
+	if len(calls) != 3 {
+		t.Fatalf("host ran %d times, want DX12 + Dawn + Dawn compat", len(calls))
+	}
+	if hasArgPair(calls[0].args, "--backend", "dawn-d3d11") {
+		t.Errorf("the first pass must stay on DX12: %q", calls[0].args)
+	}
+	for i, c := range calls[1:] {
+		if !hasArgPair(c.args, "--backend", "dawn-d3d11") || c.args[len(c.args)-1] != "dawn-d3d11" {
+			t.Errorf("Dawn pass %d: --backend must come last so it overrides the bake's DX12: %q", i, c.args)
+		}
+		if c.list != "model:g/assets/pine.glb\n" {
+			t.Errorf("Dawn pass %d list = %q, want the models only", i, c.list)
+		}
+		if envValue(c.env, "MITIRU_SHADER_CACHE") != filepath.Join(data, "shader_cache") {
+			t.Errorf("Dawn pass %d writes elsewhere than the shipped cache: %q", i, c.env)
+		}
+	}
+	if saveDir(calls[1].args) == "" || saveDir(calls[1].args) == saveDir(calls[2].args) {
+		t.Errorf("the two Dawn passes must not share a save dir or settings: %q / %q", calls[1].args, calls[2].args)
+	}
+	if envValue(calls[1].env, "MITIRU_DAWN_COMPAT") != "" || envValue(calls[2].env, "MITIRU_DAWN_COMPAT") != "1" {
+		t.Errorf("compat must be set on the second Dawn pass only: %q / %q", calls[1].env, calls[2].env)
+	}
+	if !strings.Contains(out.String(), "baked Dawn d3d11 compat, +1 files") {
+		t.Errorf("summary = %q", out.String())
+	}
+}
+
+func TestBakeDistCachesSkipsDawnWithoutFeature(t *testing.T) {
+	data := fakeBakeData(t)
+	var calls []bakeCall
+	run := recordingRunner(&calls, func(int, string) ([]byte, int, error) { return nil, 0, nil })
+	if err := bakeDistCaches(data, "g/g.dll", "g", nil, false, run, &bytes.Buffer{}); err != nil {
+		t.Fatal(err)
+	}
+	if len(calls) != 1 {
+		t.Errorf("host ran %d times, want only the DX12 pass", len(calls))
+	}
+}
+
+func TestBakeDistCachesDawnFailureOnlyWarns(t *testing.T) {
+	cases := map[string]func(int, string) ([]byte, int, error){
+		"unreadable": func(n int, _ string) ([]byte, int, error) {
+			if n == 1 {
+				return nil, 0, nil
+			}
+			return []byte("mitiru_host: --bake-caches で読めない: g/assets/pine.glb\n"), 4, nil
+		},
+		"crash": func(n int, _ string) ([]byte, int, error) {
+			if n == 1 {
+				return nil, 0, nil
+			}
+			return nil, -1073741819, nil
+		},
+		"cannot start": func(n int, _ string) ([]byte, int, error) {
+			if n == 1 {
+				return nil, 0, nil
+			}
+			return nil, 0, errors.New("access denied")
+		},
+	}
+	for name, results := range cases {
+		data := fakeBakeData(t)
+		var calls []bakeCall
+		var out bytes.Buffer
+		if err := bakeDistCaches(data, "g/g.dll", "g", nil, true, recordingRunner(&calls, results), &out); err != nil {
+			t.Errorf("%s: a Dawn failure must not stop dist: %v", name, err)
+		}
+		if len(calls) != 3 {
+			t.Errorf("%s: the compat pass should still run after a failure: %d calls", name, len(calls))
+		}
+		if !strings.Contains(out.String(), "Dawn の cache 無しで続けます") {
+			t.Errorf("%s: no warning: %q", name, out.String())
+		}
+	}
+}
+
+func TestBakeDistCachesDX12FailureSkipsDawn(t *testing.T) {
+	data := fakeBakeData(t)
+	var calls []bakeCall
+	run := recordingRunner(&calls, func(int, string) ([]byte, int, error) {
+		return []byte("mitiru_host: --bake-caches で読めない: g/assets/level.obj\n"), 4, nil
+	})
+	if err := bakeDistCaches(data, "g/g.dll", "g", nil, true, run, &bytes.Buffer{}); err == nil {
+		t.Fatal("an unreadable asset must still fail dist")
+	}
+	if len(calls) != 1 {
+		t.Errorf("Dawn ran after the DX12 pass failed: %d calls", len(calls))
 	}
 }

@@ -227,6 +227,8 @@ assets/field.region.json     # 区画の world.json も全部焼く
 
 読めない資産が 1 つでもあれば (host の終了コード 4)、その資産を並べて dist を止める。そのまま配ると遊ぶ側でも読めないからだ。DX12 の GPU が無いなどで host が走れないときは、警告を出して cache 無しで続ける。`--no-bake` を付けると焼き込みを飛ばす。
 
+`[engine] features` に `dawn` がある project では、DX12 の後に Dawn の D3D11 (通常と互換の 2 通り) でも host を走らせ、Dawn のシェーダーの変換結果を同じ `data/shader_cache/` に残す。Dawn が読めない資産 (clod・world・region・焼いた光) は渡さず、モデルだけを渡す。Dawn の側が走れなくても警告だけで続く。cache の鍵は Dawn の版とシェーダーの内容で決まり、遊ぶ側の環境と合わなければその cache は使われず、普通に変換して自分の置き場に書く。
+
 ## コンパイルの cache (sccache)
 
 [sccache](https://github.com/mozilla/sccache) が見つかれば、`mitiru` は configure でそれをコンパイラの前に挟む。worktree を増やしても、同じ engine のソースは 2 つ目からは cache から戻る。PATH、`MITIRU_SCCACHE` (exe のパス)、winget の置き場所の順に探し、無ければ何もしない。
