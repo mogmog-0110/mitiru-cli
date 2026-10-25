@@ -52,6 +52,7 @@ Parts of the engine that are not built by default are turned on in mitiru.toml:
   directml  DirectML neural post-process in the DX12 frame (adds DirectML.dll to dist)
   effekseer .efkefc effects through drawModel (Effekseer)
   cubism    Live2D models (Cubism SDK)
+  video     MPEG-1 (.mpg) video through Screen::drawVideo (pl_mpeg; adds about 31 KB to the host)
 
 Examples:
   mitiru build              # Debug build (default)

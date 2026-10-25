@@ -24,7 +24,7 @@ const defaultDistCheckFrames = 90
 // engine の warnOnce と loader が出す文に合わせてある。engine は欠けを知らせる文に
 // 読めません / 見つかりません / 開けません / ありません / 失敗しました のどれかを入れる。
 var distCheckProblemWords = []string{
-	"読めない", "読めません", "ありません", "見つから", "見つかりません", "開けません", "失敗", "失敗しました",
+	"読めない", "読めません", "ありません", "見つから", "見つかりません", "開けません", "描けません", "失敗", "失敗しました",
 	"not found", "cannot open", "failed to load", "missing",
 }
 

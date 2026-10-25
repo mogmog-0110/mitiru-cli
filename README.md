@@ -159,6 +159,7 @@ source = "assets/level.obj"         # .obj / .gltf / .glb
 | `directml` | なし (engine を `-DMITIRU_WITH_DIRECTML=ON` で作る) | `Screen::enableNeuralFx` など、DX12 のフレームの中で DirectML を使う後処理。入れると配布物に `DirectML.dll` が加わる |
 | `effekseer` | なし (engine を `-DMITIRU_WITH_EFFEKSEER=ON` で作る。静的に host へ入る) | `.efkefc` を `drawModel` で描く。使わないゲームでは外れていて host が小さい |
 | `cubism` | なし (engine を `-DMITIRU_WITH_CUBISM=ON` で作る。静的に host へ入る) | Live2D のモデル。Cubism SDK for Native を `external/cubism/` に置く。使うゲームだけが選ぶと、配布物に Live2D の表記が入らない |
+| `video` | なし (engine を `-DMITIRU_WITH_VIDEO=ON` で作る。復号の pl_mpeg は 1 ヘッダーで、host が約 31 KB 太る) | MPEG-1 (`.mpg`) の動画を `Screen::drawVideo` で映す。動画は `assets/video/<名前>.mpg` に置く。`assets/video` に動画があるのに features に書かないゲームは、`mitiru dist` が組む前に止める。`--check` は動画が配布物に入っているかも見る |
 
 知らない名前を書くと `mitiru build` が使える名前の一覧を出して止まる。`crowd` や `fbx` のように間違えやすい名前には、代わりの書き方も出す。FBX の取り込みは engine 本体に入っているので、名前を書かなくても使える。engine がその target を持っていない (取得した engine に submodule が無い) ときは、CMake の configure が直し方を出して止まる。
 

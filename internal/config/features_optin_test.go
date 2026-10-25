@@ -45,3 +45,45 @@ func TestResolveFeatures_NeuralHint(t *testing.T) {
 		t.Fatalf("want a hint toward onnx / directml, got %v", err)
 	}
 }
+
+// 動画は名前を書いたゲームだけが持つ。engine が mitiru に link する物なので、生成 CMake は option を ON にするだけ
+func TestResolveFeatures_Video(t *testing.T) {
+	got, err := ResolveFeatures([]string{"Video"})
+	if err != nil || len(got) != 1 {
+		t.Fatalf("ResolveFeatures: %v %v", got, err)
+	}
+	f := got[0]
+	if f.Name != "video" || f.Option != "MITIRU_WITH_VIDEO" || f.Target != "mitiru_video" || f.Link || f.Host {
+		t.Errorf("video feature = %+v", f)
+	}
+	off := false
+	for _, o := range FeatureOptions(nil) {
+		if o.Name == "MITIRU_WITH_VIDEO" && !o.On {
+			off = true
+		}
+	}
+	if !off {
+		t.Error("MITIRU_WITH_VIDEO must be forced OFF without a declaration")
+	}
+	on := false
+	for _, o := range FeatureOptions(got) {
+		if o.Name == "MITIRU_WITH_VIDEO" && o.On {
+			on = true
+		}
+	}
+	if !on {
+		t.Error("MITIRU_WITH_VIDEO must be ON with the declaration")
+	}
+}
+
+func TestResolveFeatures_VideoHints(t *testing.T) {
+	for _, name := range []string{"mp4", "h264"} {
+		_, err := ResolveFeatures([]string{name})
+		if err == nil || !strings.Contains(err.Error(), "MPEG-1") {
+			t.Errorf("%s: want a hint that video is MPEG-1 only, got %v", name, err)
+		}
+	}
+	if _, err := ResolveFeatures([]string{"movie"}); err == nil || !strings.Contains(err.Error(), `use "video"`) {
+		t.Errorf("movie: want a hint toward video, got %v", err)
+	}
+}

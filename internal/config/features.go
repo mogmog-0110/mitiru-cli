@@ -97,6 +97,13 @@ var engineFeatures = []EngineFeature{
 		Option:  "MITIRU_WITH_CUBISM",
 		Missing: "Live2D needs the Cubism SDK for Native unpacked as external/cubism/CubismSdkForNative-*",
 	},
+	{
+		// MPEG-1 (.mpg) の動画を Screen::drawVideo で映す。復号の pl_mpeg は 1 ヘッダーで、host が約 31 KB 太る。
+		// 動画を使わないゲームの出荷物には、復号器も pl_mpeg の表記も入らない。
+		Name: "video", Target: "mitiru_video", Link: false,
+		Option:  "MITIRU_WITH_VIDEO",
+		Missing: "video needs an engine newer than v0.47 (it adds MITIRU_WITH_VIDEO and external/pl_mpeg)",
+	},
 }
 
 // DropForConfig は buildConfig では組めない feature を外した名前の並びと、外した feature の名前を返す。
@@ -163,6 +170,10 @@ var featureHints = map[string]string{
 	"neural":   `use "onnx" (NeuralStyle / NeuralDepth) or "directml" (neural post-process in the DX12 frame)`,
 	"efk":      `use "effekseer"`,
 	"live2d":   `use "cubism"`,
+	"mpeg":     `use "video" (MPEG-1 .mpg through Screen::drawVideo)`,
+	"movie":    `use "video" (MPEG-1 .mpg through Screen::drawVideo)`,
+	"mp4":      `video plays MPEG-1 (.mpg) only, with the feature "video"; H.264 / MP4 is not supported`,
+	"h264":     `video plays MPEG-1 (.mpg) only, with the feature "video"; H.264 / MP4 is not supported`,
 }
 
 var navSourceExts = map[string]bool{".obj": true, ".gltf": true, ".glb": true}

@@ -223,6 +223,14 @@ func runDist() error {
 	buildExtraDefines = []string{"MITIRU_HOST_GUI=ON"}
 	defer func() { buildOutDir = ""; buildExtraDefines = nil }() // 後続コマンドへ漏らさない
 
+	// 動画 (assets/video) があるのに features に video が無いゲームは、組む前に止める。
+	// 読み込みに失敗したときは、後の runBuild が同じ失敗を知らせる
+	if loaded, lerr := config.Load(manifestPath); lerr == nil {
+		if err := checkDistVideoFeature(projectRoot, loaded.HasFeature("video")); err != nil {
+			return err
+		}
+	}
+
 	checkRun, err := resolveDistCheckRun()
 	if err != nil {
 		return err
@@ -365,6 +373,11 @@ func runDist() error {
 		if err := signFiles(signCfg, files, distSignRunner, os.Stdout); err != nil {
 			return err
 		}
+	}
+
+	// pack に畳む前に、project の動画が配布物の assets へ写っているかを見る (畳むと、抜けは読めなくなってから分かる)
+	if err := checkBundleVideos(projectRoot, filepath.Join(dataDir, gameDir)); err != nil {
+		return err
 	}
 
 	if distPack {
