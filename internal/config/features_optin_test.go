@@ -87,3 +87,29 @@ func TestResolveFeatures_VideoHints(t *testing.T) {
 		t.Errorf("movie: want a hint toward video, got %v", err)
 	}
 }
+
+// SVG は名前を書いたゲームだけが持つ。lunasvg は engine が組むので、生成 CMake は option を ON にするだけ
+func TestResolveFeatures_Svg(t *testing.T) {
+	got, err := ResolveFeatures([]string{"SVG"})
+	if err != nil || len(got) != 1 {
+		t.Fatalf("ResolveFeatures: %v %v", got, err)
+	}
+	f := got[0]
+	if f.Name != "svg" || f.Option != "MITIRU_WITH_SVG" || f.Target != "mitiru_svg" || f.Link || f.Host {
+		t.Errorf("svg feature = %+v", f)
+	}
+	for _, o := range FeatureOptions(nil) {
+		if o.Name == "MITIRU_WITH_SVG" && o.On {
+			t.Error("MITIRU_WITH_SVG must be forced OFF without a declaration")
+		}
+	}
+	on := false
+	for _, o := range FeatureOptions(got) {
+		if o.Name == "MITIRU_WITH_SVG" && o.On {
+			on = true
+		}
+	}
+	if !on {
+		t.Error("MITIRU_WITH_SVG must be ON with the declaration")
+	}
+}

@@ -104,6 +104,12 @@ var engineFeatures = []EngineFeature{
 		Option:  "MITIRU_WITH_VIDEO",
 		Missing: "video needs an engine newer than v0.47 (it adds MITIRU_WITH_VIDEO and external/pl_mpeg)",
 	},
+	{
+		// RmlUi の <svg src="x.svg"/> と svg() の decorator。lunasvg は host の exe に静的に入るので、使わないゲームは外す。
+		Name: "svg", Target: "mitiru_svg", Link: false,
+		Option:  "MITIRU_WITH_SVG",
+		Missing: "svg needs an engine with MITIRU_WITH_SVG and lunasvg unpacked as external/lunasvg (https://github.com/sammycage/lunasvg)",
+	},
 }
 
 // DropForConfig は buildConfig では組めない feature を外した名前の並びと、外した feature の名前を返す。
@@ -174,6 +180,7 @@ var featureHints = map[string]string{
 	"movie":    `use "video" (MPEG-1 .mpg through Screen::drawVideo)`,
 	"mp4":      `video plays MPEG-1 (.mpg) only, with the feature "video"; H.264 / MP4 is not supported`,
 	"h264":     `video plays MPEG-1 (.mpg) only, with the feature "video"; H.264 / MP4 is not supported`,
+	"lunasvg":  `use "svg" (RmlUi <svg src> and svg() decorator)`,
 }
 
 var navSourceExts = map[string]bool{".obj": true, ".gltf": true, ".glb": true}
