@@ -41,3 +41,32 @@ func TestConfigure_NoFeaturesForcesOptInLibrariesOff(t *testing.T) {
 		}
 	}
 }
+
+// svg と video_mf も同じ形: option を ON にし、engine の target が無ければ configure で止まる。宣言が無ければ OFF に固定する
+func TestConfigure_SvgAndVideoMfTurnOnEngineOptions(t *testing.T) {
+	projectRoot, engineRoot := fakeProject(t)
+	cmake, err := generatedCMakeWith(t, projectRoot, engineRoot, func(o *Options) {
+		o.Features = []string{"svg", "video_mf"}
+	})
+	if err != nil {
+		t.Fatalf("Configure: %v", err)
+	}
+	for _, want := range []string{
+		`set(MITIRU_WITH_SVG ON CACHE BOOL "" FORCE)`,
+		`set(MITIRU_WITH_VIDEO_MF ON CACHE BOOL "" FORCE)`,
+		`set(MITIRU_WITH_VIDEO OFF CACHE BOOL "" FORCE)`,
+		"if(TARGET mitiru_svg)\nelse()",
+		"if(TARGET mitiru_video_mf)\nelse()",
+	} {
+		if !strings.Contains(cmake, want) {
+			t.Errorf("generated CMake is missing:\n%s", want)
+		}
+	}
+
+	off := generatedCMake(t, projectRoot, engineRoot)
+	for _, name := range []string{"MITIRU_WITH_SVG", "MITIRU_WITH_VIDEO_MF"} {
+		if !strings.Contains(off, "set("+name+` OFF CACHE BOOL "" FORCE)`) {
+			t.Errorf("%s must be forced OFF without a declaration", name)
+		}
+	}
+}

@@ -226,7 +226,7 @@ func runDist() error {
 	// 動画 (assets/video) があるのに features に video が無いゲームは、組む前に止める。
 	// 読み込みに失敗したときは、後の runBuild が同じ失敗を知らせる
 	if loaded, lerr := config.Load(manifestPath); lerr == nil {
-		if err := checkDistVideoFeature(projectRoot, loaded.HasFeature("video")); err != nil {
+		if err := checkDistVideoFeature(projectRoot, loaded.HasFeature); err != nil {
 			return err
 		}
 	}

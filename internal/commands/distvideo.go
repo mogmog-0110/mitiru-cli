@@ -8,16 +8,24 @@ import (
 	"strings"
 )
 
-// distVideoExt は engine の動画 (feature "video") が読む形式。
-const distVideoExt = ".mpg"
+// distVideoFeatureByExt は engine の VideoHost が探す拡張子 (.webm .mpg .mp4) と、その動画を映すのに要る feature。
+// AV1 の WebM と MPEG-1 は "video"、H.264 の MP4 は "video_mf" (ADR 0114)。
+var distVideoFeatureByExt = map[string]string{
+	".webm": "video",
+	".mpg":  "video",
+	".mp4":  "video_mf",
+}
 
-// distVideoFiles は root/assets/video の下にある動画 (.mpg) を、assets/video からの相対パス (スラッシュ区切り) で返す。
+// distVideoFiles は root/assets/video の下にある動画 (.webm .mpg .mp4) を、assets/video からの相対パス (スラッシュ区切り) で返す。
 // フォルダが無ければ空。
 func distVideoFiles(root string) []string {
 	base := filepath.Join(root, "assets", "video")
 	var out []string
 	_ = filepath.WalkDir(base, func(path string, d fs.DirEntry, err error) error {
-		if err != nil || d.IsDir() || !strings.EqualFold(filepath.Ext(path), distVideoExt) {
+		if err != nil || d.IsDir() {
+			return nil
+		}
+		if _, ok := distVideoFeatureByExt[strings.ToLower(filepath.Ext(path))]; !ok {
 			return nil
 		}
 		if rel, rerr := filepath.Rel(base, path); rerr == nil {
@@ -29,15 +37,24 @@ func distVideoFiles(root string) []string {
 	return out
 }
 
-// checkDistVideoFeature は assets/video に動画があるのに [engine] features に "video" が無いゲームを、組む前に止める。
+// checkDistVideoFeature は assets/video に動画があるのに、それを映す feature が [engine] features に無いゲームを、組む前に止める。
 // features に無い host は動画を映せず、画面が黙って欠けるまま配ることになる。
-func checkDistVideoFeature(projectRoot string, hasVideoFeature bool) error {
-	videos := distVideoFiles(projectRoot)
-	if len(videos) == 0 || hasVideoFeature {
-		return nil
+func checkDistVideoFeature(projectRoot string, hasFeature func(name string) bool) error {
+	byFeature := map[string][]string{}
+	for _, v := range distVideoFiles(projectRoot) {
+		feature := distVideoFeatureByExt[strings.ToLower(filepath.Ext(v))]
+		if !hasFeature(feature) {
+			byFeature[feature] = append(byFeature[feature], v)
+		}
 	}
-	return fmt.Errorf("dist: assets/video に動画 (%s) があるのに、mitiru.toml の [engine] features に \"video\" がありません。"+
-		"動画は features に video を書いたゲームだけが映せます。features = [\"video\"] を足してください", distVideoList(videos))
+	for _, feature := range []string{"video", "video_mf"} {
+		if videos := byFeature[feature]; len(videos) > 0 {
+			return fmt.Errorf("dist: assets/video に動画 (%s) があるのに、mitiru.toml の [engine] features に \"%s\" がありません。"+
+				"この動画は features に %s を書いたゲームだけが映せます。features = [\"%s\"] を足してください",
+				distVideoList(videos), feature, feature, feature)
+		}
+	}
+	return nil
 }
 
 // distVideoMissing は want のうち have に無いものを返す。配布物へ動画が写っていないことを、pack に畳む前に見つける。
