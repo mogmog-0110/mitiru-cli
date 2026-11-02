@@ -24,14 +24,14 @@ var vcRuntimeDLLs = map[string]bool{
 }
 
 // mustBundleDLLs は開発機の System32 に入っていることがあっても、配布物に同梱しないといけない DLL。
-// Windows 11 は自前の onnxruntime.dll / DirectML.dll を System32 に持つが版が合わない。
+// Windows 11 は自前の onnxruntime.dll / DirectML.dll を System32 に持つがバージョンが合わない。
 var mustBundleDLLs = map[string]bool{
 	"onnxruntime.dll": true, "onnxruntime_providers_shared.dll": true, "directml.dll": true,
 	"sdl3.dll": true, "sdl2.dll": true, "steam_api64.dll": true, "phonon.dll": true,
 	"dxcompiler.dll": true, "dxil.dll": true, "vulkan-1.dll": true, "openal32.dll": true,
 }
 
-// isDebugCRT は再頒布できない Debug 版ランタイムかを返す。
+// isDebugCRT は再頒布できない Debug ランタイムかを返す。
 func isDebugCRT(name string) bool {
 	low := strings.ToLower(name)
 	if low == "ucrtbased.dll" {
@@ -58,7 +58,7 @@ type importProblem struct {
 // distImportReport は data/ 以下の全 PE の依存を調べた結果。
 type distImportReport struct {
 	MissingVC []string        // 同梱すれば直る VC ランタイム
-	DebugCRT  []importProblem // Debug 版ランタイムへの依存
+	DebugCRT  []importProblem // Debug ランタイムへの依存
 	Missing   []importProblem // それ以外で見つからない DLL
 }
 
@@ -169,11 +169,11 @@ func checkDistImports(dataDir string, imports peImportsFunc, system systemDLLFun
 			}
 			switch {
 			case isDebugCRT(low):
-				rep.DebugCRT = append(rep.DebugCRT, importProblem{rel, lib, "Debug 版ランタイム (再頒布できない)"})
+				rep.DebugCRT = append(rep.DebugCRT, importProblem{rel, lib, "Debug ランタイム (再頒布できない)"})
 			case vcRuntimeDLLs[low]:
 				missingVC[low] = true
 			case mustBundleDLLs[low]:
-				rep.Missing = append(rep.Missing, importProblem{rel, lib, "配布物に無い (Windows に同名があっても版が合わない)"})
+				rep.Missing = append(rep.Missing, importProblem{rel, lib, "配布物に無い (Windows に同名があってもバージョンが合わない)"})
 			case !system(lib):
 				rep.Missing = append(rep.Missing, importProblem{rel, lib, "配布物にも Windows にも無い"})
 			}
@@ -212,8 +212,8 @@ func scanDistPE(dataDir string) (map[string]bool, []string, error) {
 	return present, pes, err
 }
 
-// vcRedistDirs は VC ランタイムの再頒布 DLL があるフォルダを返す (新しい版が先)。
-// debug が true なら再頒布できない Debug 版 (debug_nonredist) を返す。
+// vcRedistDirs は VC ランタイムの再頒布 DLL があるフォルダを返す (新しいバージョンが先)。
+// debug が true なら再頒布できない Debug ランタイム (debug_nonredist) を返す。
 func vcRedistDirs(debug bool) []string {
 	var roots []string
 	if env := os.Getenv("VCToolsRedistDir"); env != "" {
@@ -254,7 +254,7 @@ func copyFromDirs(name string, dirs []string, dst string) error {
 }
 
 // ensureDistRuntime は配布物の依存を調べ、VC ランタイムを data/ に置き、直せない欠けをエラーにする。
-// debug は --debug の配布。そのときだけ Debug 版ランタイムを許し、同梱する。同梱した DLL の数を返す。
+// debug は --debug の配布。そのときだけ Debug ランタイムを許し、同梱する。同梱した DLL の数を返す。
 func ensureDistRuntime(dataDir string, debug bool) (int, error) {
 	rep, err := checkDistImports(dataDir, readPEImports, systemDLLInWindows)
 	if err != nil {
@@ -267,7 +267,7 @@ func ensureDistRuntime(dataDir string, debug bool) (int, error) {
 		}
 	}
 	if len(rep.DebugCRT) > 0 && !debug {
-		return 0, fmt.Errorf("dist: Release の配布物が Debug 版ランタイムを読む。build/dist-out を消して作り直す\n%s",
+		return 0, fmt.Errorf("dist: Release の配布物が Debug ランタイムを読む。build/dist-out を消して作り直す\n%s",
 			formatImportProblems(rep.DebugCRT))
 	}
 	debugDLLs := 0
@@ -286,7 +286,7 @@ func ensureDistRuntime(dataDir string, debug bool) (int, error) {
 	return len(rep.MissingVC) + debugDLLs, nil
 }
 
-// bundleDebugCRT は --debug の配布に Debug 版ランタイムを同梱する。ucrtbased.dll は Windows SDK にある。
+// bundleDebugCRT は --debug の配布に Debug ランタイムを同梱する。ucrtbased.dll は Windows SDK にある。
 func bundleDebugCRT(dataDir string, problems []importProblem) (int, error) {
 	dirs := vcRedistDirs(true)
 	if sdk, _ := filepath.Glob(`C:\Program Files (x86)\Windows Kits\10\bin\*\x64\ucrt`); len(sdk) > 0 {

@@ -102,7 +102,7 @@ func EnsureSource(version string, progress io.Writer) (string, error) {
 		return "", fmt.Errorf("create cache dir: %w", err)
 	}
 
-	fmt.Fprintf(progress, "MitiruEngine %s をダウンロードしています。この版では初回だけです。\n", tag)
+	fmt.Fprintf(progress, "MitiruEngine %s をダウンロードしています。このバージョンでは初回だけです。\n", tag)
 	if err := downloadAndExtract(tag, versionDir, progress); err != nil {
 		// Best-effort: 中途半端な cache を残さない。
 		_ = os.RemoveAll(versionDir)
@@ -124,9 +124,9 @@ func EnsureSource(version string, progress io.Writer) (string, error) {
 // cmakeProjectVersionRe は engine の CMakeLists.txt の project(MitiruEngine ... VERSION X.Y.Z) を拾う。
 var cmakeProjectVersionRe = regexp.MustCompile(`(?s)project\(\s*MitiruEngine\b[^)]*?\bVERSION\s+(\d+\.\d+\.\d+)`)
 
-// overrideNotice は MITIRU_ENGINE_ROOT の engine が mitiru.toml の pin と違う版のときだけ
-// 黄色で知らせる。pin が黙って捨てられると、版を指定して確かめたつもりの検証が別の源を
-// 測ってしまう (E3)。同じ版なら毎回の build / run に 1 行足すだけなので -v に回す。
+// overrideNotice は MITIRU_ENGINE_ROOT の engine が mitiru.toml の pin と違うバージョンのときだけ
+// 黄色で知らせる。pin が黙って捨てられると、バージョンを指定して確かめたつもりの検証が別の源を
+// 測ってしまう (E3)。同じバージョンなら毎回の build / run に 1 行足すだけなので -v に回す。
 func overrideNotice(w io.Writer, root, pin string) {
 	have := engineVersionAt(root)
 	want, wantOK := ParseSemver(pin)
@@ -136,15 +136,15 @@ func overrideNotice(w io.Writer, root, pin string) {
 		return
 	}
 	if have == "" {
-		have = "版は不明"
+		have = "バージョンは不明"
 	}
 	const yellow, reset = "\x1b[33m", "\x1b[0m"
 	fmt.Fprintf(w,
-		"%sMITIRU_ENGINE_ROOT の %s (%s) を使います。mitiru.toml の engine = %q とは違う版です。%s\n",
+		"%sMITIRU_ENGINE_ROOT の %s (%s) を使います。mitiru.toml の engine = %q とは違うバージョンです。%s\n",
 		yellow, root, have, pin, reset)
 }
 
-// engineVersionAt は root の CMakeLists.txt から engine の版を読む。読めなければ空。
+// engineVersionAt は root の CMakeLists.txt から engine のバージョンを読む。読めなければ空。
 func engineVersionAt(root string) string {
 	data, err := os.ReadFile(filepath.Join(root, "CMakeLists.txt"))
 	if err != nil {
@@ -176,12 +176,12 @@ func resolveTag(version string, progress io.Writer) (string, error) {
 	return v, nil
 }
 
-// fetchLatestTag は public repo の最新版を "vX.Y.Z" tag 形式で返す。
+// fetchLatestTag は public repo の最新バージョンを "vX.Y.Z" tag 形式で返す。
 //
 // GitHub *Releases* ではなく *tags* を見る (LatestVersion と同根の理由): release
 // snapshot pipeline は tag を push するが GitHub Release を作るとは限らず、
-// `releases/latest` API は tag だけの最新版 (例 v0.7.4) を取りこぼす。tags を
-// semver 比較して最大を採るので Release 未作成でも最新版を解決できる。
+// `releases/latest` API は tag だけの最新バージョン (例 v0.7.4) を取りこぼす。tags を
+// semver 比較して最大を採るので Release 未作成でも最新バージョンを解決できる。
 func fetchLatestTag() (string, error) {
 	v, err := LatestVersionTimeout(httpTimeout)
 	if err != nil {
@@ -209,7 +209,7 @@ func downloadAndExtract(tag, destDir string, progress io.Writer) error {
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("%s を取得できません (%s)。%s に %s の版があるか確かめてください。",
+		return fmt.Errorf("%s を取得できません (%s)。%s に %s のバージョンがあるか確かめてください。",
 			url, resp.Status, publicRepo, tag)
 	}
 

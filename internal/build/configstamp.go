@@ -54,8 +54,8 @@ func hashFileInto(w io.Writer, path string) {
 	w.Write(data)
 }
 
-// toolsetNames は vcvars64.bat から見た VC\Tools\MSVC の下の版の名前を返す。VS の更新で
-// コンパイラの版が入れ替わると、CMakeCache.txt に焼いた cl.exe のパスが消えるので、
+// toolsetNames は vcvars64.bat から見た VC\Tools\MSVC の下のバージョンの名前を返す。VS の更新で
+// コンパイラのバージョンが入れ替わると、CMakeCache.txt に焼いた cl.exe のパスが消えるので、
 // そのときは configure し直す。
 func toolsetNames(vcvars string) []string {
 	if vcvars == "" {

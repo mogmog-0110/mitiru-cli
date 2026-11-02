@@ -221,7 +221,7 @@ func TestReadFeatureTable_ReadsTheMeaningNotTheLayout(t *testing.T) {
 	}
 }
 
-// 読めない JSON と、読み方の違う版は、宣言の検査を黙って飛ばさず止める。
+// 読めない JSON と、読み方の違うバージョンは、宣言の検査を黙って飛ばさず止める。
 func TestReadFeatureTable_RejectsUnreadableTables(t *testing.T) {
 	cases := map[string]struct{ body, want string }{
 		"not json":          {`{"schema": 1, "rows": [`, "JSON を読めません"},
@@ -256,7 +256,7 @@ func TestConfigure_RenderNeedsStopsOnUnreadableTable(t *testing.T) {
 	}
 }
 
-// ヘッダーだけを持ち JSON を持たない engine (JSON を足す前の版) も、古い engine と同じ扱いにする。
+// ヘッダーだけを持ち JSON を持たない engine (JSON を足す前のバージョン) も、古い engine と同じ扱いにする。
 func TestConfigure_RenderNeedsOnEngineWithHeaderOnlyIsSkipped(t *testing.T) {
 	projectRoot, engineRoot := fakeProject(t)
 	header := filepath.Join(engineRoot, "include", "mitiru", "render", "RenderFeatures.hpp")

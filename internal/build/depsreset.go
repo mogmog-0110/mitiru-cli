@@ -24,7 +24,7 @@ func writeDepsScheme(outDir string) error {
 	return os.WriteFile(filepath.Join(outDir, depsSchemeFile), []byte(depsScheme+"\n"), 0o644)
 }
 
-// resetCompilerDetection は CMakeFiles/<cmake の版> (コンパイラの検出の結果) と .ninja_deps を消す。
+// resetCompilerDetection は CMakeFiles/<cmake のバージョン> (コンパイラの検出の結果) と .ninja_deps を消す。
 // .ninja_deps が無いと ninja は依存を記録する object を全部作り直すので、
 // header の依存を持たずに作られた object も残らない。
 func resetCompilerDetection(outDir string) error {
@@ -45,7 +45,7 @@ func resetCompilerDetection(outDir string) error {
 	return nil
 }
 
-// isCMakeVersionDir は "3.31.6-msvc6" のような、版の数字で始まる名前かを見る。
+// isCMakeVersionDir は "3.31.6-msvc6" のような、バージョンの数字で始まる名前かを見る。
 func isCMakeVersionDir(name string) bool {
 	return len(name) > 0 && name[0] >= '0' && name[0] <= '9' && strings.Contains(name, ".")
 }

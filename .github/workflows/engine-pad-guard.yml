@@ -71,7 +71,7 @@ jobs:
 
           $t = "${{ matrix.template }}"
           if ($t) { mitiru new guard_game -t $t } else { mitiru new guard_game }
-          # dispatch で版が指定されたら mitiru.toml の pin を上書きする (publish 直後の tag の確認用)。
+          # dispatch でバージョンが指定されたら mitiru.toml の pin を上書きする (publish 直後の tag の確認用)。
           $v = "${{ github.event.inputs.engine_version }}"
           if ($v) {
             $toml = 'guard_game/mitiru.toml'

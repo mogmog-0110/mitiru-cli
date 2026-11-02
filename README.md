@@ -105,7 +105,7 @@ my-game/
 [project]
 name = "my-game"
 version = "0.1.0"
-engine = "0.49.0"       # 取得する MitiruEngine のバージョン（タグまたは "main"）。mitiru new は CLI の既定の版を書く
+engine = "0.49.0"       # 取得する MitiruEngine のバージョン（タグまたは "main"）。mitiru new は CLI の既定のバージョンを書く
 
 [window]
 title = "my-game"
@@ -154,7 +154,7 @@ source = "assets/level.obj"         # .obj / .gltf / .glb
 | `navbake` | `mitiru_nav_bake` (Recast、`nav` を含む) | DLL の中でメッシュからナビメッシュを焼く |
 | `jolt` | なし (engine が Jolt 付きなら本体に入っている) | Jolt を使う DLL で、engine が Jolt 付きかを configure の時点で確かめる |
 | `online` | なし (`mitiru_host` に `mitiru_rollback_net` を link し、engine を `-DMITIRU_WITH_GEKKONET=ON` で作る) | オンライン協力プレイ (`mitiru_host --net`、`hud.net*`)。GekkoNet は静的ライブラリで、通信は Windows の Winsock なので、`mitiru dist` の配布物に足す DLL は無い |
-| `dawn` | なし (engine を `-DMITIRU_WITH_DAWN=ON` で作る。Dawn は静的に exe へ入る) | WebGPU (Dawn) の描画の層。D3D12 の無い PC で D3D11 に自動で落とす。engine が固定した版のビルド済み (約 114 MB) を、初回のビルドで `~/.mitiru/cache/dawn-<コミット>` へ取ってきて (SHA-256 を確かめる)、展開先を engine に渡す。用意は要らない。手元に展開した物を使うなら環境変数 `MITIRU_DAWN_DIR` で指す。ビルド済みは Release の CRT なので、Debug の構成では外して組み、1 行知らせる (Release と RelWithDebInfo では入る) |
+| `dawn` | なし (engine を `-DMITIRU_WITH_DAWN=ON` で作る。Dawn は静的に exe へ入る) | WebGPU (Dawn) の描画の層。D3D12 の無い PC で D3D11 に自動で落とす。engine が固定したバージョンのビルド済み (約 114 MB) を、初回のビルドで `~/.mitiru/cache/dawn-<コミット>` へ取ってきて (SHA-256 を確かめる)、展開先を engine に渡す。用意は要らない。手元に展開した物を使うなら環境変数 `MITIRU_DAWN_DIR` で指す。ビルド済みは Release の CRT なので、Debug の構成では外して組み、1 行知らせる (Release と RelWithDebInfo では入る) |
 | `onnx` | なし (engine を `-DMITIRU_WITH_ONNX=ON` で作る) | `NeuralStyle.hpp` / `NeuralDepth.hpp` (ONNX Runtime)。入れると `mitiru dist` の配布物に `onnxruntime.dll` と `DirectML.dll` が加わる (約 36 MB) |
 | `directml` | なし (engine を `-DMITIRU_WITH_DIRECTML=ON` で作る) | `Screen::enableNeuralFx` など、DX12 のフレームの中で DirectML を使う後処理。入れると配布物に `DirectML.dll` が加わる |
 | `effekseer` | なし (engine を `-DMITIRU_WITH_EFFEKSEER=ON` で作る。静的に host へ入る) | `.efkefc` を `drawModel` で描く。使わないゲームでは外れていて host が小さい |
@@ -228,7 +228,7 @@ assets/field.region.json     # 区画の world.json も全部焼く
 
 読めない資産が 1 つでもあれば (host の終了コード 4)、その資産を並べて dist を止める。そのまま配ると遊ぶ側でも読めないからだ。DX12 の GPU が無いなどで host が走れないときは、警告を出して cache 無しで続ける。`--no-bake` を付けると焼き込みを飛ばす。
 
-`[engine] features` に `dawn` がある project では、DX12 の後に Dawn の D3D11 (通常と互換の 2 通り) でも host を走らせ、Dawn のシェーダーの変換結果を同じ `data/shader_cache/` に残す。Dawn が読めない資産 (clod・world・region・焼いた光) は渡さず、モデルだけを渡す。Dawn の側が走れなくても警告だけで続く。cache の鍵は Dawn の版とシェーダーの内容で決まり、遊ぶ側の環境と合わなければその cache は使われず、普通に変換して自分の置き場に書く。
+`[engine] features` に `dawn` がある project では、DX12 の後に Dawn の D3D11 (通常と互換の 2 通り) でも host を走らせ、Dawn のシェーダーの変換結果を同じ `data/shader_cache/` に残す。Dawn が読めない資産 (clod・world・region・焼いた光) は渡さず、モデルだけを渡す。Dawn の側が走れなくても警告だけで続く。cache の鍵は Dawn のバージョンとシェーダーの内容で決まり、遊ぶ側の環境と合わなければその cache は使われず、普通に変換して自分の置き場に書く。
 
 ## コンパイルの cache (sccache)
 

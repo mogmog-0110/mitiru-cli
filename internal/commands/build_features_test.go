@@ -27,7 +27,7 @@ func TestResolveFeatures_DebugDropsDawnWithOneLine(t *testing.T) {
 	}
 }
 
-// Dawn の版を固定していない engine は、取得せず engine 自身の案内 (target が無い) に任せる。
+// Dawn のバージョンを固定していない engine は、取得せず engine 自身の案内 (target が無い) に任せる。
 func TestResolveFeatures_EngineWithoutPinKeepsDawn(t *testing.T) {
 	t.Setenv("MITIRU_CACHE_DIR", t.TempDir())
 	var out bytes.Buffer

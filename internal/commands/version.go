@@ -16,7 +16,7 @@ func newVersionCommand() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			fmt.Printf("mitiru %s (%s/%s)\n", cliVersion, runtime.GOOS, runtime.GOARCH)
 			fmt.Printf("mitiru new で作るプロジェクトは engine %s を使います。\n", defaultEngineVersion)
-			// build / run の成功時には更新を知らせないので、版を尋ねられたここで知らせる。
+			// build / run の成功時には更新を知らせないので、バージョンを尋ねられたここで知らせる。
 			maybeNotifyUpdates(projectEnginePin(), os.Stdout)
 			return nil
 		},

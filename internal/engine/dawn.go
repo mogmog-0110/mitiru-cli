@@ -19,7 +19,7 @@ var dawnReleaseBase = "https://github.com/google/dawn/releases/download"
 // DawnDirEnv は Dawn の展開先を手で指す環境変数。engine の cmake/MitiruDawn.cmake も同じ名前を読む。
 const DawnDirEnv = "MITIRU_DAWN_DIR"
 
-// ErrNoDawnPin は engine が Dawn の版を固定していない (src/dawn の無い古い engine)。
+// ErrNoDawnPin は engine が Dawn のバージョンを固定していない (src/dawn の無い古い engine)。
 // 取得はせず、engine 自身の「target が無い」案内に任せる。
 var ErrNoDawnPin = errors.New("engine has no cmake/dawn_version.cmake")
 
@@ -38,8 +38,8 @@ var dawnPinRe = func(name string) *regexp.Regexp {
 	return regexp.MustCompile(`set\(\s*MITIRU_DAWN_` + name + `\s+"([^"]+)"\s*\)`)
 }
 
-// readDawnPin は engine の cmake/dawn_version.cmake から、固定した版を読む。
-// 版の正は engine 側に 1 つだけ置き、CLI は写さない。
+// readDawnPin は engine の cmake/dawn_version.cmake から、固定したバージョンを読む。
+// バージョンの正は engine 側に 1 つだけ置き、CLI は写さない。
 func readDawnPin(engineRoot string) (dawnPin, error) {
 	data, err := os.ReadFile(filepath.Join(engineRoot, "cmake", "dawn_version.cmake"))
 	if err != nil {
@@ -56,7 +56,7 @@ func readDawnPin(engineRoot string) (dawnPin, error) {
 	}
 	pin := dawnPin{Tag: get("TAG"), Commit: get("COMMIT"), SHA256: strings.ToLower(get("ARCHIVE_SHA256"))}
 	if pin.Tag == "" || len(pin.Commit) < dawnDirCommitLen || len(pin.SHA256) != 64 {
-		return dawnPin{}, fmt.Errorf("%s/cmake/dawn_version.cmake から Dawn の版 (TAG・COMMIT・ARCHIVE_SHA256) を読めません",
+		return dawnPin{}, fmt.Errorf("%s/cmake/dawn_version.cmake から Dawn のバージョン (TAG・COMMIT・ARCHIVE_SHA256) を読めません",
 			engineRoot)
 	}
 	return pin, nil
@@ -72,7 +72,7 @@ func dawnDirUsable(dir string) bool {
 	return true
 }
 
-// EnsureDawn は engine が固定した版の Dawn のビルド済みの展開先を返す。無ければ取得して
+// EnsureDawn は engine が固定したバージョンの Dawn のビルド済みの展開先を返す。無ければ取得して
 // ~/.mitiru/cache/dawn-<コミット> に展開する (engine の取得と同じ cache)。探す順は、
 // 環境変数 MITIRU_DAWN_DIR、cache、取得。progress には取得のときだけ書く。
 func EnsureDawn(engineRoot string, progress io.Writer) (string, error) {
@@ -166,9 +166,9 @@ func downloadVerified(pin dawnPin, dst io.Writer, progress io.Writer) error {
 		return fmt.Errorf("%s を取得できません (%s)。", url, resp.Status)
 	}
 	if resp.ContentLength > 0 {
-		fmt.Fprintf(progress, "Dawn (%d MB) をダウンロードしています。この版では初回だけです。\n", resp.ContentLength>>20)
+		fmt.Fprintf(progress, "Dawn (%d MB) をダウンロードしています。このバージョンでは初回だけです。\n", resp.ContentLength>>20)
 	} else {
-		fmt.Fprintln(progress, "Dawn をダウンロードしています。この版では初回だけです。")
+		fmt.Fprintln(progress, "Dawn をダウンロードしています。このバージョンでは初回だけです。")
 	}
 	h := sha256.New()
 	if _, err := io.Copy(io.MultiWriter(dst, h), resp.Body); err != nil {

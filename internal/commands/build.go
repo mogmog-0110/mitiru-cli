@@ -263,7 +263,7 @@ func resolveBuildConfig(cfg *config.ProjectConfig) string {
 
 // resolveFeatures は [engine] features を、この構成で組める形にして返す。
 // Debug の構成では Dawn を外して 1 行だけ知らせる。Release 系で dawn が残っているときは
-// 固定した版の Dawn を用意し、その場所を返す (環境変数も手作業も要らない)。
+// 固定したバージョンの Dawn を用意し、その場所を返す (環境変数も手作業も要らない)。
 func resolveFeatures(cfg *config.ProjectConfig, buildConfig, engineRoot string, stdout io.Writer) (features []string, dawnDir string, err error) {
 	features, dropped := config.DropForConfig(cfg.Engine.Features, buildConfig)
 	if len(dropped) > 0 {

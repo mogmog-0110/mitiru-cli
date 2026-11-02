@@ -121,7 +121,7 @@ func TestConfigure_NavSourceMissingFileFails(t *testing.T) {
 	}
 }
 
-// navbake のソースを持たない古い engine では、configure で版の上げ方を出す。
+// navbake のソースを持たない古い engine では、configure でバージョンの上げ方を出す。
 func TestConfigure_NavSourceOnOldEngineFailsAtConfigure(t *testing.T) {
 	projectRoot, engineRoot := fakeProject(t)
 	writeFile(t, filepath.Join(projectRoot, "assets", "level.obj"), "v 0 0 0\n")

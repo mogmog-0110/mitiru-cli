@@ -2,7 +2,7 @@ package commands
 
 // bisect.go ── 決定論バイセクト。回帰を入れた最初の DLL スナップショットを二分探索で
 // 特定し壊れた field も出す (engine tools/replay_bisect.py の Go 昇格)。
-// Python 版と違い、現行 deployed DLL を退避→終了時に自動復元する。
+// Python 実装と違い、現行 deployed DLL を退避→終了時に自動復元する。
 
 import (
 	"fmt"
@@ -112,7 +112,7 @@ func runBisect() error {
 	}
 	art := result.Artifacts
 
-	// 現行 deployed DLL を退避し、bisect 終了時に必ず復元 (Python 版の手動 cp を不要に)。
+	// 現行 deployed DLL を退避し、bisect 終了時に必ず復元 (Python 実装の手動 cp を不要に)。
 	orig, err := os.ReadFile(art.DllPath)
 	if err != nil {
 		return fmt.Errorf("bisect: read deployed dll %s: %w", art.DllPath, err)

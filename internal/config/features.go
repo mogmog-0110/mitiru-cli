@@ -67,7 +67,7 @@ var engineFeatures = []EngineFeature{
 		// WebGPU (Dawn) の描画の層。Dawn は静的リンクで exe に入るので、配布物に足す DLL は無い。
 		// engine は Dawn の展開先を環境変数 MITIRU_DAWN_DIR (または cache の同名の変数) から読む。
 		// Dawn のビルド済みは Release の CRT なので、Debug の構成では使えない。
-		// mitiru-cli が固定した版を cache へ取ってきて MITIRU_DAWN_DIR を渡すので、利用者は何も用意しない。
+		// mitiru-cli が固定したバージョンを cache へ取ってきて MITIRU_DAWN_DIR を渡すので、利用者は何も用意しない。
 		// Debug の構成では外して組む (Dawn は D3D12 が無い PC への逃げ道で、開発の Debug では要らない)。
 		Name: "dawn", Target: "mitiru_dawn", Link: false, ReleaseCRTOnly: true,
 		Option:  "MITIRU_WITH_DAWN",

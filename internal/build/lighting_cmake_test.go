@@ -83,7 +83,7 @@ func TestConfigure_LightingSourceErrors(t *testing.T) {
 	}
 }
 
-// mitiru_lightbake のソースを持たない古い engine では、configure で版の上げ方を出す。
+// mitiru_lightbake のソースを持たない古い engine では、configure でバージョンの上げ方を出す。
 func TestConfigure_LightingSourceOnOldEngineFailsAtConfigure(t *testing.T) {
 	projectRoot, engineRoot := fakeProject(t)
 	writeFile(t, filepath.Join(projectRoot, "assets", "a.lighting.json"), `{"boxes": []}`)

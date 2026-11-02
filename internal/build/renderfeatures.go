@@ -12,7 +12,7 @@ import (
 // BuildFlag を組み込む [engine] features の名前も engine が持つ。
 const renderFeaturesJSON = "include/mitiru/render/render_features.json"
 
-// renderFeaturesSchema はこの CLI が読める JSON の版。engine が上げたら、CLI も読み方を直す。
+// renderFeaturesSchema はこの CLI が読める JSON のバージョン。engine が上げたら、CLI も読み方を直す。
 const renderFeaturesSchema = 1
 
 // featureRowInfo は engine の機能の表の 1 行のうち、宣言の検査に要る部分。
@@ -39,7 +39,7 @@ func readFeatureTable(engineRoot string) ([]featureRowInfo, error) {
 		return nil, fmt.Errorf("%s: JSON を読めません: %w", renderFeaturesJSON, err)
 	}
 	if file.Schema != renderFeaturesSchema {
-		return nil, fmt.Errorf("%s: schema %d はこの mitiru-cli が読める %d と違います。engine と mitiru-cli の版をそろえてください",
+		return nil, fmt.Errorf("%s: schema %d はこの mitiru-cli が読める %d と違います。engine と mitiru-cli のバージョンをそろえてください",
 			renderFeaturesJSON, file.Schema, renderFeaturesSchema)
 	}
 	if len(file.Rows) == 0 {

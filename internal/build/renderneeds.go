@@ -28,7 +28,7 @@ func resolveRenderNeeds(opts Options, cmakeSrcDir string) (*renderNeedsExport, [
 	table, err := readFeatureTable(opts.EngineRoot)
 	if os.IsNotExist(err) {
 		if opts.Stderr != nil {
-			fmt.Fprintf(opts.Stderr, "警告: この engine は 3D 描画の機能の表 (render_features.json) を持たず、[render] needs を読めないので、宣言は埋めません。project.engine を新しい版にしてください\n")
+			fmt.Fprintf(opts.Stderr, "警告: この engine は 3D 描画の機能の表 (render_features.json) を持たず、[render] needs を読めないので、宣言は埋めません。project.engine を新しいバージョンにしてください\n")
 		}
 		return nil, nil, nil
 	}
@@ -91,7 +91,7 @@ func buildFeatureOf(row featureRowInfo) (string, error) {
 	}
 	feature := *row.EngineFeature
 	if _, err := config.ResolveFeatures([]string{feature}); err != nil {
-		return "", fmt.Errorf("[render] needs: %s は部品 %s (feature %q) を要りますが、この mitiru-cli は知りません。mitiru-cli を新しい版にしてください",
+		return "", fmt.Errorf("[render] needs: %s は部品 %s (feature %q) を要りますが、この mitiru-cli は知りません。mitiru-cli を新しいバージョンにしてください",
 			row.Key, row.Build, feature)
 	}
 	return feature, nil

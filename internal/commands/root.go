@@ -16,7 +16,7 @@ const (
 	defaultEngineVersion = "0.49.0"
 )
 
-// cliVersion は mitiru CLI 自身の版。goreleaser が release 時に ldflags
+// cliVersion は mitiru CLI 自身のバージョン。goreleaser が release 時に ldflags
 // (-X .../commands.cliVersion=<tag>) で上書きする。手元 build では既定値のまま。
 // self-update がこの値と最新 release を比較する (ADR 0010)。
 var cliVersion = "0.12.8"

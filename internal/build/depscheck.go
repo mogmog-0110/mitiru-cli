@@ -100,8 +100,8 @@ func verifyDepsRecorded(vcvars, outDir string, since time.Time, opts Options) er
 		len(bad), bad[0])
 }
 
-// cachedMakeProgram は configure が選んだ ninja を返す。VS が複数あると PATH 上の ninja の版が違い、
-// 別の版で `-t deps` を引くと .ninja_log を「古い」と捨てて全部を作り直させてしまう。
+// cachedMakeProgram は configure が選んだ ninja を返す。VS が複数あると PATH 上の ninja のバージョンが違い、
+// 別のバージョンで `-t deps` を引くと .ninja_log を「古い」と捨てて全部を作り直させてしまう。
 func cachedMakeProgram(outDir string) string {
 	data, err := os.ReadFile(filepath.Join(outDir, "CMakeCache.txt"))
 	if err != nil {

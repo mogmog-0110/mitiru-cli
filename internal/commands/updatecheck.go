@@ -40,7 +40,7 @@ func updateCachePath() (string, error) {
 }
 
 // maybeNotifyUpdates は enginePin (project の mitiru.toml engine) と cliVersion を、
-// キャッシュ済み (または今 fetch した) 最新版と比べ、新しければ footer を出す。
+// キャッシュ済み (または今 fetch した) 最新バージョンと比べ、新しければ footer を出す。
 // 失敗・抑制時は何もしない (build/run を妨げない)。
 func maybeNotifyUpdates(enginePin string, w io.Writer) {
 	if !updateChecksEnabled() {
@@ -57,8 +57,8 @@ func maybeNotifyUpdates(enginePin string, w io.Writer) {
 	}
 }
 
-// updateNotices は現在版と最新版を比べ、表示すべき footer 行を返す (純関数)。
-// 最新版が空 / 解析不能 / 現在版以下なら、その対象は黙る。
+// updateNotices は現在のバージョンと最新バージョンを比べ、表示すべき footer 行を返す (純関数)。
+// 最新バージョンが空 / 解析不能 / 現在のバージョン以下なら、その対象は黙る。
 func updateNotices(enginePin, latestEngine, cliCur, latestCLI string) []string {
 	var lines []string
 	if cur, ok := engine.ParseSemver(enginePin); ok {

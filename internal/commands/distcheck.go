@@ -184,7 +184,7 @@ func exitCodeText(code uint32) string {
 	case 0xC0000135:
 		return "host が起動する前に止まりました。必要な DLL がありません (0xC0000135)。"
 	case 0xC0000139, 0xC000007B:
-		return fmt.Sprintf("host が起動する前に止まりました。DLL の版か形式が合いません (0x%08X)。", code)
+		return fmt.Sprintf("host が起動する前に止まりました。DLL のバージョンか形式が合いません (0x%08X)。", code)
 	default:
 		return fmt.Sprintf("host が終了コード %d (0x%08X) で終わりました。", int32(code), code)
 	}

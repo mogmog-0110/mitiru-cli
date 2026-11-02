@@ -22,7 +22,7 @@ func composeNotices(projectRoot, dataDir string) ([]byte, error) {
 	engine, err := os.ReadFile(filepath.Join(dataDir, distNoticesFile))
 	if errors.Is(err, fs.ErrNotExist) {
 		return nil, fmt.Errorf("dist: engine の %s が deploy dir に無い。engine が使うライブラリの"+
-			"ライセンス表記を付けずに配ることになるので止める。engine を新しい版へ上げるか、"+
+			"ライセンス表記を付けずに配ることになるので止める。engine を新しいバージョンへ上げるか、"+
 			"engine のビルドが表記を生成できるよう Python を入れてビルドし直す", distNoticesFile)
 	}
 	if err != nil {

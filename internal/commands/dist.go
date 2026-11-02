@@ -22,7 +22,7 @@ var (
 	distBat  bool
 	distPack bool
 	distOne  bool
-	// distDebug は Debug ビルドを配る (テスト機で落ちた所を追うため)。Debug 版ランタイムは再頒布できない
+	// distDebug は Debug ビルドを配る (テスト機で落ちた所を追うため)。Debug ランタイムは再頒布できない
 	distDebug bool
 	// distCheck は作った配布物を一時フォルダへ写し、素の PC に近い環境で headless に走らせて確かめる
 	distCheck bool
@@ -212,13 +212,13 @@ func runDist() error {
 
 	// dist 専用ビルド: コンソール窓を出さない GUI host にする。dev の build/out を
 	// 汚さないよう別 out dir (configure-time オプションの thrash 回避)。
-	// 既定は Release。Debug は別の out dir にして、Release の配布物へ Debug 版ランタイムが混ざらないようにする
+	// 既定は Release。Debug は別の out dir にして、Release の配布物へ Debug ランタイムが混ざらないようにする
 	buildRelease = !distDebug
 	buildOutDir = filepath.Join(projectRoot, "build", "dist-out")
 	if distDebug {
 		buildConfigName = "Debug"
 		buildOutDir += "-debug"
-		fmt.Println("--debug は Debug ビルドを配布物にします。Debug 版のランタイムは再頒布できないので、自分のテスト機だけで使ってください。")
+		fmt.Println("--debug は Debug ビルドを配布物にします。Debug のランタイムは再頒布できないので、自分のテスト機だけで使ってください。")
 	}
 	buildExtraDefines = []string{"MITIRU_HOST_GUI=ON"}
 	defer func() { buildOutDir = ""; buildExtraDefines = nil }() // 後続コマンドへ漏らさない

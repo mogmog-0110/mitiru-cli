@@ -111,7 +111,7 @@ func runUpdate(checkOnly, assumeYes bool) error {
 	if _, err := engine.EnsureSource(latest.String(), os.Stdout); err != nil {
 		return fmt.Errorf("engine %s を取得できません (%w)。mitiru.toml はもう書き換えたので、mitiru build で取得し直せます。", latest, err)
 	}
-	fmt.Printf("%s を engine = \"%s\" にしました。mitiru build でこの版を使ってビルドします。\n",
+	fmt.Printf("%s を engine = \"%s\" にしました。mitiru build でこのバージョンを使ってビルドします。\n",
 		config.ManifestFilename, latest)
 	return nil
 }

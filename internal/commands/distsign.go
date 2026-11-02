@@ -83,7 +83,7 @@ func loadSignConfig(getenv func(string) string, lookPath func(string) (string, e
 	return cfg, nil
 }
 
-// findSigntool は MITIRU_SIGNTOOL、PATH、Windows SDK の最新版の順に signtool.exe を探す。
+// findSigntool は MITIRU_SIGNTOOL、PATH、Windows SDK の最新バージョンの順に signtool.exe を探す。
 func findSigntool(getenv func(string) string, lookPath func(string) (string, error)) (string, error) {
 	if explicit := strings.TrimSpace(getenv(envSigntool)); explicit != "" {
 		if _, err := os.Stat(explicit); err != nil {
@@ -100,10 +100,10 @@ func findSigntool(getenv func(string) string, lookPath func(string) (string, err
 	}
 	return "", fmt.Errorf("dist --sign: signtool.exe が見つからない。%s (未設定)、PATH、%s を探した。"+
 		"signtool は Windows SDK に入っているので、SDK を入れるか %s で場所を指す",
-		envSigntool, filepath.Join(sdkBin, "<版>", "x64", "signtool.exe"), envSigntool)
+		envSigntool, filepath.Join(sdkBin, "<バージョン>", "x64", "signtool.exe"), envSigntool)
 }
 
-// newestSDKSigntool は sdkBin/<版>/x64/signtool.exe のうち版の一番新しいものを返す。無ければ空。
+// newestSDKSigntool は sdkBin/<バージョン>/x64/signtool.exe のうちバージョンの一番新しいものを返す。無ければ空。
 func newestSDKSigntool(sdkBin string) string {
 	entries, err := os.ReadDir(sdkBin)
 	if err != nil {

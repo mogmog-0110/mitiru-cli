@@ -6,8 +6,8 @@ import (
 	"testing"
 )
 
-// README の mitiru.toml の例は、mitiru new が書く engine の版と同じであること。
-// 既定の版を上げたときに README の例だけ古いまま残らないようにする。
+// README の mitiru.toml の例は、mitiru new が書く engine のバージョンと同じであること。
+// 既定のバージョンを上げたときに README の例だけ古いまま残らないようにする。
 func TestReadmeManifestExamplePinsTheDefaultEngine(t *testing.T) {
 	b, err := os.ReadFile("../../README.md")
 	if err != nil {

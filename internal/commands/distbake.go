@@ -211,7 +211,7 @@ func (j distBakeJob) bakeDX12(entries []string, source string, out io.Writer) er
 
 // bakeDawn は Dawn の D3D11 で host を走らせ、パイプラインの変換結果を同じ置き場へ残す。
 // DX12 だけが読める資産 (clod・world・region・焼いた光) は Dawn では読めず、読めないのは異常でないので、モデルだけを渡す。
-// 鍵は Dawn の版と GPU の組で決まる。遊ぶ側の GPU と合わなければ cache は使われないだけで、読み込みは変換し直す。
+// 鍵は Dawn のバージョンと GPU の組で決まる。遊ぶ側の GPU と合わなければ cache は使われないだけで、読み込みは変換し直す。
 func (j distBakeJob) bakeDawn(entries []string, out io.Writer) {
 	models := dawnBakeEntries(entries)
 	for i, pass := range distBakeDawnPasses {
