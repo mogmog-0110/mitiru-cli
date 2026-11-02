@@ -77,14 +77,49 @@ func TestResolveFeatures_Video(t *testing.T) {
 }
 
 func TestResolveFeatures_VideoHints(t *testing.T) {
-	for _, name := range []string{"mp4", "h264"} {
+	for _, name := range []string{"mp4", "h264", "mf"} {
 		_, err := ResolveFeatures([]string{name})
-		if err == nil || !strings.Contains(err.Error(), "MPEG-1") {
-			t.Errorf("%s: want a hint that video is MPEG-1 only, got %v", name, err)
+		if err == nil || !strings.Contains(err.Error(), `use "video_mf"`) {
+			t.Errorf("%s: want a hint toward video_mf, got %v", name, err)
 		}
 	}
-	if _, err := ResolveFeatures([]string{"movie"}); err == nil || !strings.Contains(err.Error(), `use "video"`) {
-		t.Errorf("movie: want a hint toward video, got %v", err)
+	for _, name := range []string{"movie", "webm", "av1"} {
+		if _, err := ResolveFeatures([]string{name}); err == nil || !strings.Contains(err.Error(), `use "video"`) {
+			t.Errorf("%s: want a hint toward video, got %v", name, err)
+		}
+	}
+}
+
+// H.264 の MP4 は video とは別の feature。両方書いても並びは表の順で、option は独立に ON になる
+func TestResolveFeatures_VideoMf(t *testing.T) {
+	got, err := ResolveFeatures([]string{"video_mf", "Video"})
+	if err != nil || len(got) != 2 {
+		t.Fatalf("ResolveFeatures: %v %v", got, err)
+	}
+	if got[0].Name != "video" || got[1].Name != "video_mf" {
+		t.Errorf("order = %s, %s; want the table order", got[0].Name, got[1].Name)
+	}
+	mf := got[1]
+	if mf.Option != "MITIRU_WITH_VIDEO_MF" || mf.Target != "mitiru_video_mf" || mf.Link || mf.Host {
+		t.Errorf("video_mf feature = %+v", mf)
+	}
+	state := func(sel []EngineFeature, name string) (on, found bool) {
+		for _, o := range FeatureOptions(sel) {
+			if o.Name == name {
+				return o.On, true
+			}
+		}
+		return false, false
+	}
+	if on, found := state(nil, "MITIRU_WITH_VIDEO_MF"); !found || on {
+		t.Errorf("MITIRU_WITH_VIDEO_MF must be forced OFF without a declaration (found=%v on=%v)", found, on)
+	}
+	only, _ := ResolveFeatures([]string{"video_mf"})
+	if on, _ := state(only, "MITIRU_WITH_VIDEO_MF"); !on {
+		t.Error("MITIRU_WITH_VIDEO_MF must be ON with the declaration")
+	}
+	if on, _ := state(only, "MITIRU_WITH_VIDEO"); on {
+		t.Error("video_mf alone must not turn MITIRU_WITH_VIDEO on")
 	}
 }
 

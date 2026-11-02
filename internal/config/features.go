@@ -98,11 +98,18 @@ var engineFeatures = []EngineFeature{
 		Missing: "Live2D needs the Cubism SDK for Native unpacked as external/cubism/CubismSdkForNative-*",
 	},
 	{
-		// MPEG-1 (.mpg) の動画を Screen::drawVideo で映す。復号の pl_mpeg は 1 ヘッダーで、host が約 31 KB 太る。
+		// MPEG-1 (.mpg) と AV1 (.webm) の動画を Screen::drawVideo で映す。MPEG-1 の pl_mpeg は 1 ヘッダーで、host が約 31 KB 太る。
 		// 動画を使わないゲームの出荷物には、復号器も pl_mpeg の表記も入らない。
 		Name: "video", Target: "mitiru_video", Link: false,
 		Option:  "MITIRU_WITH_VIDEO",
 		Missing: "video needs an engine newer than v0.47 (it adds MITIRU_WITH_VIDEO and external/pl_mpeg)",
+	},
+	{
+		// H.264 の MP4 (.mp4) を Media Foundation で映す。OS の部品を使うので同梱物は増えないが、Windows だけ。
+		// 「video」とは別に選べ、両方書くと engine が中身で復号器を決める。
+		Name: "video_mf", Target: "mitiru_video_mf", Link: false,
+		Option:  "MITIRU_WITH_VIDEO_MF",
+		Missing: "video_mf needs an engine with MITIRU_WITH_VIDEO_MF (ADR 0114, Windows only)",
 	},
 	{
 		// RmlUi の <svg src="x.svg"/> と svg() の decorator。lunasvg は host の exe に静的に入るので、使わないゲームは外す。
@@ -176,10 +183,13 @@ var featureHints = map[string]string{
 	"neural":   `use "onnx" (NeuralStyle / NeuralDepth) or "directml" (neural post-process in the DX12 frame)`,
 	"efk":      `use "effekseer"`,
 	"live2d":   `use "cubism"`,
-	"mpeg":     `use "video" (MPEG-1 .mpg through Screen::drawVideo)`,
-	"movie":    `use "video" (MPEG-1 .mpg through Screen::drawVideo)`,
-	"mp4":      `video plays MPEG-1 (.mpg) only, with the feature "video"; H.264 / MP4 is not supported`,
-	"h264":     `video plays MPEG-1 (.mpg) only, with the feature "video"; H.264 / MP4 is not supported`,
+	"mpeg":     `use "video" (MPEG-1 .mpg and AV1 .webm through Screen::drawVideo)`,
+	"movie":    `use "video" (MPEG-1 .mpg and AV1 .webm through Screen::drawVideo)`,
+	"webm":     `use "video" (MPEG-1 .mpg and AV1 .webm through Screen::drawVideo)`,
+	"av1":      `use "video" (MPEG-1 .mpg and AV1 .webm through Screen::drawVideo)`,
+	"mp4":      `use "video_mf" (H.264 .mp4 through Media Foundation, Windows only)`,
+	"h264":     `use "video_mf" (H.264 .mp4 through Media Foundation, Windows only)`,
+	"mf":       `use "video_mf" (H.264 .mp4 through Media Foundation, Windows only)`,
 	"lunasvg":  `use "svg" (RmlUi <svg src> and svg() decorator)`,
 }
 
