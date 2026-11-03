@@ -105,7 +105,7 @@ my-game/
 [project]
 name = "my-game"
 version = "0.1.0"
-engine = "0.49.0"       # 取得する MitiruEngine のバージョン（タグまたは "main"）。mitiru new は CLI の既定のバージョンを書く
+engine = "0.50.0"       # 取得する MitiruEngine のバージョン（タグまたは "main"）。mitiru new は CLI の既定のバージョンを書く
 
 [window]
 title = "my-game"
