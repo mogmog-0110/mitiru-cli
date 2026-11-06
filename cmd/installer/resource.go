@@ -12,7 +12,7 @@ package main
 // LOCALAPPDATA にしか書き込まない (admin 不要) 場合でも同様。埋め込んだ
 // manifest の asInvoker level がこの heuristic を上書きし、double-click flow が
 // 不要な UAC prompt を出さないようにする。.syso が無いと
-// MitiruEngine_Installer.exe は起動時に admin を要求し、docs/INSTALLER.md の
+// installer は起動時に admin を要求し、docs/INSTALLER.md の
 // 「admin 不要」 約束を破ってしまう。
 //
 // installer.manifest を編集したら再生成すること:

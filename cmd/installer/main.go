@@ -4,8 +4,8 @@
 // `mitiru new my_game && mitiru run` まで ~5 分で立ち上げる one-shot bootstrap。
 //
 // Spec: docs/INSTALLER.md (engine repo)。
-// 配布: MitiruEngine release zip 内に mitiru.exe と並べて同梱される。
-// ファイルを double-click して prompt に従う。
+// 配布: mitiru-cli の Release に installer_windows_amd64.exe として添付される。
+// mitiru_windows_amd64.exe (または mitiru.exe) を隣に置き、double-click して prompt に従う。
 package main
 
 import (
@@ -22,7 +22,10 @@ import (
 const usage = `MitiruEngine Installer
 
 USAGE:
-  MitiruEngine_Installer.exe [flags]
+  installer_windows_amd64.exe [flags]
+
+隣の mitiru.exe か mitiru_windows_amd64.exe (Release の添付の名前) を
+--target-dir へ mitiru.exe として写し、PATH に足します。
 
 検出: install 済の component は default で skip されます。各 component を
 独立に制御したい場合は対応する flag を指定。

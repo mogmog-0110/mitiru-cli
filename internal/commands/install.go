@@ -7,8 +7,8 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// install command は standalone の MitiruEngine_Installer.exe ロジックを wrap し、
-// 既に mitiru が PATH にあるユーザーが release zip 内の installer .exe を探さずに
+// install command は standalone の installer_windows_amd64.exe と同じロジックを wrap し、
+// Release から mitiru だけ落としたユーザーが installer を別に探さずに
 // `mitiru install` (修復は `mitiru install --force`) を実行できるようにする。
 // docs/INSTALLER.md 参照。
 func newInstallCommand() *cobra.Command {
@@ -18,7 +18,7 @@ func newInstallCommand() *cobra.Command {
 		Use:   "install",
 		Short: "Bootstrap a fresh machine (MSVC + mitiru.exe + PATH + pre-cache)",
 		Long: `'mitiru install' runs the same bootstrap as the standalone
-MitiruEngine_Installer.exe ships in the release zip: install MSVC Build
+installer_windows_amd64.exe on the Release page: install MSVC Build
 Tools 2022 via winget, deploy mitiru.exe, append PATH, pre-cache the
 engine source, and (best-effort) enable Windows LongPaths.
 
