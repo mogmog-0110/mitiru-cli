@@ -40,7 +40,7 @@ FLAGS:
   --yes, -y               実行前 prompt を skip (CI 用)
   --help, -h              この help
 
-詳しい仕様: https://github.com/mogmog-0110/MitiruEngine/blob/main/docs/INSTALLER.md
+詳しい手順: https://github.com/mogmog-0110/MitiruEngine/blob/main/docs/GETTING_STARTED.md
 `
 
 func main() {

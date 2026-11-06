@@ -31,7 +31,7 @@ Examples:
   mitiru install --force                    # repair install (re-runs everything)
   mitiru install --skip-deploy --skip-pathenv  # only set up MSVC + pre-cache
 
-Spec: https://github.com/mogmog-0110/MitiruEngine/blob/main/docs/INSTALLER.md`,
+Guide: https://github.com/mogmog-0110/MitiruEngine/blob/main/docs/GETTING_STARTED.md`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return install.Run(opts)
 		},

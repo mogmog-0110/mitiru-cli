@@ -315,5 +315,5 @@ func printDone(opts Options) {
 	fmt.Fprintln(opts.Stdout, "    cd my_game")
 	fmt.Fprintln(opts.Stdout, "    mitiru run")
 	fmt.Fprintln(opts.Stdout)
-	fmt.Fprintln(opts.Stdout, "うまくいかないときは https://github.com/mogmog-0110/MitiruEngine/blob/main/docs/FIRST_TOUCH.md を見てください。")
+	fmt.Fprintln(opts.Stdout, "うまくいかないときは https://github.com/mogmog-0110/MitiruEngine/blob/main/docs/GETTING_STARTED.md を見てください。")
 }
