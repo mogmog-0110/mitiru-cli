@@ -10,21 +10,18 @@ import (
 	"path/filepath"
 )
 
-// deployMitiru は installer の隣 (同じ release zip 内) にある `mitiru.exe`
-// を opts.TargetDir へ copy する。
+// deployMitiru は installer の隣にある mitiru の実行ファイルを opts.TargetDir へ
+// mitiru.exe として copy する。
 //
-// source の特定: installer.exe と mitiru.exe は release zip 内で隣り合って
-// 配布されるので、os.Executable() + "/../mitiru.exe" が canonical なパス。
-// installer を `go run ./cmd/installer` から起動した場合、このパスは実在の
-// .exe に解決しない — その場合は cwd を見るフォールバックを行い、開発時の
-// `--dry-run` も動くようにする。
+// installer を `go run ./cmd/installer` から起動した場合、隣は一時ディレクトリで
+// 何も無いので、cwd も見て開発時の `--dry-run` も動くようにする。
 func deployMitiru(opts Options) error {
 	src, srcErr := findMitiruSource()
 	dst := filepath.Join(opts.TargetDir, "mitiru.exe")
 
 	if opts.DryRun {
 		if srcErr != nil {
-			fmt.Fprintln(opts.Stdout, "  source: (見つかりません。release の zip では同じフォルダの mitiru.exe を写します)")
+			fmt.Fprintln(opts.Stdout, "  source: (見つかりません。installer と同じフォルダの mitiru.exe か mitiru_windows_amd64.exe を写します)")
 		} else {
 			fmt.Fprintf(opts.Stdout, "  source: %s\n", src)
 		}
@@ -50,23 +47,32 @@ func deployMitiru(opts Options) error {
 	return nil
 }
 
+// mitiruSourceNames は探す名前を優先順に並べたもの。Release の添付は
+// mitiru_windows_amd64.exe なので、落としたままの名前でも拾えるようにする。
+var mitiruSourceNames = []string{"mitiru.exe", "mitiru_windows_amd64.exe"}
+
 func findMitiruSource() (string, error) {
-	// まず installer の隣を試す (release-zip レイアウト)。
+	var dirs []string
+	// installer の隣を先に見て、次に cwd (`go run` での開発時実行) を見る。
 	if exe, err := os.Executable(); err == nil {
-		cand := filepath.Join(filepath.Dir(exe), "mitiru.exe")
-		if st, err := os.Stat(cand); err == nil && !st.IsDir() {
-			return cand, nil
+		dirs = append(dirs, filepath.Dir(exe))
+	}
+	if cwd, err := os.Getwd(); err == nil {
+		dirs = append(dirs, cwd)
+	}
+	return findMitiruSourceIn(dirs)
+}
+
+func findMitiruSourceIn(dirs []string) (string, error) {
+	for _, dir := range dirs {
+		for _, name := range mitiruSourceNames {
+			cand := filepath.Join(dir, name)
+			if st, err := os.Stat(cand); err == nil && !st.IsDir() {
+				return cand, nil
+			}
 		}
 	}
-	// cwd にフォールバック (`go run` での開発時実行)。
-	cwd, err := os.Getwd()
-	if err == nil {
-		cand := filepath.Join(cwd, "mitiru.exe")
-		if st, err := os.Stat(cand); err == nil && !st.IsDir() {
-			return cand, nil
-		}
-	}
-	return "", errors.New("mitiru.exe が見つかりません (installer と同じフォルダに置いてください)")
+	return "", errors.New("mitiru.exe が見つかりません (Release から落とした mitiru_windows_amd64.exe を installer と同じフォルダに置いてください)")
 }
 
 func copyFile(src, dst string) error {
