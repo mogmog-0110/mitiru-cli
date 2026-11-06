@@ -4,6 +4,21 @@ MitiruEngine のプロジェクトを管理する CLI です。`CMakeLists.txt` 
 
 ## インストール
 
+### Windows: Release から
+
+PowerShell かコマンドプロンプトで、好きなフォルダから次の 2 行を実行します。Go は要りません。
+
+```bash
+curl.exe -L -o mitiru.exe https://github.com/mogmog-0110/mitiru-cli/releases/latest/download/mitiru_windows_amd64.exe
+.\mitiru.exe install
+```
+
+`install` は MSVC Build Tools を winget で入れ、自分と同じフォルダの `mitiru.exe` を `%LOCALAPPDATA%\Programs\MitiruEngine\bin\` に写して `PATH` に足します。実行前に内容を一覧で見せるので、確かめたいだけなら `.\mitiru.exe install --dry-run` を使います。済んだら新しいターミナルを開いて `mitiru version` を実行します。
+
+Release の `installer_windows_amd64.exe` も同じ処理をします。使うときは、同じフォルダに `mitiru.exe` か `mitiru_windows_amd64.exe` を置きます。
+
+### Go から
+
 ```bash
 go install github.com/mogmog-0110/mitiru-cli/cmd/mitiru@latest
 ```
