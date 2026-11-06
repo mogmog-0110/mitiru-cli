@@ -97,7 +97,7 @@ func main() {
 // console が "閉じます" の N 行で埋まらない。
 func autoCloseCountdown(seconds int) {
 	for i := seconds; i > 0; i-- {
-		fmt.Fprintf(os.Stdout, "\rこの窓は %d 秒後に閉じます。", i)
+		fmt.Fprintf(os.Stdout, "\rこのウィンドウは %d 秒後に閉じます。", i)
 		time.Sleep(1 * time.Second)
 	}
 	fmt.Fprintln(os.Stdout)
