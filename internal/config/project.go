@@ -83,6 +83,9 @@ type BuildSection struct {
 	// Bake は true なら `mitiru build` の後に自動で `mitiru bake --all` を回す
 	// (★4-1、配置 JSON を POD へ焼いて起動時の再現性を上げる)。既定 false (opt-in)。
 	Bake bool `toml:"bake"`
+	// Sources は src/main.cpp のほかに、ゲームの DLL へ足す cpp (project root からの相対、glob 可)。
+	// 大きなゲームが重い関数の本体を hpp から cpp へ移し、1 行の変更で全部を組み直さずに済ませる。
+	Sources PathList `toml:"sources"`
 }
 
 const (
