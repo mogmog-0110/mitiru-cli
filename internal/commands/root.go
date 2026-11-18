@@ -49,6 +49,7 @@ Manage MitiruEngine game projects without touching CMakeLists.txt:
   mitiru replay          record / play back an input replay
   mitiru ui              capture the game with its RML UI to a PNG, no window
   mitiru capture         run headless for N frames and save PNGs (--script plays input)
+  mitiru view <glb>      look at skinned glb models and play a clip, no game DLL needed
   mitiru inspect <pid>   open a sub-window inspector for a running game
   mitiru dist            build a redistributable folder (no-console launcher)
   mitiru lint            check main.rml bindings against the C++ hud.set keys
@@ -105,6 +106,7 @@ build progress and diagnostics from the CLI and the game.`,
 	root.AddCommand(newAiPlaytestCommand())
 	root.AddCommand(newUICommand())
 	root.AddCommand(newCaptureCommand())
+	root.AddCommand(newViewCommand())
 	root.AddCommand(newInspectCommand())
 	root.AddCommand(newInstallCommand())
 	root.AddCommand(newUpdateCommand())
