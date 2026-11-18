@@ -197,6 +197,7 @@ func buildProject(stdout, stderr io.Writer, allowStandalone, launch bool) (*buil
 		NavArgs:         cfg.Nav.Args,
 		LightingSources: cfg.Lighting.Source,
 		LightingArgs:    cfg.Lighting.Args,
+		BakeMml:         cfg.BakeMML(),
 		RenderNeeds:     cfg.Render.Needs,
 		RenderNeedsSet:  cfg.Render.NeedsSet,
 		Stdout:          stdout,

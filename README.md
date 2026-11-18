@@ -149,6 +149,13 @@ config = "RelWithDebInfo"   # Debug / Release / RelWithDebInfo。RelWithDebInfo 
 watch_assets = false
 ```
 
+`assets/audio` の下に `.mml` があるプロジェクトでは、`mitiru build` が先に `mitiru_mmlbake` で `.mml` を同じ場所の `.wav` に焼きます。MML が変わっていない WAV は書き直さず、手で置いた WAV は上書きしません。焼いた WAV は DLL の隣の `assets/` の写しに入ります。`.mml` が無いプロジェクトと、`apps/mitiru_mmlbake` が無い古いエンジンでは何もしません。切るときは次のように書きます。
+
+```toml
+[build]
+bake_mml = false
+```
+
 古い `mitiru.toml` の `[cef]` は読み捨てます (警告を 1 行出す)。UI は DLL の隣の `assets/ui/main.rml` があれば host が自動で重ねます。
 
 ### engine の追加ライブラリ (`[engine]` と `[nav]`)
