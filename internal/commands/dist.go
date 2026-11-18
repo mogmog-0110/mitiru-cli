@@ -141,8 +141,20 @@ list is a warning: a missing translation still shows the fallback language,
 and shipping some languages unfinished is a normal choice. --strict-i18n
 makes any entry fail the check (and implies --check).
 
+--web builds for the browser instead: src/main.cpp is statically linked into a
+WebAssembly game with the engine (Emscripten), and dist/<name>-web/ gets
+index.html, index.js, index.wasm and the assets (--single-file folds them into
+one index.html; --zip zips the folder). It needs an Emscripten SDK (emsdk, about
+2 GB): EMSDK, E:/emsdk, C:/emsdk or ~/emsdk, in that order; mitiru never
+installs it. Signing, the installer, VC++ runtime, cache pre-baking, --onefile
+and --check do not apply. [window] width / height / title are used;
+[engine] features, [render] needs and [cef] have no effect in the browser. Only
+games that stay within the 2D engine path and avoid std::thread and Windows.h
+build (docs/adr/0163-web-dist-static-link.md).
+
 Examples:
   mitiru dist                 # → dist/<name>/  (no-console <name>.exe)
+  mitiru dist --web           # → dist/<name>-web/  (play it from a web server)
   mitiru dist --bat           # also add a console-visible <name>.bat
   mitiru dist --zip           # also produce dist/<name>.zip
   mitiru dist --pack=false    # keep loose assets/ (packing is the default)
@@ -152,6 +164,15 @@ Examples:
   mitiru dist --strict-i18n   # --check, and fail on missing translations
   mitiru dist --out build/ship`,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if distWeb {
+				if err := rejectWebConflicts(cmd.Flags().Changed); err != nil {
+					return err
+				}
+				return runDistWeb()
+			}
+			if distSingleFile {
+				return fmt.Errorf("--single-file は --web と一緒に使います。")
+			}
 			if distCheckScript != "" || cmd.Flags().Changed("check-frames") || distStrictI18n {
 				distCheck = true
 			}
@@ -189,6 +210,7 @@ Examples:
 			defaultTimestamp+")")
 	cmd.Flags().StringVar(&buildGenerator, "generator", "",
 		"explicit CMake generator (default Ninja)")
+	configureWebFlags(cmd)
 	return cmd
 }
 
