@@ -56,6 +56,7 @@ mitiru run
 | `mitiru ui` | ゲームを窓なしで回し、RML の UI ごと最後のフレームを PNG に撮る (`--frames` / `--input-script` / `--out`) |
 | `mitiru capture` | ビルドしたこのプロジェクトの host を窓なしで回し、`--every` フレームごとに PNG を `build/capture/` へ書く (`--frames` / `--script` / `--out`) |
 | `mitiru view <glb>...` | glb / glTF のスキンモデルを、ゲームの DLL なしで並べて見る。エンジン自身の `mitiru_host` と `apps/mitiru_view` を使うので、プロジェクトの外でも動く (0.54.0 以降のエンジン)。`--clip NAME` でクリップを選び、`--toon` でトゥーン、`--check` で表 (大きさ・頂点・骨の数・クリップ名と長さ) と警告だけを出して止まる (終了コード 0 / 1 = 警告あり / 2 = 読めない)、`--capture-dir D` でウィンドウなしの DX12 撮影 |
+| `mitiru clip [rec.mtrr]` | ゲームで F11 を押して保存した録画 (`bug_*.mtrr`) を、このプロジェクトの host と DLL で再生して mp4 にする。録画を省くと一番新しい物を使う。`--gif` で GIF も、`--3d` で GPU の描画、`-o` で出力先。ffmpeg が PATH に無いときは AVI までで終わる |
 | `mitiru lint` | `assets/ui/main.rml` が引く変数を、C++ の `hud.set("view.x", ...)` と突き合わせる |
 | `mitiru bisect` | どのビルドから決定論が壊れたかを二分探索で特定 |
 | `mitiru fuzz` | ランダム入力でクラッシュ・非決定・不変条件違反を探す |
