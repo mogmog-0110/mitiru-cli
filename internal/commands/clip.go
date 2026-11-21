@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"unicode/utf8"
 
@@ -254,11 +255,13 @@ func runClip(opts clipOptions) error {
 	}
 
 	aviRel, mp4Rel, gifRel := planClipOutputs(rec, opts.Out, opts.Gif, opts.NoMp4)
-	avi, mp4, gif := absOrSelf(aviRel), absOrSelf(mp4Rel), absOrSelf(gifRel)
+	wantAvi, mp4, gif := absOrSelf(aviRel), absOrSelf(mp4Rel), absOrSelf(gifRel)
+	avi := clipWorkAvi(wantAvi, mp4, gif, os.Getpid())
 	if err := os.MkdirAll(filepath.Dir(avi), 0o755); err != nil {
 		return clipUsageError("%s を作れません: %v", filepath.Dir(avi), err)
 	}
-	// AVI が残っていると、host が失敗しても成功に見える
+	// 前の実行の AVI が残っていると、host が失敗しても成功に見える。消すのは作業用の名前か、
+	// 利用者が AVI を指定した出力だけで、mp4 の隣の同じ名前の利用者の AVI は触らない
 	_ = os.Remove(avi)
 
 	fmt.Printf("[clip] host を走らせます: %s\n", filepath.Base(hostExe))
@@ -282,9 +285,8 @@ func runClip(opts clipOptions) error {
 	if warning != "" {
 		fmt.Fprintf(os.Stderr, "[clip] 注意: %s\n", warning)
 	}
-	fmt.Printf("[clip] AVI: %s (%s)\n", avi, clipSizeText(avi))
-
 	if mp4 == "" && gif == "" {
+		fmt.Printf("[clip] AVI: %s (%s)\n", avi, clipSizeText(avi))
 		return nil
 	}
 	ffmpegName := opts.FFmpeg
@@ -293,8 +295,10 @@ func runClip(opts clipOptions) error {
 	}
 	ffmpeg, lookErr := exec.LookPath(ffmpegName)
 	if lookErr != nil {
+		kept := keepClipAvi(avi, wantAvi)
+		fmt.Printf("[clip] AVI: %s (%s)\n", kept, clipSizeText(kept))
 		fmt.Fprintf(os.Stderr, "[clip] ffmpeg が PATH に無いので、AVI までにしました: %s\n"+
-			"[clip] mp4 にするには ffmpeg を入れて (Windows なら winget install Gyan.FFmpeg)、同じコマンドをもう一度流してください\n", avi)
+			"[clip] mp4 にするには ffmpeg を入れて (Windows なら winget install Gyan.FFmpeg)、同じコマンドをもう一度流してください\n", kept)
 		return nil
 	}
 	steps := []struct {
@@ -310,14 +314,38 @@ func runClip(opts clipOptions) error {
 		if ferr != nil || fcode != 0 || !fileExists(s.target) {
 			return &ExitCodeError{Code: clipExitFFmpeg, Message: fmt.Sprintf(
 				"[clip] ffmpeg が %s を作れませんでした (exit %d): %s\n[clip] AVI は残してあります: %s",
-				filepath.Base(s.target), fcode, clipTrim(errText, 400), avi)}
+				filepath.Base(s.target), fcode, clipTrim(errText, 400), keepClipAvi(avi, wantAvi))}
 		}
 		fmt.Printf("[clip] %s: %s (%s)\n", strings.ToUpper(strings.TrimPrefix(filepath.Ext(s.target), ".")), s.target, clipSizeText(s.target))
 	}
-	if !opts.KeepAvi {
+	if opts.KeepAvi {
+		kept := keepClipAvi(avi, wantAvi)
+		fmt.Printf("[clip] AVI: %s (%s)\n", kept, clipSizeText(kept))
+	} else {
 		_ = os.Remove(avi)
 	}
 	return nil
+}
+
+// clipWorkAvi は host が書く AVI の場所。mp4 や GIF を作るときの AVI は途中の物なので、出力の隣の
+// 利用者の同名の AVI を上書きしないよう、プロセスごとの一時の名前にする。AVI そのものが出力なら wantAvi。
+func clipWorkAvi(wantAvi, mp4, gif string, pid int) string {
+	if mp4 == "" && gif == "" {
+		return wantAvi
+	}
+	return strings.TrimSuffix(wantAvi, ".avi") + ".clip-" + strconv.Itoa(pid) + ".avi"
+}
+
+// keepClipAvi は残す AVI を、wantAvi が空いていればその名前へ移して返す。既にあるときは、その利用者の
+// ファイルを上書きせず作業用の名前のまま返す。
+func keepClipAvi(workAvi, wantAvi string) string {
+	if workAvi == wantAvi || fileExists(wantAvi) {
+		return workAvi
+	}
+	if err := os.Rename(workAvi, wantAvi); err != nil {
+		return workAvi
+	}
+	return wantAvi
 }
 
 func clipTrim(s string, max int) string {

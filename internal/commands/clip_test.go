@@ -127,3 +127,36 @@ func TestClipTrimKeepsRunes(t *testing.T) {
 		t.Error("短ければ前後の空白を除くだけのはず")
 	}
 }
+
+func TestClipWorkAviAvoidsUserFiles(t *testing.T) {
+	if got := clipWorkAvi(`C:\o\a.avi`, `C:\o\a.mp4`, "", 42); got != `C:\o\a.clip-42.avi` {
+		t.Errorf("mp4 を作るときは一時の名前のはず: %q", got)
+	}
+	if got := clipWorkAvi(`C:\o\a.avi`, "", `C:\o\a.gif`, 42); got == `C:\o\a.avi` {
+		t.Errorf("GIF を作るときも一時の名前のはず: %q", got)
+	}
+	if got := clipWorkAvi(`C:\o\a.avi`, "", "", 42); got != `C:\o\a.avi` {
+		t.Errorf("AVI が出力なら指定の名前のはず: %q", got)
+	}
+}
+
+func TestKeepClipAvi(t *testing.T) {
+	dir := t.TempDir()
+	work, want := filepath.Join(dir, "a.clip-1.avi"), filepath.Join(dir, "a.avi")
+	if err := os.WriteFile(work, []byte("new"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if got := keepClipAvi(work, want); got != want || !fileExists(want) || fileExists(work) {
+		t.Errorf("空いていれば want へ移すはず: %q", got)
+	}
+	// 利用者の a.avi があれば、上書きも削除もしない
+	if err := os.WriteFile(work, []byte("new2"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if got := keepClipAvi(work, want); got != work {
+		t.Errorf("既存の a.avi があれば作業用の名前のまま返すはず: %q", got)
+	}
+	if b, _ := os.ReadFile(want); string(b) != "new" {
+		t.Errorf("既存の a.avi を書き換えた: %q", b)
+	}
+}
