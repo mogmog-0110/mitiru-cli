@@ -78,48 +78,71 @@ func LatestVersion(progress io.Writer) (Semver, error) {
 	return LatestVersionTimeout(httpTimeout)
 }
 
+// tagsAPIBase は tag 一覧の URL。単体試験が差し替える。
+var tagsAPIBase = "https://api.github.com/repos/" + publicRepo + "/tags"
+
+const (
+	tagsPerPage = 100
+	// tagsMaxPages は止まらない応答に付き合わないための上限 (10,000 件)。
+	tagsMaxPages = 100
+)
+
 // LatestVersionTimeout は LatestVersion を任意の network timeout で実行する。
 // build 末尾の更新通知のように「速く諦める」用途向け (オフラインで build を
-// 待たせない)。
+// 待たせない)。timeout は全ページを合わせた上限。
 func LatestVersionTimeout(timeout time.Duration) (Semver, error) {
-	url := "https://api.github.com/repos/" + publicRepo + "/tags?per_page=100"
-	client := &http.Client{Timeout: timeout}
-	req, err := http.NewRequest(http.MethodGet, url, nil)
-	if err != nil {
-		return Semver{}, err
-	}
-	req.Header.Set("Accept", "application/vnd.github+json")
-	req.Header.Set("User-Agent", "mitiru-cli")
-
-	resp, err := client.Do(req)
-	if err != nil {
-		return Semver{}, fmt.Errorf("list tags on %s: %w", publicRepo, err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<14))
-		return Semver{}, fmt.Errorf("github tags API returned %s: %s",
-			resp.Status, strings.TrimSpace(string(body)))
-	}
-
-	var tags []ghTag
-	if err := json.NewDecoder(resp.Body).Decode(&tags); err != nil {
-		return Semver{}, fmt.Errorf("decode tags response: %w", err)
-	}
-
+	deadline := time.Now().Add(timeout)
 	best, found := Semver{}, false
-	for _, t := range tags {
-		v, ok := ParseSemver(t.Name)
-		if !ok {
-			continue
+	for page := 1; page <= tagsMaxPages; page++ {
+		tags, err := fetchTagsPage(page, time.Until(deadline))
+		if err != nil {
+			return Semver{}, err
 		}
-		if !found || v.Compare(best) > 0 {
-			best, found = v, true
+		for _, t := range tags {
+			v, ok := ParseSemver(t.Name)
+			if ok && (!found || v.Compare(best) > 0) {
+				best, found = v, true
+			}
+		}
+		if len(tags) < tagsPerPage {
+			break
 		}
 	}
 	if !found {
 		return Semver{}, errors.New("no semver tags found on " + publicRepo)
 	}
 	return best, nil
+}
+
+// fetchTagsPage は tag 一覧の page 番目 (1 から) を返す。GitHub は 1 ページ最大 100 件で、
+// 一覧の並びは semver の順とは限らないので、呼ぶ側が全ページを見る。
+func fetchTagsPage(page int, timeout time.Duration) ([]ghTag, error) {
+	if timeout <= 0 {
+		return nil, fmt.Errorf("list tags on %s: timed out", publicRepo)
+	}
+	url := fmt.Sprintf("%s?per_page=%d&page=%d", tagsAPIBase, tagsPerPage, page)
+	client := &http.Client{Timeout: timeout}
+	req, err := http.NewRequest(http.MethodGet, url, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Accept", "application/vnd.github+json")
+	req.Header.Set("User-Agent", "mitiru-cli")
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("list tags on %s: %w", publicRepo, err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<14))
+		return nil, fmt.Errorf("github tags API returned %s: %s",
+			resp.Status, strings.TrimSpace(string(body)))
+	}
+	var tags []ghTag
+	if err := json.NewDecoder(resp.Body).Decode(&tags); err != nil {
+		return nil, fmt.Errorf("decode tags response: %w", err)
+	}
+	return tags, nil
 }
