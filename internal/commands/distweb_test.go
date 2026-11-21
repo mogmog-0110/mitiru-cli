@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/mogmog-0110/mitiru-cli/internal/config"
 )
@@ -98,5 +99,18 @@ func TestWebMmlNotices(t *testing.T) {
 	}
 	if got := webMmlNotices(filepath.Join(dir, "none")); len(got) != 0 {
 		t.Errorf("audio が無ければ何も出さないはず: %v", got)
+	}
+}
+
+func TestWebMmlNoticesOlderWav(t *testing.T) {
+	dir := t.TempDir()
+	mml, wav := filepath.Join(dir, "a.mml"), filepath.Join(dir, "a.wav")
+	_ = os.WriteFile(mml, nil, 0o644)
+	_ = os.WriteFile(wav, nil, 0o644)
+	old := time.Now().Add(-time.Hour)
+	_ = os.Chtimes(wav, old, old)
+	notes := webMmlNotices(dir)
+	if len(notes) != 1 || !strings.Contains(notes[0], "より古い") {
+		t.Errorf("WAV が .mml より古ければ知らせるはず: %v", notes)
 	}
 }

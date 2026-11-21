@@ -52,8 +52,8 @@ func webIgnoredNotices(cfg *config.ProjectConfig) []string {
 	return notes
 }
 
-// webMmlNotices は、WAV が隣に無い .mml を並べる。dist --web は .mml を焼かず assets/ をそのまま載せるので、
-// mitiru build がまだ WAV を焼いていないと、ブラウザでその音が鳴らない。
+// webMmlNotices は、WAV が隣に無い .mml と、WAV より新しい .mml を並べる。dist --web は .mml を焼かず
+// assets/ をそのまま載せるので、mitiru build がまだ焼いていないと、ブラウザで鳴る音が無いか古くなる。
 func webMmlNotices(audioDir string) []string {
 	var notes []string
 	_ = filepath.WalkDir(audioDir, func(path string, d fs.DirEntry, err error) error {
@@ -61,8 +61,13 @@ func webMmlNotices(audioDir string) []string {
 			return nil
 		}
 		wav := strings.TrimSuffix(path, filepath.Ext(path)) + ".wav"
-		if !fileExists(wav) {
+		wavInfo, wavErr := os.Stat(wav)
+		if wavErr != nil {
 			notes = append(notes, fmt.Sprintf("%s の WAV がありません。dist --web は .mml を焼かないので、先に mitiru build で焼いてください。", path))
+			return nil
+		}
+		if mmlInfo, mmlErr := os.Stat(path); mmlErr == nil && mmlInfo.ModTime().After(wavInfo.ModTime()) {
+			notes = append(notes, fmt.Sprintf("%s の WAV が .mml より古いです。dist --web は .mml を焼かないので、先に mitiru build で焼き直してください。", path))
 		}
 		return nil
 	})
@@ -147,6 +152,12 @@ func runDistWeb() error {
 	}
 
 	target := build.WebTargetName(cfg.Project.Name)
+	if build.WebCacheStale(outDir, build.EmsdkToolchainFile(emsdk)) {
+		fmt.Println("前回と違う emsdk で組もうとしているので、ブラウザ向けの組み直しの cache (build/web/out) を作り直します。")
+		if err := os.RemoveAll(outDir); err != nil {
+			return fmt.Errorf("dist --web: %s を空にできません: %w", outDir, err)
+		}
+	}
 	if !fileExists(filepath.Join(outDir, "CMakeCache.txt")) {
 		fmt.Println("ブラウザ向けのエンジン全体を初めて組むので、数分かかります。")
 	}

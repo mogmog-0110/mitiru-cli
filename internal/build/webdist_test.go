@@ -152,3 +152,18 @@ func TestRenderWebCMakeSources(t *testing.T) {
 		t.Errorf("sources が無ければ target_sources は書かないはず:\n%s", plain)
 	}
 }
+
+func TestWebCacheStale(t *testing.T) {
+	dir := t.TempDir()
+	if WebCacheStale(dir, "E:/emsdk/tc.cmake") {
+		t.Error("cache が無ければ古い扱いにしない")
+	}
+	cache := "CMAKE_BUILD_TYPE:STRING=Release\r\nCMAKE_TOOLCHAIN_FILE:FILEPATH=E:/emsdk/tc.cmake\r\n"
+	_ = os.WriteFile(filepath.Join(dir, "CMakeCache.txt"), []byte(cache), 0o644)
+	if WebCacheStale(dir, `e:\emsdk\tc.cmake`) {
+		t.Error("同じツールチェーン (大文字小文字と区切りの違い) は古い扱いにしない")
+	}
+	if !WebCacheStale(dir, "D:/other/tc.cmake") {
+		t.Error("別のツールチェーンなら古い扱いにするはず")
+	}
+}

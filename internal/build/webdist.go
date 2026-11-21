@@ -163,6 +163,25 @@ func WebDirs(projectRoot string) (cmakeSrcDir, cmakeOutDir string) {
 	return filepath.Join(base, "cmake"), filepath.Join(base, "out")
 }
 
+// WebCacheStale は outDir の CMakeCache.txt が、toolchain とは別の Emscripten のツールチェーンで configure
+// されたものかを返す。EMSDK を替えたり emsdk を移したりした後に同じ outDir へ configure すると、
+// cache に残った古い場所のコンパイラと食い違って失敗する。cache が無ければ false。
+func WebCacheStale(outDir, toolchain string) bool {
+	body, err := os.ReadFile(filepath.Join(outDir, "CMakeCache.txt"))
+	if err != nil {
+		return false
+	}
+	want := strings.ToLower(filepath.ToSlash(toolchain))
+	for _, line := range strings.Split(string(body), "\n") {
+		if !strings.HasPrefix(line, "CMAKE_TOOLCHAIN_FILE:") {
+			continue
+		}
+		_, value, ok := strings.Cut(strings.TrimSpace(line), "=")
+		return ok && strings.ToLower(filepath.ToSlash(value)) != want
+	}
+	return false
+}
+
 // CountNetworkURLs は dir の下の text ファイルにある http:// と https:// の数を返す。
 // ブラウザ向けの配布物は CDN に頼らないので、0 であることを確かめる材料にする。
 func CountNetworkURLs(dir string) (int, error) {
