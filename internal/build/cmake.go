@@ -80,6 +80,8 @@ type Options struct {
 	// BakeMml は assets/audio の .mml をビルドの前に WAV へ焼くか ([build] bake_mml)。
 	// .mml が無いか engine に mitiru_mmlbake が無いときは、true でも何も足さない。
 	BakeMml bool
+	// GameSources は [build] sources (project root からの相対、glob 可)。src/main.cpp のほかに DLL へ足す cpp。
+	GameSources []string
 
 	// RenderNeeds は [render] needs (3D 描画で宣言する機能の key)。RenderNeedsSet が false なら DLL に宣言を埋めない。
 	RenderNeeds    []string
@@ -143,6 +145,9 @@ type templateData struct {
 	Nav *navBake
 	// Lighting は [lighting] source があるときだけ非 nil。
 	Lighting *lightingBake
+	// GameSources は main.cpp のほかに DLL へ足す cpp の絶対パス (CMake の書き方)。
+	GameSources []string
+
 	// RenderNeeds は [render] needs があるときだけ非 nil。DLL に足す宣言の export のソース。
 	RenderNeeds *renderNeedsExport
 	// MmlBake は assets/audio に .mml があり、engine が mitiru_mmlbake を持つときだけ非 nil。
@@ -205,7 +210,10 @@ set(MITIRU_PROJECT_ROOT "{{.ProjectRoot}}")
 
 # ── Game DLL (the user's project) ─────────────────────────────────
 add_library({{.TargetName}} SHARED "{{.MainCppAbs}}")
-target_link_libraries({{.TargetName}} PRIVATE Mitiru::mitiru)
+{{if .GameSources}}# mitiru.toml [build] sources: main.cpp のほかにゲームの DLL へ足す cpp
+target_sources({{.TargetName}} PRIVATE{{range .GameSources}}
+    "{{.}}"{{end}})
+{{end}}target_link_libraries({{.TargetName}} PRIVATE Mitiru::mitiru)
 if(MSVC)
     target_compile_options({{.TargetName}} PRIVATE /bigobj{{if .UserWarnings}} /W3{{end}})
 endif()
@@ -595,6 +603,11 @@ func Configure(opts Options) (cmakeSrcDir, cmakeOutDir string, err error) {
 		return "", "", err
 	}
 
+	gameSources, err := expandGameSources(opts.ProjectRoot, mainCpp, opts.GameSources)
+	if err != nil {
+		return "", "", err
+	}
+
 	data := templateData{
 		ProjectName:     opts.ProjectName,
 		TargetName:      TargetName(opts.ProjectName),
@@ -614,6 +627,7 @@ func Configure(opts Options) (cmakeSrcDir, cmakeOutDir string, err error) {
 		Lighting:        lighting,
 		RenderNeeds:     renderNeeds,
 		MmlBake:         resolveMmlBake(opts),
+		GameSources:     gameSources,
 	}
 
 	// engine 源の切り替わりは全ターゲットの作り直しになり、検証が別の engine を測る原因にもなる。

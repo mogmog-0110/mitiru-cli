@@ -87,6 +87,9 @@ type BuildSection struct {
 	// 未指定は true (.mml が無ければ何も足さない)。手で置いた WAV だけで足りるゲームや、
 	// 焼いた WAV を git に入れて CI では焼かない運用で切る。
 	BakeMML *bool `toml:"bake_mml"`
+	// Sources は src/main.cpp のほかに、ゲームの DLL へ足す cpp (project root からの相対、glob 可)。
+	// 大きなゲームが重い関数の本体を hpp から cpp へ移し、1 行の変更で全部を組み直さずに済ませる。
+	Sources PathList `toml:"sources"`
 }
 
 // BakeMML は [build] bake_mml の値。書いていなければ true。
