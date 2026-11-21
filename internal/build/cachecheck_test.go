@@ -1,6 +1,9 @@
 package build
 
-import "testing"
+import (
+	"path/filepath"
+	"testing"
+)
 
 func TestShowIncludesPrefix(t *testing.T) {
 	dir := `C:\Temp\p`
@@ -73,5 +76,31 @@ func TestParseCacheDir(t *testing.T) {
 	}
 	if got := parseCacheDir("Cache location  Unknown\n"); got != "" {
 		t.Errorf("local disk でないのに %q", got)
+	}
+}
+
+func TestBrokenDepsExemptsGameSources(t *testing.T) {
+	// 標準 header しか include しない [build] sources の cpp は、依存が空でも壊れではない
+	objs := []objectDeps{
+		{Path: "CMakeFiles/game.dir/E_/p/src/main.cpp.obj", Count: 12},
+		{Path: "CMakeFiles/game.dir/E_/p/src/extra.cpp.obj"},
+	}
+	if got := brokenDeps(objs, "CMakeFiles/game.dir/", "/src/extra.cpp.obj"); len(got) != 0 {
+		t.Errorf("外した cpp を壊れ扱いにした: %v", got)
+	}
+	if got := brokenDeps(objs, "CMakeFiles/game.dir/"); len(got) != 1 {
+		t.Errorf("外さなければ空のゲームの object は拾うはず: %v", got)
+	}
+}
+
+func TestGameSourceObjectSuffixes(t *testing.T) {
+	root := t.TempDir()
+	writeFile(t, filepath.Join(root, "src", "a", "A.cpp"), "//\n")
+	got := gameSourceObjectSuffixes(Options{ProjectRoot: root, GameSources: []string{"src/*/*.cpp"}})
+	if len(got) != 1 || got[0] != "/src/a/A.cpp.obj" {
+		t.Errorf("gameSourceObjectSuffixes = %v", got)
+	}
+	if got := gameSourceObjectSuffixes(Options{ProjectRoot: root, GameSources: []string{"none/*.cpp"}}); len(got) != 0 {
+		t.Errorf("当たらないパターンは空のはず: %v", got)
 	}
 }

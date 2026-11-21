@@ -40,12 +40,14 @@ func parseObjectDeps(out string) []objectDeps {
 
 // brokenDeps は今回作った object のうち、依存が記録されていないはずのものを返す。
 // 本物のゲームの source は必ず header を include するので、空なら壊れている。
+// [build] sources の cpp は <vector> のような標準 header だけを include することがあり、その依存は
+// 記録されない (正常) ので、exemptSuffixes に object の末尾 ("/src/extra.cpp.obj") を渡して外す。
 // engine には #if で中身が空になる source (Effekseer.Socket.cpp など) があり、
 // 1 個だけ空なのは正常。半分以上が空なら、接頭辞の食い違いのように全体が壊れている。
-func brokenDeps(compiled []objectDeps, gameDir string) []string {
+func brokenDeps(compiled []objectDeps, gameDir string, exemptSuffixes ...string) []string {
 	var empty []objectDeps
 	for _, o := range compiled {
-		if o.Count == 0 && !strings.HasSuffix(o.Path, "/"+renderNeedsSourceName+".obj") {
+		if o.Count == 0 && !strings.HasSuffix(o.Path, "/"+renderNeedsSourceName+".obj") && !hasAnySuffix(o.Path, exemptSuffixes) {
 			empty = append(empty, o)
 		}
 	}
@@ -57,6 +59,33 @@ func brokenDeps(compiled []objectDeps, gameDir string) []string {
 		}
 	}
 	return bad
+}
+
+func hasAnySuffix(s string, suffixes []string) bool {
+	for _, suf := range suffixes {
+		if strings.HasSuffix(s, suf) {
+			return true
+		}
+	}
+	return false
+}
+
+// gameSourceObjectSuffixes は [build] sources の各 cpp の object の末尾 ("/src/extra.cpp.obj")。
+// 広げられなければ (パターンの誤りは Configure が先に止めている) 空を返す。
+func gameSourceObjectSuffixes(opts Options) []string {
+	sources, err := ExpandGameSources(opts.ProjectRoot, "", opts.GameSources)
+	if err != nil {
+		return nil
+	}
+	var out []string
+	for _, src := range sources {
+		rel, relErr := filepath.Rel(opts.ProjectRoot, filepath.FromSlash(src))
+		if relErr != nil {
+			continue
+		}
+		out = append(out, "/"+filepath.ToSlash(rel)+".obj")
+	}
+	return out
 }
 
 // verifyDepsRecorded は今回の build で作られたのに依存を記録しなかった object を探し、
@@ -87,7 +116,7 @@ func verifyDepsRecorded(vcvars, outDir string, since time.Time, opts Options) er
 			compiled = append(compiled, o)
 		}
 	}
-	bad := brokenDeps(compiled, "CMakeFiles/"+TargetName(opts.ProjectName)+".dir/")
+	bad := brokenDeps(compiled, "CMakeFiles/"+TargetName(opts.ProjectName)+".dir/", gameSourceObjectSuffixes(opts)...)
 	for _, obj := range bad {
 		_ = os.Remove(filepath.Join(outDir, filepath.FromSlash(obj)))
 	}
