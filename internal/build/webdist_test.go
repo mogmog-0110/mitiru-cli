@@ -136,3 +136,19 @@ func TestCountNetworkURLs(t *testing.T) {
 		t.Errorf("CountNetworkURLs = %d, %v, 2 のはず (.wasm は数えない)", n, err)
 	}
 }
+
+func TestRenderWebCMakeSources(t *testing.T) {
+	text, err := RenderWebCMake(WebOptions{ProjectName: "g", EngineRoot: "E:/e", MainCpp: "E:/p/src/main.cpp",
+		Sources: []string{"E:/p/src/a/A.cpp", "E:/p/src/b/B.cpp"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "target_sources(g PRIVATE\n    \"E:/p/src/a/A.cpp\"\n    \"E:/p/src/b/B.cpp\")"
+	if !strings.Contains(text, want) {
+		t.Errorf("[build] sources を target_sources で足すはず:\n%s", text)
+	}
+	plain, _ := RenderWebCMake(WebOptions{ProjectName: "g", EngineRoot: "E:/e", MainCpp: "E:/p/src/main.cpp"})
+	if strings.Contains(plain, "target_sources") {
+		t.Errorf("sources が無ければ target_sources は書かないはず:\n%s", plain)
+	}
+}

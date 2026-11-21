@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/mogmog-0110/mitiru-cli/internal/build"
 	"github.com/spf13/cobra"
@@ -318,7 +319,11 @@ func runClip(opts clipOptions) error {
 func clipTrim(s string, max int) string {
 	s = strings.TrimSpace(s)
 	if len(s) > max {
-		return s[:max]
+		cut := max
+		for cut > 0 && !utf8.RuneStart(s[cut]) {
+			cut--
+		}
+		return s[:cut]
 	}
 	return s
 }

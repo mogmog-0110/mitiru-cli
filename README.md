@@ -122,7 +122,7 @@ my-game/
 [project]
 name = "my-game"
 version = "0.1.0"
-engine = "0.51.0"       # 取得する MitiruEngine のバージョン（タグまたは "main"）。mitiru new は CLI の既定のバージョンを書く
+engine = "0.54.0"       # 取得する MitiruEngine のバージョン（タグまたは "main"）。mitiru new は CLI の既定のバージョンを書く
 
 [window]
 title = "my-game"
@@ -155,6 +155,13 @@ watch_assets = false
 ```toml
 [build]
 bake_mml = false
+```
+
+`src/main.cpp` のほかに、ゲームの DLL へ組み込む cpp は `[build] sources` に書きます (project root からの相対、glob 可。何にも当たらないパターンはビルドの前に止めます)。重い関数の本体を hpp から cpp へ移すと、1 行の変更で全部を組み直さずに済みます。`mitiru dist --web` も同じ cpp を wasm に足します。
+
+```toml
+[build]
+sources = ["src/*/*.cpp"]
 ```
 
 古い `mitiru.toml` の `[cef]` は読み捨てます (警告を 1 行出す)。UI は DLL の隣の `assets/ui/main.rml` があれば host が自動で重ねます。

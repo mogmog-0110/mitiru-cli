@@ -84,3 +84,19 @@ func TestEmsdkMissingErrorIsActionable(t *testing.T) {
 		}
 	}
 }
+
+func TestWebMmlNotices(t *testing.T) {
+	dir := t.TempDir()
+	for _, name := range []string{"a.mml", "a.wav", "b.mml", "c.wav"} {
+		if err := os.WriteFile(filepath.Join(dir, name), nil, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	notes := webMmlNotices(dir)
+	if len(notes) != 1 || !strings.Contains(notes[0], "b.mml") {
+		t.Errorf("WAV の無い b.mml だけを並べるはず: %v", notes)
+	}
+	if got := webMmlNotices(filepath.Join(dir, "none")); len(got) != 0 {
+		t.Errorf("audio が無ければ何も出さないはず: %v", got)
+	}
+}

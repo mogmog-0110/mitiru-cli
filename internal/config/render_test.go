@@ -48,3 +48,25 @@ func TestLoad_RenderNeedsIsNotForStandaloneProjects(t *testing.T) {
 		t.Fatalf("want a host-only error, got %v", err)
 	}
 }
+
+// [build] の sources と bake_mml は同じ表に書ける。
+func TestLoad_BuildSourcesAndBakeMml(t *testing.T) {
+	cfg, err := Load(writeManifest(t, hostHeader+`
+[build]
+sources = ["src/*/*.cpp", "src/extra.cpp"]
+bake_mml = false
+`))
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if len(cfg.Build.Sources) != 2 || cfg.BakeMML() {
+		t.Errorf("build = %+v, bake_mml = %v", cfg.Build, cfg.BakeMML())
+	}
+	cfg, err = Load(writeManifest(t, hostHeader))
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if len(cfg.Build.Sources) != 0 || !cfg.BakeMML() {
+		t.Errorf("既定は sources なし、bake_mml true のはず: %+v", cfg.Build)
+	}
+}

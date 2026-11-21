@@ -81,3 +81,27 @@ func TestHasMmlFile(t *testing.T) {
 		t.Error("入れ子の .mml (大文字の拡張子) を見つけるはず")
 	}
 }
+
+// [build] sources と .mml の焼き込みは、同じ生成 CMake に両方入る (どちらかが落ちない)。
+func TestConfigure_MmlBakeAndGameSources(t *testing.T) {
+	projectRoot, engineRoot := fakeProject(t)
+	writeFile(t, filepath.Join(projectRoot, "assets", "audio", "a.mml"), "@SSG C\n")
+	writeFile(t, filepath.Join(projectRoot, "src", "game.cpp"), "// game\n")
+	writeFile(t, filepath.Join(engineRoot, "apps", "mitiru_mmlbake", "main.cpp"), "//\n")
+	cmake, err := generatedCMakeWith(t, projectRoot, engineRoot, func(o *Options) {
+		o.BakeMml = true
+		o.GameSources = []string{"src/*.cpp"}
+	})
+	if err != nil {
+		t.Fatalf("Configure: %v", err)
+	}
+	for _, want := range []string{
+		`"` + toCMakePath(filepath.Join(projectRoot, "src", "game.cpp")) + `"`,
+		"target_sources(my_first_game PRIVATE",
+		"add_dependencies(my_first_game my_first_game_mmlbake)",
+	} {
+		if !strings.Contains(cmake, want) {
+			t.Errorf("generated CMake is missing:\n%s", want)
+		}
+	}
+}

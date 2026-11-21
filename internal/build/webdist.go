@@ -25,6 +25,7 @@ type WebOptions struct {
 	Width       int
 	Height      int
 	SingleFile  bool
+	Sources     []string // [build] sources を広げた絶対パス (CMake の書き方)。main.cpp のほかに wasm へ足す cpp
 }
 
 // WebTargetName は web 用の CMake の target 名。DLL の target と同じ規則で作る。
@@ -100,6 +101,12 @@ mitiru_add_web_game({{.Target}}
     SINGLE_FILE
 {{- end}})
 target_include_directories({{.Target}} PRIVATE "{{.MainDir}}")
+{{- if .Sources}}
+target_sources({{.Target}} PRIVATE
+{{- range .Sources}}
+    "{{.}}"
+{{- end}})
+{{- end}}
 `
 
 type webCMakeData struct {
@@ -112,6 +119,7 @@ type webCMakeData struct {
 	Width      int
 	Height     int
 	SingleFile bool
+	Sources    []string
 }
 
 // RenderWebCMake は ADR 0163 の「決定」3 の CMake を作る。SHARED のゲーム DLL は作らず、
@@ -130,6 +138,7 @@ func RenderWebCMake(o WebOptions) (string, error) {
 		Width:      o.Width,
 		Height:     o.Height,
 		SingleFile: o.SingleFile,
+		Sources:    o.Sources,
 	}
 	if o.AssetsDir != "" {
 		data.AssetsDir = toCMakePath(o.AssetsDir)

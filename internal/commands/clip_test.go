@@ -117,3 +117,13 @@ func TestClipFFmpegArgs(t *testing.T) {
 		}
 	}
 }
+
+func TestClipTrimKeepsRunes(t *testing.T) {
+	got := clipTrim("あいうえお", 7)
+	if got != "あい" {
+		t.Errorf("clipTrim = %q, 文字の途中で切らず \"あい\" のはず", got)
+	}
+	if clipTrim("  ab  ", 10) != "ab" {
+		t.Error("短ければ前後の空白を除くだけのはず")
+	}
+}

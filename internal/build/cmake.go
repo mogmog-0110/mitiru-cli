@@ -603,7 +603,7 @@ func Configure(opts Options) (cmakeSrcDir, cmakeOutDir string, err error) {
 		return "", "", err
 	}
 
-	gameSources, err := expandGameSources(opts.ProjectRoot, mainCpp, opts.GameSources)
+	gameSources, err := ExpandGameSources(opts.ProjectRoot, mainCpp, opts.GameSources)
 	if err != nil {
 		return "", "", err
 	}

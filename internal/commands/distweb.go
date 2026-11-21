@@ -2,6 +2,7 @@ package commands
 
 import (
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"sort"
@@ -51,6 +52,23 @@ func webIgnoredNotices(cfg *config.ProjectConfig) []string {
 	return notes
 }
 
+// webMmlNotices は、WAV が隣に無い .mml を並べる。dist --web は .mml を焼かず assets/ をそのまま載せるので、
+// mitiru build がまだ WAV を焼いていないと、ブラウザでその音が鳴らない。
+func webMmlNotices(audioDir string) []string {
+	var notes []string
+	_ = filepath.WalkDir(audioDir, func(path string, d fs.DirEntry, err error) error {
+		if err != nil || d.IsDir() || !strings.EqualFold(filepath.Ext(path), ".mml") {
+			return nil
+		}
+		wav := strings.TrimSuffix(path, filepath.Ext(path)) + ".wav"
+		if !fileExists(wav) {
+			notes = append(notes, fmt.Sprintf("%s の WAV がありません。dist --web は .mml を焼かないので、先に mitiru build で焼いてください。", path))
+		}
+		return nil
+	})
+	return notes
+}
+
 func emsdkMissingError(cause error) error {
 	return fmt.Errorf("%v\n"+
 		"ブラウザ向けの配布には Emscripten の SDK (emsdk) が要ります。入れるもの: emsdk 本体と、そこから入れる Emscripten のツールチェーン (ディスクに約 2 GB)。\n"+
@@ -96,6 +114,16 @@ func runDistWeb() error {
 		assets = ""
 	}
 
+	extraSources, err := build.ExpandGameSources(projectRoot, mainCpp, cfg.Build.Sources)
+	if err != nil {
+		return err
+	}
+	if assets != "" {
+		for _, note := range webMmlNotices(filepath.Join(assets, "audio")) {
+			fmt.Println(note)
+		}
+	}
+
 	cmakeText, err := build.RenderWebCMake(build.WebOptions{
 		ProjectName: cfg.Project.Name,
 		EngineRoot:  engineRoot,
@@ -105,6 +133,7 @@ func runDistWeb() error {
 		Width:       cfg.Window.Width,
 		Height:      cfg.Window.Height,
 		SingleFile:  distSingleFile,
+		Sources:     extraSources,
 	})
 	if err != nil {
 		return err

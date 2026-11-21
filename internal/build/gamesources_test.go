@@ -20,7 +20,7 @@ func TestExpandGameSources(t *testing.T) {
 	}
 	mainCpp := filepath.Join(root, "src", "main.cpp")
 
-	got, err := expandGameSources(root, mainCpp, []string{"src/*.cpp", "src/*/*.cpp", "src/a/A.cpp"})
+	got, err := ExpandGameSources(root, mainCpp, []string{"src/*.cpp", "src/*/*.cpp", "src/a/A.cpp"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -28,7 +28,7 @@ func TestExpandGameSources(t *testing.T) {
 		t.Fatalf("main.cpp を除き、重複なく名前順に並ぶはず: %v", got)
 	}
 
-	if _, err := expandGameSources(root, mainCpp, []string{"src/none/*.cpp"}); err == nil {
+	if _, err := ExpandGameSources(root, mainCpp, []string{"src/none/*.cpp"}); err == nil {
 		t.Fatal("何にも当たらないパターンは error にする")
 	}
 }

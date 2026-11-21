@@ -7,9 +7,9 @@ import (
 	"sort"
 )
 
-// expandGameSources は [build] sources の glob を実ファイルに広げ、main.cpp を除いて名前順に並べる
+// ExpandGameSources は [build] sources の glob を実ファイルに広げ、main.cpp を除いて名前順に並べる
 // (生成 CMake を安定させるため)。何にも当たらないパターンはここで止める。
-func expandGameSources(projectRoot, mainCpp string, patterns []string) ([]string, error) {
+func ExpandGameSources(projectRoot, mainCpp string, patterns []string) ([]string, error) {
 	seen := map[string]bool{filepath.Clean(mainCpp): true}
 	var out []string
 	for _, pat := range patterns {
