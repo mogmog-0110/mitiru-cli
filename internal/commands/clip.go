@@ -220,6 +220,10 @@ func clipUsageError(format string, a ...any) error {
 }
 
 func runClip(opts clipOptions) error {
+	// 指定された録画が無いのに、ビルドを何分も待たせない
+	if opts.Rec != "" && !fileExists(absOrSelf(opts.Rec)) {
+		return clipUsageError("指定した録画 %s が見つかりません。ゲームで F11 を押して保存するか、録画のパスを直してください", absOrSelf(opts.Rec))
+	}
 	result, err := runBuild()
 	if err != nil {
 		return err

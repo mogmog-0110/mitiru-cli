@@ -59,9 +59,10 @@ engine source, which takes several minutes.
 model cannot be read or --clip names a clip that does not exist.`,
 		Args: cobra.MinimumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			// --check の 2 (読めない) と同じ終了コードにして、スクリプトが警告の 1 と取り違えないようにする
 			models, err := resolveViewModels(args)
 			if err != nil {
-				return err
+				return &ExitCodeError{Code: 2, Message: err.Error()}
 			}
 			opts.Models = models
 			if captureDir != "" {
@@ -72,7 +73,7 @@ model cannot be read or --clip names a clip that does not exist.`,
 				opts.CaptureDir = abs
 			}
 			if err := validateViewOptions(opts); err != nil {
-				return err
+				return &ExitCodeError{Code: 2, Message: err.Error()}
 			}
 			return runView(opts)
 		},
