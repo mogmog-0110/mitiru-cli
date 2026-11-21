@@ -83,7 +83,14 @@ type BuildSection struct {
 	// Bake は true なら `mitiru build` の後に自動で `mitiru bake --all` を回す
 	// (★4-1、配置 JSON を POD へ焼いて起動時の再現性を上げる)。既定 false (opt-in)。
 	Bake bool `toml:"bake"`
+	// BakeMML は false で、ビルドのたびに assets/audio の .mml を WAV へ焼く工程を切る。
+	// 未指定は true (.mml が無ければ何も足さない)。手で置いた WAV だけで足りるゲームや、
+	// 焼いた WAV を git に入れて CI では焼かない運用で切る。
+	BakeMML *bool `toml:"bake_mml"`
 }
+
+// BakeMML は [build] bake_mml の値。書いていなければ true。
+func (c *ProjectConfig) BakeMML() bool { return c.Build.BakeMML == nil || *c.Build.BakeMML }
 
 const (
 	BuildKindHost       = "host"

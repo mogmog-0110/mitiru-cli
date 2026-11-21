@@ -77,6 +77,10 @@ type Options struct {
 	// LightingArgs は [lighting] args。mitiru_lightbake にそのまま渡す。
 	LightingArgs []string
 
+	// BakeMml は assets/audio の .mml をビルドの前に WAV へ焼くか ([build] bake_mml)。
+	// .mml が無いか engine に mitiru_mmlbake が無いときは、true でも何も足さない。
+	BakeMml bool
+
 	// RenderNeeds は [render] needs (3D 描画で宣言する機能の key)。RenderNeedsSet が false なら DLL に宣言を埋めない。
 	RenderNeeds    []string
 	RenderNeedsSet bool
@@ -141,6 +145,8 @@ type templateData struct {
 	Lighting *lightingBake
 	// RenderNeeds は [render] needs があるときだけ非 nil。DLL に足す宣言の export のソース。
 	RenderNeeds *renderNeedsExport
+	// MmlBake は assets/audio に .mml があり、engine が mitiru_mmlbake を持つときだけ非 nil。
+	MmlBake *mmlBake
 }
 
 // navBake はビルドの一工程でナビメッシュを焼くための値。
@@ -421,7 +427,25 @@ add_dependencies({{$.TargetName}} {{$.TargetName}}_lightbake)
 {{else}}message(FATAL_ERROR "mitiru.toml: [lighting] source needs apps/mitiru_lightbake, which this engine does not have.
 "
     "  set project.engine to 0.38.0 or newer (mitiru update)")
-{{end}}{{end}}{{if .LegacyCEF}}# CEF 世代の engine だけ: HTML の binder (mitiru_runtime/*.js) を assets/ の隣へ置く。
+{{end}}{{end}}{{with .MmlBake}}# ── .mml を WAV に焼く (assets/audio の下の *.mml → 同じ場所の *.wav) ──
+# ゲームの DLL より先に走らせ、焼いた WAV を assets/ の写しに入れる。MML が同じ WAV は書き直さない。
+add_executable(mitiru_mmlbake "{{.ToolAbs}}")
+target_link_libraries(mitiru_mmlbake PRIVATE Mitiru::mitiru)
+if(MSVC)
+    target_compile_options(mitiru_mmlbake PRIVATE /bigobj /utf-8)
+endif()
+if(COMMAND mitiru_use_utf8_codepage)
+    mitiru_use_utf8_codepage(mitiru_mmlbake)
+endif()
+set_target_properties(mitiru_mmlbake PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "$<TARGET_FILE_DIR:mitiru_host>")
+add_custom_target({{$.TargetName}}_mmlbake ALL
+    COMMAND mitiru_mmlbake "{{.AudioDirAbs}}"
+    VERBATIM
+    COMMENT "mitiru-cli: baking assets/audio/*.mml")
+add_dependencies({{$.TargetName}}_mmlbake mitiru_mmlbake)
+add_dependencies({{$.TargetName}} {{$.TargetName}}_mmlbake)
+{{end}}{{if .LegacyCEF}}# CEF 世代の engine だけ: HTML の binder (mitiru_runtime/*.js) を assets/ の隣へ置く。
 if(EXISTS "${MITIRU_ENGINE_ROOT}/web/mitiru_runtime")
     add_custom_command(TARGET {{.TargetName}} POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E ${_mitiru_copy_dir}
@@ -589,6 +613,7 @@ func Configure(opts Options) (cmakeSrcDir, cmakeOutDir string, err error) {
 		Nav:             nav,
 		Lighting:        lighting,
 		RenderNeeds:     renderNeeds,
+		MmlBake:         resolveMmlBake(opts),
 	}
 
 	// engine 源の切り替わりは全ターゲットの作り直しになり、検証が別の engine を測る原因にもなる。

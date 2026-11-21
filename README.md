@@ -48,13 +48,15 @@ mitiru run
 | `mitiru test` | `tests/*.cpp` を `cl /std:c++20 /utf-8` で 1 本ずつビルド・実行し、exit code で合否集計。`--filter` / `--release` / `--include` に対応 |
 | `mitiru run` | ビルドして実行。stdin、stdout、exit code を転送 |
 | `mitiru watch` | ビルドして起動し、`src/` の保存時に state を維持したまま hot reload |
-| `mitiru dist` | 配布フォルダを生成。ランタイムを `data/` に分離し、コンソールなしの `<name>.exe` を出力。`--bat` でログ用 `.bat`、`--zip` で zip を追加。`--onefile` で配布物全体を自己展開の単一 exe に畳む (ファイル名は `[dist] exe_name`、既定は `project.name`)。アセットは既定で `assets.mtpak` に埋め込む (`--pack=false` で外す)。`assets/ui/` と 3D モデル・ナビメッシュは pack に入れずバラ置きで残す (engine がファイルから直に読む)。ゲームの読む DLL を調べて VC ランタイムを同梱し、足りない DLL があれば止まる。セーブは `%APPDATA%/<name>/`。pack の前に資産を読ませ、読み込みの cache を配布物に入れる (下の「配布物に入れる cache」、`--no-bake` で飛ばす)。`--check` で配布物を素の環境に近い一時フォルダで headless に動かして確かめ (`--check-script` で入力の台本を流し、`--check-frames` で回すフレーム数を変える。`assets/` の下の `strings.json` の訳の抜けと、同梱の書体に無い字もファイル・言語・キーで並べ、`--strict-i18n` を付けるとそれも失敗にする)、`--debug` で Debug ビルドを配る (自分のテスト機用)。初回は Release のエンジンを `build/dist-out/` に一から作るので数分かかる |
+| `mitiru dist` | 配布フォルダを生成。ランタイムを `data/` に分離し、コンソールなしの `<name>.exe` を出力。`--bat` でログ用 `.bat`、`--zip` で zip を追加。`--onefile` で配布物全体を自己展開の単一 exe に畳む (ファイル名は `[dist] exe_name`、既定は `project.name`)。アセットは既定で `assets.mtpak` に埋め込む (`--pack=false` で外す)。`assets/ui/` と 3D モデル・ナビメッシュは pack に入れずバラ置きで残す (engine がファイルから直に読む)。ゲームの読む DLL を調べて VC ランタイムを同梱し、足りない DLL があれば止まる。セーブは `%APPDATA%/<name>/`。pack の前に資産を読ませ、読み込みの cache を配布物に入れる (下の「配布物に入れる cache」、`--no-bake` で飛ばす)。`--check` で配布物を素の環境に近い一時フォルダで headless に動かして確かめ (`--check-script` で入力のスクリプトを流し、`--check-frames` で回すフレーム数を変える。`assets/` の下の `strings.json` の訳の抜けと、同梱の書体に無い字もファイル・言語・キーで並べ、`--strict-i18n` を付けるとそれも失敗にする)、`--debug` で Debug ビルドを配る (自分のテスト機用)。初回は Release のエンジンを `build/dist-out/` に一から作るので数分かかる。`--web` でブラウザ向けの配布物 (`dist/<name>-web/` の index.html、index.js、index.wasm と素材。`--single-file` で index.html 1 つ、`--zip` で zip) を作る。Emscripten の SDK (emsdk、`EMSDK`、E:/emsdk、C:/emsdk、~/emsdk の順に探す。約 2 GB で、mitiru は入れない) と 0.54.0 以降のエンジンが要る。`src/main.cpp` を静的に結ぶので、`std::thread` や `Windows.h` を使うゲームは組めない。署名、installer、`--onefile`、`--check` は使えない |
 | `mitiru debug` | Debug 構成でビルドし、engine debug helper（`MITIRU_DEBUG=1` / `MITIRU_INSPECTOR=1`）を有効にして実行 |
 | `mitiru inspect [pid]` | 実行中の game を別の OS window に表示したツール画面で観察。`--inspectable input\|timetravel`、`--all` に対応 |
 | `mitiru replay <file>` | 記録済みの入力を決定論的に再生。`--test` で回帰判定、`--suite <dir>` で `*.mtrr` を一括判定 |
 | `mitiru renderer` / `audio` / `input` / `scene` | 各 subsystem を単独で起動 |
 | `mitiru ui` | ゲームを窓なしで回し、RML の UI ごと最後のフレームを PNG に撮る (`--frames` / `--input-script` / `--out`) |
 | `mitiru capture` | ビルドしたこのプロジェクトの host を窓なしで回し、`--every` フレームごとに PNG を `build/capture/` へ書く (`--frames` / `--script` / `--out`) |
+| `mitiru view <glb>...` | glb / glTF のスキンモデルを、ゲームの DLL なしで並べて見る。エンジン自身の `mitiru_host` と `apps/mitiru_view` を使うので、プロジェクトの外でも動く (0.54.0 以降のエンジン)。`--clip NAME` でクリップを選び、`--toon` でトゥーン、`--check` で表 (大きさ・頂点・骨の数・クリップ名と長さ) と警告だけを出して止まる (終了コード 0 / 1 = 警告あり / 2 = 読めない)、`--capture-dir D` でウィンドウなしの DX12 撮影 |
+| `mitiru clip [rec.mtrr]` | ゲームで F11 を押して保存した録画 (`bug_*.mtrr`) を、このプロジェクトの host と DLL で再生して mp4 にする。録画を省くと一番新しい物を使う。`--gif` で GIF も、`--3d` で GPU の描画、`-o` で出力先。ffmpeg が PATH に無いときは AVI までで終わる |
 | `mitiru lint` | `assets/ui/main.rml` が引く変数を、C++ の `hud.set("view.x", ...)` と突き合わせる |
 | `mitiru bisect` | どのビルドから決定論が壊れたかを二分探索で特定 |
 | `mitiru fuzz` | ランダム入力でクラッシュ・非決定・不変条件違反を探す |
@@ -146,6 +148,13 @@ config = "RelWithDebInfo"   # Debug / Release / RelWithDebInfo。RelWithDebInfo 
 ```toml
 [run]
 watch_assets = false
+```
+
+`assets/audio` の下に `.mml` があるプロジェクトでは、`mitiru build` が先に `mitiru_mmlbake` で `.mml` を同じ場所の `.wav` に焼きます。MML が変わっていない WAV は書き直さず、手で置いた WAV は上書きしません。焼いた WAV は DLL の隣の `assets/` の写しに入ります。`.mml` が無いプロジェクトと、`apps/mitiru_mmlbake` が無い古いエンジンでは何もしません。切るときは次のように書きます。
+
+```toml
+[build]
+bake_mml = false
 ```
 
 古い `mitiru.toml` の `[cef]` は読み捨てます (警告を 1 行出す)。UI は DLL の隣の `assets/ui/main.rml` があれば host が自動で重ねます。
