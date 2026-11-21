@@ -70,3 +70,12 @@ bake_mml = false
 		t.Errorf("既定は sources なし、bake_mml true のはず: %+v", cfg.Build)
 	}
 }
+
+func TestLoad_StandaloneRejectsBuildSourcesAndBakeMml(t *testing.T) {
+	for _, line := range []string{`sources = ["src/a.cpp"]`, `bake_mml = false`} {
+		_, err := Load(writeManifest(t, "[project]\nname = \"w\"\n\n[build]\nkind = \"standalone\"\n"+line+"\n"))
+		if err == nil || !strings.Contains(err.Error(), "only apply to host projects") {
+			t.Errorf("%s: standalone では断るはず: %v", line, err)
+		}
+	}
+}

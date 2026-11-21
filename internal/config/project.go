@@ -199,6 +199,12 @@ func (c *ProjectConfig) validate(path string) error {
 	if c.Window.Width < 0 || c.Window.Height < 0 {
 		return fmt.Errorf("%s: window.width/height must not be negative", path)
 	}
+	if c.Standalone() {
+		// standalone は自前の CMake で組むので、host 型の生成 CMake に足す設定は効かない
+		if len(c.Build.Sources) > 0 || c.Build.BakeMML != nil {
+			return fmt.Errorf("%s: [build] sources and bake_mml only apply to host projects; a standalone project lists its own sources in its CMakeLists.txt", path)
+		}
+	}
 	if err := c.validateEngine(path); err != nil {
 		return err
 	}
