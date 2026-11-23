@@ -90,6 +90,9 @@ type BuildSection struct {
 	// Sources は src/main.cpp のほかに、ゲームの DLL へ足す cpp (project root からの相対、glob 可)。
 	// 大きなゲームが重い関数の本体を hpp から cpp へ移し、1 行の変更で全部を組み直さずに済ませる。
 	Sources PathList `toml:"sources"`
+	// WarningLevel はゲームの DLL を組む MSVC の警告レベル (3 か 4)。0 (書かない) なら、engine のヘッダが
+	// /W3 で静かな世代だけ /W3 を付ける。4 は、利用者が自分のコードの警告を /W4 まで見たいときに書く
+	WarningLevel int `toml:"warning_level"`
 }
 
 // BakeMML は [build] bake_mml の値。書いていなければ true。
@@ -196,13 +199,18 @@ func (c *ProjectConfig) validate(path string) error {
 	if filepath.IsAbs(c.Build.Source) {
 		return fmt.Errorf("%s: build.source must be relative to the project root", path)
 	}
+	switch c.Build.WarningLevel {
+	case 0, 3, 4:
+	default:
+		return fmt.Errorf("%s: build.warning_level must be 3 or 4, got %d", path, c.Build.WarningLevel)
+	}
 	if c.Window.Width < 0 || c.Window.Height < 0 {
 		return fmt.Errorf("%s: window.width/height must not be negative", path)
 	}
 	if c.Standalone() {
 		// standalone は自前の CMake で組むので、host 型の生成 CMake に足す設定は効かない
-		if len(c.Build.Sources) > 0 || c.Build.BakeMML != nil {
-			return fmt.Errorf("%s: [build] sources and bake_mml only apply to host projects; a standalone project lists its own sources in its CMakeLists.txt", path)
+		if len(c.Build.Sources) > 0 || c.Build.BakeMML != nil || c.Build.WarningLevel != 0 {
+			return fmt.Errorf("%s: [build] sources, bake_mml and warning_level only apply to host projects; a standalone project lists its own sources in its CMakeLists.txt", path)
 		}
 	}
 	if err := c.validateEngine(path); err != nil {

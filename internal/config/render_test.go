@@ -79,3 +79,28 @@ func TestLoad_StandaloneRejectsBuildSourcesAndBakeMml(t *testing.T) {
 		}
 	}
 }
+
+// [build] warning_level は 3 か 4 だけ。書かなければ 0 (engine の世代で決まる)。
+func TestLoad_BuildWarningLevel(t *testing.T) {
+	cfg, err := Load(writeManifest(t, hostHeader+"\n[build]\nwarning_level = 4\n"))
+	if err != nil || cfg.Build.WarningLevel != 4 {
+		t.Fatalf("warning_level = 4: cfg=%+v err=%v", cfg.Build, err)
+	}
+	cfg, err = Load(writeManifest(t, hostHeader))
+	if err != nil || cfg.Build.WarningLevel != 0 {
+		t.Fatalf("既定は 0 のはず: cfg=%+v err=%v", cfg.Build, err)
+	}
+	for _, bad := range []string{"1", "5", "-3"} {
+		_, err := Load(writeManifest(t, hostHeader+"\n[build]\nwarning_level = "+bad+"\n"))
+		if err == nil || !strings.Contains(err.Error(), "warning_level must be 3 or 4") {
+			t.Errorf("warning_level = %s は断るはず: %v", bad, err)
+		}
+	}
+}
+
+func TestLoad_StandaloneRejectsWarningLevel(t *testing.T) {
+	_, err := Load(writeManifest(t, "[project]\nname = \"w\"\n\n[build]\nkind = \"standalone\"\nwarning_level = 4\n"))
+	if err == nil || !strings.Contains(err.Error(), "only apply to host projects") {
+		t.Errorf("standalone では断るはず: %v", err)
+	}
+}

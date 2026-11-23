@@ -199,6 +199,7 @@ func buildProject(stdout, stderr io.Writer, allowStandalone, launch bool) (*buil
 		LightingArgs:    cfg.Lighting.Args,
 		BakeMml:         cfg.BakeMML(),
 		GameSources:     cfg.Build.Sources,
+		WarningLevel:    cfg.Build.WarningLevel,
 		RenderNeeds:     cfg.Render.Needs,
 		RenderNeedsSet:  cfg.Render.NeedsSet,
 		Stdout:          stdout,

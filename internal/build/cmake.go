@@ -83,6 +83,9 @@ type Options struct {
 	// GameSources は [build] sources (project root からの相対、glob 可)。src/main.cpp のほかに DLL へ足す cpp。
 	GameSources []string
 
+	// WarningLevel は [build] warning_level。0 は未指定で、userWarningLevel が engine の世代から決める。
+	WarningLevel int
+
 	// RenderNeeds は [render] needs (3D 描画で宣言する機能の key)。RenderNeedsSet が false なら DLL に宣言を埋めない。
 	RenderNeeds    []string
 	RenderNeedsSet bool
@@ -131,10 +134,8 @@ type templateData struct {
 	// LegacyCEF は pin した engine が CEF 世代 (0.33 以前) のとき true。CEF の deploy と
 	// HTML 用の JS の同梱はその世代だけに出す。
 	LegacyCEF bool
-	// UserWarnings は利用者の DLL を /W3 でコンパイルするか。エンジンのヘッダが /W3 で
-	// 警告を出さない世代 (include/mitiru/core/Env.hpp がある) だけ立てる。古い engine の
-	// ヘッダの警告で利用者の出力が埋まらないようにするため。
-	UserWarnings bool
+	// UserWarningLevel は利用者の DLL に付ける /W の数字。0 なら付けない。
+	UserWarningLevel int
 	// Features は [engine] features を引いたもの。DLL に link する target と、無いときの直し方。
 	Features []config.EngineFeature
 	// FeatureOptions は feature が要る engine の CMake option と、その値。
@@ -215,7 +216,7 @@ target_sources({{.TargetName}} PRIVATE{{range .GameSources}}
     "{{.}}"{{end}})
 {{end}}target_link_libraries({{.TargetName}} PRIVATE Mitiru::mitiru)
 if(MSVC)
-    target_compile_options({{.TargetName}} PRIVATE /bigobj{{if .UserWarnings}} /W3{{end}})
+    target_compile_options({{.TargetName}} PRIVATE /bigobj{{if .UserWarningLevel}} /W{{.UserWarningLevel}}{{end}})
 endif()
 {{with .RenderNeeds}}
 # mitiru.toml [render] needs: 宣言した 3D 描画の機能を DLL の export (mitiru_module_render_needs) で host へ渡す
@@ -536,6 +537,19 @@ func OutDir(projectRoot, config string) string {
 	return filepath.Join(projectRoot, "build", "out-"+strings.ToLower(config))
 }
 
+// userWarningLevel は利用者の DLL の /W を決める。書いた値はそのまま使う。書いていなければ、
+// engine のヘッダが /W3 で静かな世代だけ /W3 にする。古い engine のヘッダの警告で
+// 利用者の出力が埋まらないようにするため。
+func userWarningLevel(requested int, engineRoot string) int {
+	if requested != 0 {
+		return requested
+	}
+	if engine.HeadersCleanAtW3(engineRoot) {
+		return 3
+	}
+	return 0
+}
+
 // Configure は <projectRoot>/build/cmake/ に CMakeLists.txt を生成し、
 // cmake に渡すべき source / output directory を返す。
 // engineRootRe は生成済み CMakeLists から前回の engine 源を取り出す。
@@ -609,25 +623,25 @@ func Configure(opts Options) (cmakeSrcDir, cmakeOutDir string, err error) {
 	}
 
 	data := templateData{
-		ProjectName:     opts.ProjectName,
-		TargetName:      TargetName(opts.ProjectName),
-		EngineRoot:      toCMakePath(opts.EngineRoot),
-		ProjectRoot:     toCMakePath(opts.ProjectRoot),
-		MainCppAbs:      toCMakePath(mainCpp),
-		HostMainAbs:     toCMakePath(hostMain),
-		StartMainAbs:    startMainAbs,
-		SelfrunMainAbs:  selfrunMainAbs,
-		SelfpackMainAbs: selfpackMainAbs,
-		LegacyCEF:       engine.UsesLegacyCEF(opts.EngineRoot),
-		UserWarnings:    engine.HeadersCleanAtW3(opts.EngineRoot),
-		Features:        features,
-		FeatureOptions:  config.FeatureOptions(features),
-		DawnDir:         dawnDirFor(opts, features),
-		Nav:             nav,
-		Lighting:        lighting,
-		RenderNeeds:     renderNeeds,
-		MmlBake:         resolveMmlBake(opts),
-		GameSources:     gameSources,
+		ProjectName:      opts.ProjectName,
+		TargetName:       TargetName(opts.ProjectName),
+		EngineRoot:       toCMakePath(opts.EngineRoot),
+		ProjectRoot:      toCMakePath(opts.ProjectRoot),
+		MainCppAbs:       toCMakePath(mainCpp),
+		HostMainAbs:      toCMakePath(hostMain),
+		StartMainAbs:     startMainAbs,
+		SelfrunMainAbs:   selfrunMainAbs,
+		SelfpackMainAbs:  selfpackMainAbs,
+		LegacyCEF:        engine.UsesLegacyCEF(opts.EngineRoot),
+		UserWarningLevel: userWarningLevel(opts.WarningLevel, opts.EngineRoot),
+		Features:         features,
+		FeatureOptions:   config.FeatureOptions(features),
+		DawnDir:          dawnDirFor(opts, features),
+		Nav:              nav,
+		Lighting:         lighting,
+		RenderNeeds:      renderNeeds,
+		MmlBake:          resolveMmlBake(opts),
+		GameSources:      gameSources,
 	}
 
 	// engine 源の切り替わりは全ターゲットの作り直しになり、検証が別の engine を測る原因にもなる。

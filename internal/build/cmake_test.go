@@ -189,3 +189,52 @@ func TestConfigure_UserTargetWarnsAtW3OnCleanEngines(t *testing.T) {
 		t.Errorf("/W3 must apply to the user target only, got %d uses", strings.Count(clean, "/W3"))
 	}
 }
+
+// [build] warning_level は、engine の世代に関わらず書いた値をそのまま利用者の DLL に付ける。
+// engine の host と engine 本体の target には付けない。
+func TestConfigure_WarningLevelFromManifest(t *testing.T) {
+	projectRoot, engineRoot := fakeProject(t)
+	userOpts := "target_compile_options(my_first_game PRIVATE /bigobj"
+
+	configure := func(level int) string {
+		t.Helper()
+		srcDir, _, err := Configure(Options{
+			ProjectRoot:  projectRoot,
+			ProjectName:  "my-first-game",
+			EngineRoot:   engineRoot,
+			Config:       "Debug",
+			WarningLevel: level,
+		})
+		if err != nil {
+			t.Fatalf("Configure: %v", err)
+		}
+		b, err := os.ReadFile(filepath.Join(srcDir, "CMakeLists.txt"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		return string(b)
+	}
+
+	// ヘッダが静かでない古い engine でも、利用者が 4 と書けば付く。書かなければ付けない
+	w4 := configure(4)
+	if !strings.Contains(w4, userOpts+" /W4)") || strings.Count(w4, "/W4") != 1 || strings.Contains(w4, "/W3") {
+		t.Errorf("warning_level = 4 must put /W4 on the user target only:\n%s", w4)
+	}
+	if none := configure(0); strings.Contains(none, "/W") {
+		t.Errorf("an old engine without warning_level must keep the default:\n%s", none)
+	}
+
+	env := filepath.Join(engineRoot, "include", "mitiru", "core", "Env.hpp")
+	if err := os.MkdirAll(filepath.Dir(env), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(env, []byte("#pragma once\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if unset := configure(0); !strings.Contains(unset, userOpts+" /W3)") {
+		t.Errorf("unset warning_level on a clean engine must stay /W3:\n%s", unset)
+	}
+	if w4 := configure(4); !strings.Contains(w4, userOpts+" /W4)") || strings.Contains(w4, "/W3") {
+		t.Errorf("warning_level = 4 must win over the /W3 default:\n%s", w4)
+	}
+}

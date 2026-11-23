@@ -164,6 +164,13 @@ bake_mml = false
 sources = ["src/*/*.cpp"]
 ```
 
+ゲームの DLL は、engine のヘッダが `/W3` で静かな世代なら `/W3` で組みます。自分のコードの警告を `/W4` まで見たいときは `[build] warning_level` に書きます (3 か 4)。書いた値は engine の世代に関わらずそのまま効きます。engine のヘッダが `/W4` で警告を出す世代では、`/W4` のビルドに engine 由来の警告が混ざります。
+
+```toml
+[build]
+warning_level = 4
+```
+
 古い `mitiru.toml` の `[cef]` は読み捨てます (警告を 1 行出す)。UI は DLL の隣の `assets/ui/main.rml` があれば host が自動で重ねます。
 
 ### engine の追加ライブラリ (`[engine]` と `[nav]`)
